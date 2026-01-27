@@ -83,24 +83,7 @@ ls shared
 
 ## 3. High-Level Architecture
 
-```
-              +---------------------+
-              |   Metadata Server   |
-              |   (Shared Index)    |
-              +----------+----------+
-                         |
-        +----------------+----------------+
-        |                                 |
-+---------------+                +---------------+
-| File Server 1 |                | File Server 2 |
-| (OS FS + DB)  |                | (OS FS + DB)  |
-+-------+-------+                +-------+-------+
-        |                                 |
-               +------------------+
-               |      Client      |
-               |   (Virtual FS)   |
-               +------------------+
-```
+![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](./architecture.png)
 
 ---
 
