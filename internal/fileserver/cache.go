@@ -7,6 +7,7 @@ import (
 	cbpb "github.com/umangshikarvar/dvfs/api/callback"
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // invalidateCache sends invalidation callbacks to other clients
@@ -31,7 +32,7 @@ func (fs *FileServer) invalidateCache(fid *pb.FID, writingClientID string, newVe
 		}
 
 		go func(addr string, cID string) {
-			conn, err := grpc.Dial(addr, grpc.WithInsecure())
+			conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				fmt.Printf("Failed to connect to client %s: %v\n", cID, err)
 				return
