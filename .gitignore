@@ -1,4 +1,4 @@
-# Binaries
+# Binaries and build artifacts
 *.exe
 *.exe~
 *.dll
@@ -7,10 +7,8 @@
 bin/
 dist/
 
-# Test binary
+# Test binary and coverage
 *.test
-
-# Output of the go coverage tool
 *.out
 
 # Dependency directories
@@ -19,18 +17,23 @@ vendor/
 # Go workspace file
 go.work
 
-# IDE
+# IDE files
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# OS
+# OS files
 .DS_Store
+Thumbs.db
 
-# File server storage
+# File server runtime data
 fileserver_data/
 
-# Generated protobuf files (optional - uncomment if you regenerate often)
+# Development and temporary files
+*.tmp
+*.log
+
+# Generated protobuf files (uncomment to regenerate on each build)
 # *.pb.go

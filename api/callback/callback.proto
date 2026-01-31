@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package callback;
 
-option go_package = "github.com/umangshikarvar/dvfs/proto/callback";
+option go_package = "github.com/umangshikarvar/dvfs/api/callback";
 
-import "proto/fileserver/fileserver.proto";
+import "api/fileserver/fileserver.proto";
 
 // Callback messages for cache invalidation
 message InvalidateRequest {

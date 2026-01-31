@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	cbpb "github.com/umangshikarvar/dvfs/proto/callback"
-	pb "github.com/umangshikarvar/dvfs/proto/fileserver"
+	cbpb "github.com/umangshikarvar/dvfs/api/callback"
+	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"google.golang.org/grpc"
 )
 

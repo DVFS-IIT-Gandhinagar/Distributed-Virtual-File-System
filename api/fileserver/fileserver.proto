@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package fileserver;
 
-option go_package = "github.com/umangshikarvar/dvfs/proto/fileserver";
+option go_package = "github.com/umangshikarvar/dvfs/api/fileserver";
 
 // File Identifier
 message FID {

@@ -115,27 +115,35 @@ Created: /docs (FID: fs1_2_1)
 
 ```
 .
-├── proto/                      # Protocol buffer definitions
-│   ├── fileserver/
-│   │   └── fileserver.proto
-│   └── callback/
-│       └── callback.proto
-├── fileserver/                 # File server implementation
-│   └── fileserver.go
-├── client/                     # Client implementation
-│   └── client.go
-├── cmd/                        # Executables
-│   ├── fileserver/
-│   │   └── main.go
-│   └── client/
-│       └── main.go
-├── bin/                        # Built binaries
-│   ├── fileserver
-│   └── client
+├── Makefile                    # Build automation
 ├── README.md                   # This file
-├── README_PHASE1.md           # Detailed Phase 1 docs
-├── EXAMPLES.md                # Usage examples
-└── generate_proto.sh          # Proto generation script
+├── go.mod                      # Go module definition
+├── go.sum                      # Go dependencies
+├── cmd/                        # Command-line applications
+│   ├── fileserver/
+│   │   └── main.go            # File server entry point
+│   └── client/
+│       └── main.go            # Client entry point
+├── internal/                   # Private application code
+│   ├── fileserver/
+│   │   ├── fileserver.go      # Server initialization
+│   │   ├── inode.go           # FID and inode management
+│   │   ├── acl.go             # Access control
+│   │   ├── client.go          # Client registration
+│   │   ├── cache.go           # Cache invalidation
+│   │   ├── file_ops.go        # File operations
+│   │   └── dir_ops.go         # Directory operations
+│   └── client/
+│       └── client.go          # Client implementation
+└── api/                        # API definitions (Protocol Buffers)
+    ├── fileserver/
+    │   ├── fileserver.proto   # File server gRPC definitions
+    │   ├── fileserver.pb.go   # Generated code
+    │   └── fileserver_grpc.pb.go
+    └── callback/
+        ├── callback.proto     # Callback gRPC definitions
+        ├── callback.pb.go     # Generated code
+        └── callback_grpc.pb.go
 ```
 
 ## 🧪 Testing Cache Invalidation

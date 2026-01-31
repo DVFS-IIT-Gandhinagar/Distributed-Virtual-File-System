@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/umangshikarvar/dvfs/client"
-	pb "github.com/umangshikarvar/dvfs/proto/fileserver"
+	pb "github.com/umangshikarvar/dvfs/api/fileserver"
+	"github.com/umangshikarvar/dvfs/internal/client"
 )
 
 func main() {

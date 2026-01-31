@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             v6.33.4
-// source: proto/callback/callback.proto
+// source: api/callback/callback.proto
 
 package callback
 
@@ -121,5 +121,5 @@ var ClientCallback_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/callback/callback.proto",
+	Metadata: "api/callback/callback.proto",
 }

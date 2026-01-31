@@ -2,12 +2,12 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v6.33.4
-// source: proto/callback/callback.proto
+// source: api/callback/callback.proto
 
 package callback
 
 import (
-	fileserver "github.com/umangshikarvar/dvfs/proto/fileserver"
+	fileserver "github.com/umangshikarvar/dvfs/api/fileserver"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -33,7 +33,7 @@ type InvalidateRequest struct {
 
 func (x *InvalidateRequest) Reset() {
 	*x = InvalidateRequest{}
-	mi := &file_proto_callback_callback_proto_msgTypes[0]
+	mi := &file_api_callback_callback_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +45,7 @@ func (x *InvalidateRequest) String() string {
 func (*InvalidateRequest) ProtoMessage() {}
 
 func (x *InvalidateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_callback_callback_proto_msgTypes[0]
+	mi := &file_api_callback_callback_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +58,7 @@ func (x *InvalidateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvalidateRequest.ProtoReflect.Descriptor instead.
 func (*InvalidateRequest) Descriptor() ([]byte, []int) {
-	return file_proto_callback_callback_proto_rawDescGZIP(), []int{0}
+	return file_api_callback_callback_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *InvalidateRequest) GetFid() *fileserver.FID {
@@ -84,7 +84,7 @@ type InvalidateResponse struct {
 
 func (x *InvalidateResponse) Reset() {
 	*x = InvalidateResponse{}
-	mi := &file_proto_callback_callback_proto_msgTypes[1]
+	mi := &file_api_callback_callback_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -96,7 +96,7 @@ func (x *InvalidateResponse) String() string {
 func (*InvalidateResponse) ProtoMessage() {}
 
 func (x *InvalidateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_callback_callback_proto_msgTypes[1]
+	mi := &file_api_callback_callback_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,7 +109,7 @@ func (x *InvalidateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvalidateResponse.ProtoReflect.Descriptor instead.
 func (*InvalidateResponse) Descriptor() ([]byte, []int) {
-	return file_proto_callback_callback_proto_rawDescGZIP(), []int{1}
+	return file_api_callback_callback_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *InvalidateResponse) GetSuccess() bool {
@@ -119,11 +119,11 @@ func (x *InvalidateResponse) GetSuccess() bool {
 	return false
 }
 
-var File_proto_callback_callback_proto protoreflect.FileDescriptor
+var File_api_callback_callback_proto protoreflect.FileDescriptor
 
-const file_proto_callback_callback_proto_rawDesc = "" +
+const file_api_callback_callback_proto_rawDesc = "" +
 	"\n" +
-	"\x1dproto/callback/callback.proto\x12\bcallback\x1a!proto/fileserver/fileserver.proto\"W\n" +
+	"\x1bapi/callback/callback.proto\x12\bcallback\x1a\x1fapi/fileserver/fileserver.proto\"W\n" +
 	"\x11InvalidateRequest\x12!\n" +
 	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12\x1f\n" +
 	"\vnew_version\x18\x02 \x01(\x04R\n" +
@@ -132,27 +132,27 @@ const file_proto_callback_callback_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess2Y\n" +
 	"\x0eClientCallback\x12G\n" +
 	"\n" +
-	"Invalidate\x12\x1b.callback.InvalidateRequest\x1a\x1c.callback.InvalidateResponseB/Z-github.com/umangshikarvar/dvfs/proto/callbackb\x06proto3"
+	"Invalidate\x12\x1b.callback.InvalidateRequest\x1a\x1c.callback.InvalidateResponseB-Z+github.com/umangshikarvar/dvfs/api/callbackb\x06proto3"
 
 var (
-	file_proto_callback_callback_proto_rawDescOnce sync.Once
-	file_proto_callback_callback_proto_rawDescData []byte
+	file_api_callback_callback_proto_rawDescOnce sync.Once
+	file_api_callback_callback_proto_rawDescData []byte
 )
 
-func file_proto_callback_callback_proto_rawDescGZIP() []byte {
-	file_proto_callback_callback_proto_rawDescOnce.Do(func() {
-		file_proto_callback_callback_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_callback_callback_proto_rawDesc), len(file_proto_callback_callback_proto_rawDesc)))
+func file_api_callback_callback_proto_rawDescGZIP() []byte {
+	file_api_callback_callback_proto_rawDescOnce.Do(func() {
+		file_api_callback_callback_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_callback_callback_proto_rawDesc), len(file_api_callback_callback_proto_rawDesc)))
 	})
-	return file_proto_callback_callback_proto_rawDescData
+	return file_api_callback_callback_proto_rawDescData
 }
 
-var file_proto_callback_callback_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_proto_callback_callback_proto_goTypes = []any{
+var file_api_callback_callback_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_api_callback_callback_proto_goTypes = []any{
 	(*InvalidateRequest)(nil),  // 0: callback.InvalidateRequest
 	(*InvalidateResponse)(nil), // 1: callback.InvalidateResponse
 	(*fileserver.FID)(nil),     // 2: fileserver.FID
 }
-var file_proto_callback_callback_proto_depIdxs = []int32{
+var file_api_callback_callback_proto_depIdxs = []int32{
 	2, // 0: callback.InvalidateRequest.fid:type_name -> fileserver.FID
 	0, // 1: callback.ClientCallback.Invalidate:input_type -> callback.InvalidateRequest
 	1, // 2: callback.ClientCallback.Invalidate:output_type -> callback.InvalidateResponse
@@ -163,26 +163,26 @@ var file_proto_callback_callback_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_proto_callback_callback_proto_init() }
-func file_proto_callback_callback_proto_init() {
-	if File_proto_callback_callback_proto != nil {
+func init() { file_api_callback_callback_proto_init() }
+func file_api_callback_callback_proto_init() {
+	if File_api_callback_callback_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_callback_callback_proto_rawDesc), len(file_proto_callback_callback_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_callback_callback_proto_rawDesc), len(file_api_callback_callback_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_proto_callback_callback_proto_goTypes,
-		DependencyIndexes: file_proto_callback_callback_proto_depIdxs,
-		MessageInfos:      file_proto_callback_callback_proto_msgTypes,
+		GoTypes:           file_api_callback_callback_proto_goTypes,
+		DependencyIndexes: file_api_callback_callback_proto_depIdxs,
+		MessageInfos:      file_api_callback_callback_proto_msgTypes,
 	}.Build()
-	File_proto_callback_callback_proto = out.File
-	file_proto_callback_callback_proto_goTypes = nil
-	file_proto_callback_callback_proto_depIdxs = nil
+	File_api_callback_callback_proto = out.File
+	file_api_callback_callback_proto_goTypes = nil
+	file_api_callback_callback_proto_depIdxs = nil
 }

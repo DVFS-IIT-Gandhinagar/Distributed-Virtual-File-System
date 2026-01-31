@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/umangshikarvar/dvfs/fileserver"
-	pb "github.com/umangshikarvar/dvfs/proto/fileserver"
+	pb "github.com/umangshikarvar/dvfs/api/fileserver"
+	"github.com/umangshikarvar/dvfs/internal/fileserver"
 	"google.golang.org/grpc"
 )
 
