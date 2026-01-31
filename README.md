@@ -1,187 +1,332 @@
-# AFS Phase-0 Implementation Plan (Go + gRPC)
+# Distributed Virtual File System
 
-This document summarizes the **Phase-0 plan** for implementing an AFS-inspired distributed file system in Go.  
-The goal of Phase-0 is to build a **correct AFS core** (FID-based access, client caching, and callbacks) while deliberately simplifying persistence and discovery.
+## 1. System Overview
 
----
+This document describes the final design of a **distributed virtual file system (VFS)** inspired by AFS and implemented **in userspace on top of the host OS filesystem**.
 
-## 1. Phase-0 Goals
+The system consists of:
+- **File Servers (FS)** – store file data and enforce access control
+- **Metadata Server (MDS)** – stores indexing metadata for fast shared-file discovery
+- **Clients** – expose a virtual namespace and interact with FS and MDS
 
-Phase-0 focuses on correctness of semantics, not completeness.
-
-### What Phase-0 MUST achieve
-- FID-based file access (no path-based identity)
-- AFS-style client-side caching
-- Server-driven callback invalidation
-- Clean separation of client and file server responsibilities
-- gRPC-based RPC interfaces
-
-### What Phase-0 deliberately omits
-- Persistent inode database
-- Metadata server (MDS)
-- Sharing and ACLs beyond ownership
-- Rename and move
-- Crash recovery
+### Design Goals
+- Correct filesystem semantics (`open`, `read`, `write`, `rename`, `ls`)
+- Each user sees exactly **two namespaces**:
+  - **`mydrive`** (private)
+  - **`shared`** (shared with the user)
+- Fast common case (`ls shared`)
+- Clear separation between authority and indexing
 
 ---
 
-## 2. High-Level Architecture (Phase-0)
+## 2. Terminology
 
-Components:
-- **Client**
-  - Maintains a mount table (hardcoded for now)
-  - Caches file data indexed by FID
-  - Receives callback invalidations from file servers
-- **File Server (FS)**
-  - Authoritative for data and metadata
-  - Generates FIDs
-  - Maps FIDs to OS filesystem paths (hardcoded, in-memory)
-  - Grants and revokes callbacks
+### 2.1 Logical Inode
+A **logical inode** is an internal representation of a file or directory.  
+It is **not** an OS inode.
 
-> The metadata server is intentionally excluded in Phase-0.
+Each logical inode has:
+- a stable identity
+- metadata (name, ACL)
+- a cached OS path
 
 ---
 
-## 3. File Identifier (FID)
+### 2.2 File Identifier (FID)
 
-Each file or directory is identified by a **File Identifier (FID)**:
+A **FID** uniquely identifies a file or directory globally.
 
 ```
-FID = <fs_id, inode_id, generation>
+FID = <file_server_id, inode_id, generation_number>
 ```
 
-### FID Invariants
-- FIDs are generated **only by the file server**
-- Clients treat FIDs as opaque values
-- FIDs are the only stable identity in the system
+- `file_server_id` – which file server owns the file
+- `inode_id` – unique logical inode number on that server
+- `generation_number` – increments on delete + recreate
+
+**FID is the only identity in the system.**
 
 ---
 
-## 4. FID Generation Strategy
+### 2.3 Access Control List (ACL)
 
-### Phase-0 Rule
-> **inode_id values are never reused**
-
-- `inode_id` is monotonically increasing
-- `generation` is always set to `1`
-- Deletion removes the mapping but does not recycle identifiers
-
-This guarantees:
-- No stale references
-- No generation mismatch handling needed yet
-- Extremely simple implementation
-
----
-
-## 5. FS Internal State (Phase-0)
-
-The file server maintains in-memory state only.
-
-### FID Generator
-- Generates new `(inode_id, generation=1)` pairs
-- Protected by a mutex
-
-### Inode Table (Hardcoded Mapping)
+An **ACL** defines which users may access a file or directory.
 
 ```
-FID → OSPath
+ACL {
+  read   → users allowed to read file
+  write  → users allowed to modify file
+  lookup → users allowed to traverse directory
+}
 ```
 
-Example:
+Rules:
+- ACLs are stored and enforced only on file servers
+- Metadata server never enforces permissions
+
+---
+
+### 2.4 Private vs Shared Files
+- **Private file** – accessible only to the owner
+- **Shared file** – ACL allows additional users
+
+---
+
+### 2.5 Shared Index
+A **shared index** is denormalized metadata on the metadata server used only for:
+
 ```
-<1,1,1> → /srv/fs1/users/umang
-<1,2,1> → /srv/fs1/users/umang/a.txt
+ls shared
 ```
 
-No lookup, rename, or persistence is implemented in Phase-0.
+---
+
+## 3. High-Level Architecture
+
+![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](./architecture.png)
 
 ---
 
-## 6. Client Mounting (Phase-0)
+## 4. File Server Design (Authoritative)
 
-Mounting is **hardcoded in the client**.
+Each file server stores actual data on the OS filesystem and maintains one authoritative database.
 
-Example mount table:
+### 4.1 Unified File Server Database
+
 ```
-mydrive → (fs_addr, root_fid)
+InodeDB {
+  fid                PRIMARY KEY
+  type               ENUM {file, directory}
+  name               STRING
+  os_path            STRING
+  child_fids[]       ARRAY<FID>
+  acl                ACL
+}
 ```
 
-This avoids:
-- FS mount RPCs
-- Metadata server dependencies
-
-The mount table abstraction remains unchanged for later phases.
-
----
-
-## 7. gRPC API Shape
-
-Even in Phase-0, RPCs are designed **as if FIDs are permanent**.
-
-### Example RPCs
-- `Read(FID, client_id) → data`
-- `Write(FID, data)`
-- `Invalidate(FID)` (callback)
-
-Only payloads will evolve in later phases; API semantics remain stable.
+**Invariants**
+- FID is identity
+- `os_path` is cached, derived state
+- ACLs are enforced before OS access
+- One inode maps to one OS path
 
 ---
 
-## 8. AFS-Style Client-Side Caching
+### 4.2 Shared ACL Table (FS-local)
 
-### Cache Key
-- Cache entries are indexed by **FID**, not by path
+```
+SharedACLTable {
+  fid → users[]
+}
+```
 
-### Cache Rule
-- If the client holds a valid callback for a FID, cached data is trusted
-- On callback invalidation, cache entry is marked invalid
-
----
-
-## 9. Callback Mechanism
-
-### FS Responsibilities
-- Track which clients hold callbacks per FID
-- Invalidate callbacks on write or delete
-- Never rely on clients for correctness
-
-### Client Responsibilities
-- Mark cached data invalid on callback
-- Refetch data on next access
-
-This mechanism is the **core of AFS correctness**.
+Used to:
+- track shared inodes
+- notify metadata server
+- rebuild shared state after crashes
 
 ---
 
-## 10. Delete Semantics (Phase-0)
+## 5. Metadata Server Design
 
-On delete:
-- FS removes FID → OSPath mapping
-- FS invalidates all callbacks
-- inode_id is never reused
+The metadata server stores no file data and no ACLs.
 
----
+### 5.1 Metadata Server Database
 
-## 11. Evolution Path
+```
+SharedIndex {
+  fid           PRIMARY KEY
+  cached_name
+  users[]
+}
+```
 
-The Phase-0 design is intentionally forward-compatible.
-
-| Phase | Added Features |
-|-----|---------------|
-| Phase-1 | Persistent InodeDB, lookup, generation handling |
-| Phase-2 | Metadata Server (MDS), shared volumes |
-| Phase-3 | ACLs, rename, directory sharing |
-
-Client semantics remain unchanged across phases.
+- `users[]` represents visibility only
+- access is always validated by file servers
 
 ---
 
-## 12. Key Invariant
+## 6. Client Namespace (User View)
 
-> **All correctness-critical mechanisms (identity, caching, callbacks) are implemented in Phase-0; later phases only add metadata and discovery.**
+Each user sees **exactly two directories**:
+
+```
+mydrive/
+shared/
+```
+
+### Semantics
+- **`mydrive`**
+  - User’s private files
+  - Backed by the user’s root directory on a file server
+- **`shared`**
+  - Virtual directory
+  - Contains files and directories shared *with* the user
+  - Backed by metadata server + FIDs
 
 ---
 
-## 13. Summary
+## 7. Private File Operations (`mydrive`)
 
-Phase-0 establishes a correct AFS foundation using FIDs, gRPC, and server-driven callbacks, while intentionally simplifying persistence and mounting. By preserving the correct identity and caching model from the start, the system can evolve incrementally without architectural refactoring.
+### Create Private File
+
+```
+touch mydrive/fileA
+```
+
+File server:
+1. Allocate new FID
+2. Create OS file
+3. Insert entry into `InodeDB`
+4. ACL allows only owner
+
+---
+
+### Open Private File
+
+```
+open("mydrive/fileA")
+```
+
+File server:
+1. Resolve path → FID
+2. Check ACL
+3. Use `os_path`
+4. Call OS `open()`
+
+---
+
+## 8. Sharing Operations
+
+### Share a File
+
+```
+setacl mydrive/fileA alice read
+```
+
+File server:
+1. Update `InodeDB[fid].acl`
+2. Update `SharedACLTable`
+3. Notify metadata server
+
+Metadata server updates `SharedIndex`.
+
+---
+
+## 9. Shared File Discovery (`shared`)
+
+### List Shared Files
+
+```
+ls shared
+```
+
+Client queries metadata server:
+
+```
+SELECT * FROM SharedIndex
+WHERE user ∈ users[]
+```
+
+Result:
+- List of `(fid, cached_name, fs_id)`
+- No file-server RPCs required
+
+---
+
+## 10. Open Shared File
+
+```
+open("shared/fileA")
+```
+
+Client:
+- Resolves name → FID using metadata server
+
+File server:
+1. Validate generation number
+2. Check ACL
+3. Use cached `os_path`
+4. Call OS `open()`
+
+Client never sees real OS paths.
+
+---
+
+## 11. Rename and Move
+
+### Rename File (Private or Shared)
+
+```
+mv mydrive/fileA mydrive/fileX
+```
+
+File server:
+- updates `name`
+- updates `os_path`
+- FID unchanged
+- metadata server notified if shared
+
+---
+
+### Move Directory (Rare, Expensive)
+
+```
+mv mydrive/project mydrive/archive/project
+```
+
+File server:
+- updates directory `os_path`
+- recursively updates children `os_path`
+- notifies metadata server for shared FIDs only
+
+---
+
+## 12. Delete / Unshare with Cascade
+
+```
+rm -r mydrive/project
+```
+
+File server:
+1. DFS using `child_fids`
+2. Remove each FID from `SharedACLTable`
+3. Notify metadata server
+4. Delete OS files and DB entries
+
+Guarantee:
+- No ghost shared entries
+- No stale visibility
+
+---
+
+## 13. Failure Handling
+
+### Metadata Server Failure
+- File servers continue enforcing ACLs
+- `ls shared` may be stale
+- Access remains correct
+
+### File Server Failure
+On restart:
+1. Scan OS filesystem
+2. Rebuild `InodeDB`
+3. Rebuild `SharedACLTable`
+4. Re-register shared FIDs
+
+---
+
+## 14. Design Invariants
+
+1. FID is the only identity
+2. ACLs enforced only on file servers
+3. Metadata server is advisory
+4. `os_path` must match OS filesystem
+5. Rename/move updates `os_path`
+6. Shared index staleness is safe
+
+---
+
+## 15. Summary
+
+Each user interacts with exactly two namespaces—`mydrive` for private data and `shared` for shared data. File servers maintain authoritative metadata and enforce ACLs, while the metadata server maintains a denormalized shared index to optimize listing without participating in access control.
