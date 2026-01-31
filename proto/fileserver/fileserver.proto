@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package fileserver;
+
+option go_package = "github.com/umangshikarvar/dvfs/proto/fileserver";
+
+// File Identifier
+message FID {
+  string file_server_id = 1;
+  uint64 inode_id = 2;
+  uint64 generation_number = 3;
+}
+
+// Access Control List
+message ACL {
+  repeated string read_users = 1;
+  repeated string write_users = 2;
+
+}
+
+// File/Directory Type
+enum InodeType {
+  FILE = 0;
+  DIRECTORY = 1;
+}
+
+// === File Operations ===
+
+message CreateFileRequest {
+  string parent_path = 1; // path on server
+  string name = 2;
+  string user = 3;
+  InodeType type = 4;
+}
+
+message CreateFileResponse {
+  FID fid = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message OpenFileRequest {
+  FID fid = 1;
+  string user = 2;
+  string client_id = 3; // for callbacks
+}
+
+message OpenFileResponse {
+  bool success = 1;
+  string error = 2;
+  uint64 file_size = 3;
+  uint64 version = 4; // for cache validation
+}
+
+message ReadFileRequest {
+  FID fid = 1;
+  uint64 offset = 2;
+  uint64 length = 3;
+  string user = 4;
+}
+
+message ReadFileResponse {
+  bytes data = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message WriteFileRequest {
+  FID fid = 1;
+  uint64 offset = 2;
+  bytes data = 3;
+  string user = 4;
+  string client_id = 5;
+}
+
+message WriteFileResponse {
+  bool success = 1;
+  string error = 2;
+  uint64 version = 3; // new version after write
+}
+
+message CloseFileRequest {
+  FID fid = 1;
+  string user = 2;
+  string client_id = 3;
+}
+
+message CloseFileResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message DeleteFileRequest {
+  FID fid = 1;
+  string user = 2;
+}
+
+message DeleteFileResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message GetAttrRequest {
+  FID fid = 1;
+  string user = 2;
+}
+
+message GetAttrResponse {
+  bool success = 1;
+  string error = 2;
+  string name = 3;
+  InodeType type = 4;
+  uint64 size = 5;
+  uint64 version = 6;
+}
+
+message ListDirRequest {
+  FID fid = 1;
+  string user = 2;
+}
+
+message DirEntry {
+  FID fid = 1;
+  string name = 2;
+  InodeType type = 3;
+}
+
+message ListDirResponse {
+  bool success = 1;
+  string error = 2;
+  repeated DirEntry entries = 3;
+}
+
+message LookupRequest {
+  FID parent_fid = 1;
+  string name = 2;
+  string user = 3;
+}
+
+message LookupResponse {
+  bool success = 1;
+  string error = 2;
+  FID fid = 3;
+}
+
+message RegisterClientRequest {
+  string client_id = 1;
+  string callback_address = 2; // host:port for callbacks
+  string username = 3; // user's name for creating user directory
+}
+
+message RegisterClientResponse {
+  bool success = 1;
+  string error = 2;
+  FID user_root_fid = 3; // FID of user's root directory
+}
+
+// FileServer service
+service FileServer {
+  rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse);
+  rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
+  rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  rpc CloseFile(CloseFileRequest) returns (CloseFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc GetAttr(GetAttrRequest) returns (GetAttrResponse);
+  rpc ListDir(ListDirRequest) returns (ListDirResponse);
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+}
