@@ -93,7 +93,7 @@ Root Directory Information:
 main.go:main()
 ├── client.NewClient(username)
 ├── client.Connect(serverAddress)
-│   ├── grpc.Dial() → establish connection
+│   ├── grpc.NewClient() → establish connection
 │   ├── pb.NewFileServerClient() → create gRPC client
 │   └── RegisterClient() gRPC call
 │       ├── GRPCHandler.RegisterClient() [server]

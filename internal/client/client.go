@@ -7,6 +7,7 @@ import (
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Client provides basic VFS client functionality
@@ -26,7 +27,7 @@ func NewClient(username string) *Client {
 // Connect connects to a file server and gets user root
 func (c *Client) Connect(serverAddress string) error {
 	// Connect to server
-	conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
