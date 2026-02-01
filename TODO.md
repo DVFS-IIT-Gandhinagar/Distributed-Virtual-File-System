@@ -1,3 +1,4 @@
 - Test server-client on different machines
 - Handle current inode (in some subdir)
 - implement cd command 
+- handle correct creation of nested file's inodes
