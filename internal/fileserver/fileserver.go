@@ -2,6 +2,7 @@ package fileserver
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,6 +16,7 @@ type FileServer struct {
 	serverID    string
 	rootDir     string
 	inodes      map[string]*domain.Inode // FID string -> Inode
+	users       map[string]*domain.FID
 	nextInodeID uint64
 	mu          sync.RWMutex
 }
@@ -25,7 +27,8 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 		serverID:    serverID,
 		rootDir:     rootDir,
 		inodes:      make(map[string]*domain.Inode),
-		nextInodeID: 1,
+		users:       make(map[string]*domain.FID),
+		nextInodeID: 0,
 	}
 
 	// Check if rootDir already exists
@@ -34,6 +37,7 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 		if err := fs.loadExistingData(); err != nil {
 			return nil, fmt.Errorf("failed to load existing data: %w", err)
 		}
+		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
 	} else {
 		// Root directory doesn't exist, create it
 		if err := os.MkdirAll(rootDir, 0755); err != nil {
@@ -61,9 +65,11 @@ func (fs *FileServer) loadExistingData() error {
 			// Create root inode for this user (always inode ID 0)
 			userRootFID := &domain.FID{
 				FileServerID:     fs.serverID,
-				InodeID:          0,
+				InodeID:          fs.nextInodeID,
 				GenerationNumber: 1,
 			}
+			atomic.AddUint64(&fs.nextInodeID, 1)
+			fs.users[username] = userRootFID
 
 			// Create root inode
 			userRootInode := &domain.Inode{
@@ -96,10 +102,9 @@ func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inod
 
 	for _, entry := range entries {
 		// Generate new FID for this item
-		inodeID := atomic.AddUint64(&fs.nextInodeID, 1)
 		newFID := &domain.FID{
 			FileServerID:     fs.serverID,
-			InodeID:          inodeID,
+			InodeID:          fs.nextInodeID,
 			GenerationNumber: 1,
 		}
 
@@ -136,6 +141,9 @@ func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inod
 
 		// Add to parent's children
 		parentInode.Children = append(parentInode.Children, newFID)
+
+		// Increment inode ID counter
+		atomic.AddUint64(&fs.nextInodeID, 1)
 	}
 
 	return nil
@@ -145,16 +153,9 @@ func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inod
 func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	
-	// Create root FID for user (always inode ID 0 for root)
-	rootFID := &domain.FID{
-		FileServerID:     fs.serverID,
-		InodeID:          0,
-		GenerationNumber: 1,
-	}
 
-	// Check if root inode already exists (might have been loaded from existing data)
-	if inode := fs.inodes[rootFID.String()]; inode != nil {
+	// Check if user already exists
+	if rootFID := fs.users[username]; rootFID != nil {
 		return rootFID, nil
 	}
 
@@ -162,6 +163,13 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	userDir := filepath.Join(fs.rootDir, username)
 	if err := os.MkdirAll(userDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create user dir: %w", err)
+	}
+
+	// Create root FID for user
+	rootFID := &domain.FID{
+		FileServerID:     fs.serverID,
+		InodeID:          fs.nextInodeID,
+		GenerationNumber: 1,
 	}
 
 	// Create root inode
@@ -175,6 +183,10 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	}
 
 	fs.inodes[rootFID.String()] = rootInode
+	fs.users[username] = rootFID
+
+	atomic.AddUint64(&fs.nextInodeID, 1)
+
 	return rootFID, nil
 }
 
@@ -195,10 +207,9 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, f
 	}
 
 	// Generate new FID
-	inodeID := atomic.AddUint64(&fs.nextInodeID, 1)
 	newFID := &domain.FID{
 		FileServerID:     fs.serverID,
-		InodeID:          inodeID,
+		InodeID:          fs.nextInodeID,
 		GenerationNumber: 1,
 	}
 
@@ -237,6 +248,8 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, f
 
 	// Add to parent's children
 	parent.Children = append(parent.Children, newFID)
+
+	atomic.AddUint64(&fs.nextInodeID, 1)
 
 	return newFID, nil
 }

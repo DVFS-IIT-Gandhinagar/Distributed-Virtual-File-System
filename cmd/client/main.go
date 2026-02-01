@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/umangshikarvar/dvfs/internal/client"
 )
@@ -10,6 +11,10 @@ import (
 func main() {
 	// Client configuration
 	username := "romit"
+	// Parse command line args
+	if len(os.Args) > 1 {
+		username = os.Args[1]
+	}
 	serverAddress := "127.0.0.1:50051"
 
 	// Create and connect client
