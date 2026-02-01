@@ -19,31 +19,133 @@ type FileServer struct {
 	mu          sync.RWMutex
 }
 
-// NewFileServer creates a new file server
+// NewFileServer creates a new file server object, either blank or loading from existing data
 func NewFileServer(serverID, rootDir string) (*FileServer, error) {
-	if err := os.MkdirAll(rootDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create root dir: %w", err)
-	}
-
-	return &FileServer{
+	fs := &FileServer{
 		serverID:    serverID,
 		rootDir:     rootDir,
 		inodes:      make(map[string]*domain.Inode),
 		nextInodeID: 1,
-	}, nil
+	}
+
+	// Check if rootDir already exists
+	if _, err := os.Stat(rootDir); err == nil {
+		// Root directory exists, scan and load existing data
+		if err := fs.loadExistingData(); err != nil {
+			return nil, fmt.Errorf("failed to load existing data: %w", err)
+		}
+	} else {
+		// Root directory doesn't exist, create it
+		if err := os.MkdirAll(rootDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create root dir: %w", err)
+		}
+	}
+
+	return fs, nil
+}
+
+// loadExistingData scans the root directory and creates inodes for existing files and directories
+func (fs *FileServer) loadExistingData() error {
+	// Scan user directories (first level under rootDir)
+	entries, err := os.ReadDir(fs.rootDir)
+	if err != nil {
+		return fmt.Errorf("failed to read root directory: %w", err)
+	}
+
+	// user volumes are at first level
+	for _, entry := range entries {
+		if entry.IsDir() {
+			username := entry.Name()
+			userDir := filepath.Join(fs.rootDir, username)
+
+			// Create root inode for this user (always inode ID 0)
+			userRootFID := &domain.FID{
+				FileServerID:     fs.serverID,
+				InodeID:          0,
+				GenerationNumber: 1,
+			}
+
+			// Create root inode
+			userRootInode := &domain.Inode{
+				FID:      userRootFID,
+				Type:     domain.InodeTypeDirectory,
+				Name:     username,
+				OSPath:   userDir,
+				Owner:    username,
+				Children: make([]*domain.FID, 0),
+			}
+
+			fs.inodes[userRootFID.String()] = userRootInode
+
+			// Scan user's files and directories (first level only)
+			if err := fs.scanUserDirectory(userDir, userRootInode); err != nil {
+				return fmt.Errorf("failed to scan user directory %s: %w", username, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// scanUserDirectory scans a user's directory and creates inodes for first-level files and directories
+func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inode) error {
+	entries, err := os.ReadDir(userDir)
+	if err != nil {
+		return fmt.Errorf("failed to read user directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		// Generate new FID for this item
+		inodeID := atomic.AddUint64(&fs.nextInodeID, 1)
+		newFID := &domain.FID{
+			FileServerID:     fs.serverID,
+			InodeID:          inodeID,
+			GenerationNumber: 1,
+		}
+
+		// Determine type
+		var inodeType domain.InodeType
+		if entry.IsDir() {
+			inodeType = domain.InodeTypeDirectory
+		} else {
+			inodeType = domain.InodeTypeFile
+		}
+
+		// Create inode
+		itemPath := filepath.Join(userDir, entry.Name())
+		newInode := &domain.Inode{
+			FID:    newFID,
+			Type:   inodeType,
+			Name:   entry.Name(),
+			OSPath: itemPath,
+			Owner:  parentInode.Owner, // Same as parent (user)
+		}
+
+		// Set up directory-specific fields
+		if inodeType == domain.InodeTypeDirectory {
+			newInode.Children = make([]*domain.FID, 0)
+		} else {
+			// For files, get the current size
+			if info, err := entry.Info(); err == nil {
+				newInode.Size = uint64(info.Size())
+			}
+		}
+
+		// Store inode
+		fs.inodes[newFID.String()] = newInode
+
+		// Add to parent's children
+		parentInode.Children = append(parentInode.Children, newFID)
+	}
+
+	return nil
 }
 
 // GetUserRoot returns the root FID for a user, creating it if necessary
 func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-
-	// Create user directory if it doesn't exist
-	userDir := filepath.Join(fs.rootDir, username)
-	if err := os.MkdirAll(userDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create user dir: %w", err)
-	}
-
+	
 	// Create root FID for user (always inode ID 0 for root)
 	rootFID := &domain.FID{
 		FileServerID:     fs.serverID,
@@ -51,9 +153,15 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 		GenerationNumber: 1,
 	}
 
-	// Check if root inode already exists
+	// Check if root inode already exists (might have been loaded from existing data)
 	if inode := fs.inodes[rootFID.String()]; inode != nil {
 		return rootFID, nil
+	}
+
+	// Create user directory if it doesn't exist
+	userDir := filepath.Join(fs.rootDir, username)
+	if err := os.MkdirAll(userDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create user dir: %w", err)
 	}
 
 	// Create root inode
