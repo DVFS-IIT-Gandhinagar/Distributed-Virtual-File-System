@@ -2,6 +2,7 @@ package fileserver
 
 import (
 	"context"
+	"log"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -22,7 +23,10 @@ func NewGRPCHandler(fileServer *FileServer) *GRPCHandler {
 
 // RegisterClient handles client registration and returns user root FID
 func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClientRequest) (*pb.RegisterClientResponse, error) {
+	log.Printf("RegisterClient: username=%s", req.Username)
+	
 	if req.Username == "" {
+		log.Printf("RegisterClient: error - username is required")
 		return &pb.RegisterClientResponse{
 			Success: false,
 			Error:   "username is required",
@@ -31,12 +35,14 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 
 	rootFID, err := h.fileServer.GetUserRoot(req.Username)
 	if err != nil {
+		log.Printf("RegisterClient: error getting user root - %v", err)
 		return &pb.RegisterClientResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
+	log.Printf("RegisterClient: success for user %s", req.Username)
 	return &pb.RegisterClientResponse{
 		Success: true,
 		UserRootFid: rootFID.ToProto(),
@@ -45,7 +51,10 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 
 // GetAttr gets file attributes
 func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.GetAttrResponse, error) {
+	log.Printf("GetAttr: FID=%v", req.Fid)
+	
 	if req.Fid == nil {
+		log.Printf("GetAttr: error - FID is required")
 		return &pb.GetAttrResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -55,12 +64,14 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 	fid := domain.FIDFromProto(req.Fid)
 	inode, err := h.fileServer.GetInode(fid)
 	if err != nil {
+		log.Printf("GetAttr: error getting inode - %v", err)
 		return &pb.GetAttrResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
+	log.Printf("GetAttr: success for file %s", inode.Name)
 	return &pb.GetAttrResponse{
 		Success: true,
 		Name:    inode.Name,
@@ -71,7 +82,10 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 
 // ListDir lists directory contents
 func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.ListDirResponse, error) {
+	log.Printf("ListDir: FID=%v", req.Fid)
+	
 	if req.Fid == nil {
+		log.Printf("ListDir: error - FID is required")
 		return &pb.ListDirResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -81,6 +95,7 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 	fid := domain.FIDFromProto(req.Fid)
 	children, err := h.fileServer.ListDirectory(fid)
 	if err != nil {
+		log.Printf("ListDir: error listing directory - %v", err)
 		return &pb.ListDirResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -97,6 +112,7 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 		}
 	}
 
+	log.Printf("ListDir: success - found %d entries", len(children))
 	return &pb.ListDirResponse{
 		Success: true,
 		Entries: pbChildren,
@@ -105,7 +121,10 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 
 // CreateFile creates a new file or directory
 func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
+	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.User, req.Type)
+	
 	if req.Name == "" || req.User == "" {
+		log.Printf("CreateFile: error - name and user are required")
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   "name and user are required",
@@ -116,6 +135,7 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	// In real implementation, you'd parse parent_path to get parent FID
 	parentFID, err := h.fileServer.GetUserRoot(req.User)
 	if err != nil {
+		log.Printf("CreateFile: error getting user root - %v", err)
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   "failed to get user root: " + err.Error(),
@@ -125,12 +145,14 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	fileType := domain.InodeTypeFromProto(req.Type)
 	newFID, err := h.fileServer.CreateFile(parentFID, req.Name, req.User, fileType)
 	if err != nil {
+		log.Printf("CreateFile: error creating file - %v", err)
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
+	log.Printf("CreateFile: success - created %s with FID %s", req.Name, newFID.String())
 	return &pb.CreateFileResponse{
 		Success: true,
 		Fid:     newFID.ToProto(),
@@ -139,7 +161,10 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 
 // OpenFile handles file opening (simplified - just returns success)
 func (h *GRPCHandler) OpenFile(ctx context.Context, req *pb.OpenFileRequest) (*pb.OpenFileResponse, error) {
+	log.Printf("OpenFile: FID=%v", req.Fid)
+	
 	if req.Fid == nil {
+		log.Printf("OpenFile: error - FID is required")
 		return &pb.OpenFileResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -149,12 +174,14 @@ func (h *GRPCHandler) OpenFile(ctx context.Context, req *pb.OpenFileRequest) (*p
 	fid := domain.FIDFromProto(req.Fid)
 	_, err := h.fileServer.GetInode(fid)
 	if err != nil {
+		log.Printf("OpenFile: error getting inode - %v", err)
 		return &pb.OpenFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
+	log.Printf("OpenFile: success")
 	return &pb.OpenFileResponse{
 		Success: true,
 	}, nil
