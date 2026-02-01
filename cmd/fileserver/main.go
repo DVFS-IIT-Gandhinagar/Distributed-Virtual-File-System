@@ -1,12 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
-	"os"
-	"os/signal"
-	"syscall"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/fileserver"
@@ -14,53 +10,33 @@ import (
 )
 
 func main() {
-	// Configuration
+	// Server configuration
 	serverID := "fs1"
-	port := "50051"
 	rootDir := "./fileserver_data"
-
-	// Parse command line args
-	if len(os.Args) > 1 {
-		serverID = os.Args[1]
-	}
-	if len(os.Args) > 2 {
-		port = os.Args[2]
-	}
-	if len(os.Args) > 3 {
-		rootDir = os.Args[3]
-	}
+	listenAddr := "0.0.0.0:50051" // Listen on all interfaces
 
 	// Create file server
-	fs, err := fileserver.NewFileServer(serverID, rootDir)
+	server, err := fileserver.NewFileServer(serverID, rootDir)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
 
+	// Create gRPC handler
+	handler := fileserver.NewGRPCHandler(server)
+
 	// Start gRPC server
-	lis, err := net.Listen("tcp", ":"+port)
+	grpcServer := grpc.NewServer()
+	pb.RegisterFileServerServer(grpcServer, handler)
+
+	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
-	pb.RegisterFileServerServer(grpcServer, fs)
+	log.Printf("File server starting on %s", listenAddr)
+	log.Printf("Data directory: %s", rootDir)
 
-	// Handle shutdown gracefully
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		fmt.Println("\nShutting down file server...")
-		grpcServer.GracefulStop()
-		os.Exit(0)
-	}()
-
-	fmt.Printf("File Server '%s' started on port %s\n", serverID, port)
-	fmt.Printf("Root directory: %s\n", rootDir)
-	fmt.Println("Press Ctrl+C to stop")
-
-	if err := grpcServer.Serve(lis); err != nil {
+	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 }

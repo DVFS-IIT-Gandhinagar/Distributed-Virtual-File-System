@@ -1,0 +1,4 @@
+- Multiple CLients on same machine have to be handled - give different ports
+- Test server-client on different machines
+- Clean code server and client both
+- seperate handler in client side as well
