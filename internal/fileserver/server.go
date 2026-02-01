@@ -15,6 +15,7 @@ type FileServer struct {
 	serverID    string
 	rootDir     string
 	inodes      map[string]*domain.Inode // FID string -> Inode
+	users		map[string]*domain.FID
 	nextInodeID uint64
 	mu          sync.RWMutex
 }
@@ -29,7 +30,8 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 		serverID:    serverID,
 		rootDir:     rootDir,
 		inodes:      make(map[string]*domain.Inode),
-		nextInodeID: 1,
+		users: 		 make(map[string]*domain.FID),
+		nextInodeID: 0,
 	}, nil
 }
 
@@ -38,23 +40,30 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
+	// Check if user already exists
+	if rootFID := fs.users[username]; rootFID != nil {
+		return rootFID, nil
+	}
+
 	// Create user directory if it doesn't exist
 	userDir := filepath.Join(fs.rootDir, username)
 	if err := os.MkdirAll(userDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create user dir: %w", err)
 	}
 
-	// Create root FID for user (always inode ID 0 for root)
+	inodeID := atomic.AddUint64(&fs.nextInodeID, 1)
+
+	// Create root FID for user
 	rootFID := &domain.FID{
 		FileServerID:     fs.serverID,
-		InodeID:          0,
+		InodeID:          inodeID,
 		GenerationNumber: 1,
 	}
 
-	// Check if root inode already exists
-	if inode := fs.inodes[rootFID.String()]; inode != nil {
-		return rootFID, nil
-	}
+	// // Check if root inode already exists
+	// if inode := fs.inodes[rootFID.String()]; inode != nil {
+	// 	return rootFID, nil
+	// }
 
 	// Create root inode
 	rootInode := &domain.Inode{
@@ -67,6 +76,7 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	}
 
 	fs.inodes[rootFID.String()] = rootInode
+	fs.users[username] = rootFID
 	return rootFID, nil
 }
 
