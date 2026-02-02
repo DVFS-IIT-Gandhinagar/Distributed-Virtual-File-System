@@ -26,7 +26,7 @@ func NewCommandHandler(client *Client) *CommandHandler {
 // Start begins the interactive command loop
 func (h *CommandHandler) Start() {
 	fmt.Println("=== Distributed VFS Client ===")
-	fmt.Println("Available commands: ls, create, mkdir, info, help, exit")
+	fmt.Println("Available commands: ls, pwd, create, mkdir, info, help, exit")
 	fmt.Println()
 
 	for {
@@ -48,6 +48,8 @@ func (h *CommandHandler) Start() {
 		switch command {
 		case "ls", "list":
 			h.handleList()
+		case "pwd":
+			h.handlePath()
 		case "create":
 			if len(parts) < 2 {
 				fmt.Println("Usage: create <filename>")
@@ -89,7 +91,7 @@ func (h *CommandHandler) handleList() {
 
 	fmt.Printf("%-20s %-10s %10s\n", "Name", "Type", "Size")
 	fmt.Printf("%-20s %-10s %10s\n", "----", "----", "----")
-	
+
 	for _, file := range files {
 		typeStr := "file"
 		if file.Type == domain.InodeTypeDirectory {
@@ -97,6 +99,17 @@ func (h *CommandHandler) handleList() {
 		}
 		fmt.Printf("%-20s %-10s %10d\n", file.Name, typeStr, file.Size)
 	}
+}
+
+// handlePath returns the current path
+func (h *CommandHandler) handlePath() {
+	path, err := h.client.Path()
+	if err != nil {
+		fmt.Printf("Error getting the pwd: %v\n", err)
+		return
+	}
+
+	fmt.Println(path)
 }
 
 // handleCreateFile creates a new file
@@ -150,6 +163,7 @@ func (h *CommandHandler) handleInfo() {
 func (h *CommandHandler) handleHelp() {
 	fmt.Println("Available commands:")
 	fmt.Println("  ls, list           - List files and directories")
+	fmt.Println("  pwd                - Returns parent working directory")
 	fmt.Println("  create <filename>  - Create a new file")
 	fmt.Println("  mkdir <dirname>    - Create a new directory")
 	fmt.Println("  info               - Show root directory information")

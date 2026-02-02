@@ -274,6 +274,25 @@ func (fs *FileServer) GetInode(fid *domain.FID) (*domain.Inode, error) {
 	return inode, nil
 }
 
+// Return path as pwd
+func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	dirInode, exists := fs.inodes[dirFID.String()]
+	if !exists {
+		return "", fmt.Errorf("directory not found")
+	}
+
+	if dirInode.Type != domain.InodeTypeDirectory {
+		return "", fmt.Errorf("not a directory")
+	}
+
+	path := dirInode.OSPath
+
+	return path, nil
+}
+
 // ListDirectory lists contents of a directory
 func (fs *FileServer) ListDirectory(dirFID *domain.FID) ([]*domain.Inode, error) {
 	fs.mu.RLock()

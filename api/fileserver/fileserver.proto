@@ -25,6 +25,16 @@ enum InodeType {
 }
 
 // === File Operations ===
+message PathRequest {
+  FID fid = 1;
+  string user = 2;
+}
+
+message PathResponse {
+  string path =1;
+  bool success = 2;
+  string error = 3;
+}
 
 message CreateFileRequest {
   string parent_path = 1; // path on server
@@ -167,4 +177,7 @@ service FileServer {
   rpc GetAttr(GetAttrRequest) returns (GetAttrResponse);
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
+  rpc Path(PathRequest) returns (PathResponse);
 }
+
+// To build these run: make proto

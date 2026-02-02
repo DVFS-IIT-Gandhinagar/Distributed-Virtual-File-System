@@ -77,6 +77,23 @@ func (c *Client) ListFiles() ([]*FileInfo, error) {
 	return files, nil
 }
 
+// Returns current user path
+func (c *Client) Path() (string, error) {
+	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
+		Fid:  c.rootFID.ToProto(),
+		User: c.username,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to get attributes: %w", err)
+	}
+
+	if !resp.Success {
+		return "", fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	return resp.Path, nil
+}
+
 // GetFileInfo gets information about user's root directory
 func (c *Client) GetFileInfo() (*FileInfo, error) {
 	resp, err := c.serverConn.GetAttr(context.Background(), &pb.GetAttrRequest{

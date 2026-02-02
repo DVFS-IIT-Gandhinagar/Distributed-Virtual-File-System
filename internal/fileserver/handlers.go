@@ -24,7 +24,7 @@ func NewGRPCHandler(fileServer *FileServer) *GRPCHandler {
 // RegisterClient handles client registration and returns user root FID
 func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClientRequest) (*pb.RegisterClientResponse, error) {
 	log.Printf("RegisterClient: username=%s", req.Username)
-	
+
 	if req.Username == "" {
 		log.Printf("RegisterClient: error - username is required")
 		return &pb.RegisterClientResponse{
@@ -44,7 +44,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 
 	log.Printf("RegisterClient: success for user %s", req.Username)
 	return &pb.RegisterClientResponse{
-		Success: true,
+		Success:     true,
 		UserRootFid: rootFID.ToProto(),
 	}, nil
 }
@@ -52,7 +52,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 // GetAttr gets file attributes
 func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.GetAttrResponse, error) {
 	log.Printf("GetAttr: FID=%v", req.Fid)
-	
+
 	if req.Fid == nil {
 		log.Printf("GetAttr: error - FID is required")
 		return &pb.GetAttrResponse{
@@ -80,10 +80,36 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 	}, nil
 }
 
+// Returns current path
+func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathResponse, error) {
+	if req.Fid == nil {
+		log.Printf("ListDir: error - FID is required")
+		return &pb.PathResponse{
+			Success: false,
+			Error:   "FID is required",
+		}, nil
+	}
+
+	fid := domain.FIDFromProto(req.Fid)
+	path, err := h.fileServer.Path(fid)
+	if err != nil {
+		log.Printf("Path: error getting pwd - %v", err)
+		return &pb.PathResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &pb.PathResponse{
+		Path:    path,
+		Success: true,
+	}, nil
+}
+
 // ListDir lists directory contents
 func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.ListDirResponse, error) {
 	log.Printf("ListDir: FID=%v", req.Fid)
-	
+
 	if req.Fid == nil {
 		log.Printf("ListDir: error - FID is required")
 		return &pb.ListDirResponse{
@@ -122,7 +148,7 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 // CreateFile creates a new file or directory
 func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
 	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.User, req.Type)
-	
+
 	if req.Name == "" || req.User == "" {
 		log.Printf("CreateFile: error - name and user are required")
 		return &pb.CreateFileResponse{
@@ -162,7 +188,7 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 // OpenFile handles file opening (simplified - just returns success)
 func (h *GRPCHandler) OpenFile(ctx context.Context, req *pb.OpenFileRequest) (*pb.OpenFileResponse, error) {
 	log.Printf("OpenFile: FID=%v", req.Fid)
-	
+
 	if req.Fid == nil {
 		log.Printf("OpenFile: error - FID is required")
 		return &pb.OpenFileResponse{
