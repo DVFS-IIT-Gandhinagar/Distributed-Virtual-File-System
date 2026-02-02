@@ -288,8 +288,10 @@ func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
 		return "", fmt.Errorf("not a directory")
 	}
 
-	path := dirInode.OSPath
-
+	path, err := filepath.Rel(fs.rootDir, dirInode.OSPath)
+	if err != nil {
+    	return "", fmt.Errorf("internal error can't compute path")
+	}
 	return path, nil
 }
 
