@@ -1167,7 +1167,7 @@ func (x *PathResponse) GetError() string {
 	return ""
 }
 
-type ChangeDirtRequest struct {
+type ChangeDirRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Fid           *FID                   `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
 	RootFid       *FID                   `protobuf:"bytes,2,opt,name=root_fid,json=rootFid,proto3" json:"root_fid,omitempty"`
@@ -1176,20 +1176,20 @@ type ChangeDirtRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ChangeDirtRequest) Reset() {
-	*x = ChangeDirtRequest{}
+func (x *ChangeDirRequest) Reset() {
+	*x = ChangeDirRequest{}
 	mi := &file_api_fileserver_fileserver_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChangeDirtRequest) String() string {
+func (x *ChangeDirRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChangeDirtRequest) ProtoMessage() {}
+func (*ChangeDirRequest) ProtoMessage() {}
 
-func (x *ChangeDirtRequest) ProtoReflect() protoreflect.Message {
+func (x *ChangeDirRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_api_fileserver_fileserver_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1201,26 +1201,26 @@ func (x *ChangeDirtRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChangeDirtRequest.ProtoReflect.Descriptor instead.
-func (*ChangeDirtRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChangeDirRequest.ProtoReflect.Descriptor instead.
+func (*ChangeDirRequest) Descriptor() ([]byte, []int) {
 	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *ChangeDirtRequest) GetFid() *FID {
+func (x *ChangeDirRequest) GetFid() *FID {
 	if x != nil {
 		return x.Fid
 	}
 	return nil
 }
 
-func (x *ChangeDirtRequest) GetRootFid() *FID {
+func (x *ChangeDirRequest) GetRootFid() *FID {
 	if x != nil {
 		return x.RootFid
 	}
 	return nil
 }
 
-func (x *ChangeDirtRequest) GetPath() string {
+func (x *ChangeDirRequest) GetPath() string {
 	if x != nil {
 		return x.Path
 	}
@@ -1780,8 +1780,8 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\fPathResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"v\n" +
-	"\x11ChangeDirtRequest\x12!\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"u\n" +
+	"\x10ChangeDirRequest\x12!\n" +
 	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12*\n" +
 	"\broot_fid\x18\x02 \x01(\v2\x0f.fileserver.FIDR\arootFid\x12\x12\n" +
 	"\x04path\x18\x03 \x01(\tR\x04path\"m\n" +
@@ -1819,7 +1819,7 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\ruser_root_fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\vuserRootFid*$\n" +
 	"\tInodeType\x12\b\n" +
 	"\x04FILE\x10\x00\x12\r\n" +
-	"\tDIRECTORY\x10\x012\xf0\x06\n" +
+	"\tDIRECTORY\x10\x012\xef\x06\n" +
 	"\n" +
 	"FileServer\x12W\n" +
 	"\x0eRegisterClient\x12!.fileserver.RegisterClientRequest\x1a\".fileserver.RegisterClientResponse\x12K\n" +
@@ -1834,8 +1834,8 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\aGetAttr\x12\x1a.fileserver.GetAttrRequest\x1a\x1b.fileserver.GetAttrResponse\x12B\n" +
 	"\aListDir\x12\x1a.fileserver.ListDirRequest\x1a\x1b.fileserver.ListDirResponse\x12?\n" +
 	"\x06Lookup\x12\x19.fileserver.LookupRequest\x1a\x1a.fileserver.LookupResponse\x129\n" +
-	"\x04Path\x12\x17.fileserver.PathRequest\x1a\x18.fileserver.PathResponse\x12I\n" +
-	"\tChangeDir\x12\x1d.fileserver.ChangeDirtRequest\x1a\x1d.fileserver.ChangeDirResponseB/Z-github.com/umangshikarvar/dvfs/api/fileserverb\x06proto3"
+	"\x04Path\x12\x17.fileserver.PathRequest\x1a\x18.fileserver.PathResponse\x12H\n" +
+	"\tChangeDir\x12\x1c.fileserver.ChangeDirRequest\x1a\x1d.fileserver.ChangeDirResponseB/Z-github.com/umangshikarvar/dvfs/api/fileserverb\x06proto3"
 
 var (
 	file_api_fileserver_fileserver_proto_rawDescOnce sync.Once
@@ -1871,7 +1871,7 @@ var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(*GetAttrResponse)(nil),        // 16: fileserver.GetAttrResponse
 	(*PathRequest)(nil),            // 17: fileserver.PathRequest
 	(*PathResponse)(nil),           // 18: fileserver.PathResponse
-	(*ChangeDirtRequest)(nil),      // 19: fileserver.ChangeDirtRequest
+	(*ChangeDirRequest)(nil),       // 19: fileserver.ChangeDirRequest
 	(*ChangeDirResponse)(nil),      // 20: fileserver.ChangeDirResponse
 	(*ListDirRequest)(nil),         // 21: fileserver.ListDirRequest
 	(*DirEntry)(nil),               // 22: fileserver.DirEntry
@@ -1893,8 +1893,8 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	1,  // 8: fileserver.GetAttrRequest.fid:type_name -> fileserver.FID
 	0,  // 9: fileserver.GetAttrResponse.type:type_name -> fileserver.InodeType
 	1,  // 10: fileserver.PathRequest.fid:type_name -> fileserver.FID
-	1,  // 11: fileserver.ChangeDirtRequest.fid:type_name -> fileserver.FID
-	1,  // 12: fileserver.ChangeDirtRequest.root_fid:type_name -> fileserver.FID
+	1,  // 11: fileserver.ChangeDirRequest.fid:type_name -> fileserver.FID
+	1,  // 12: fileserver.ChangeDirRequest.root_fid:type_name -> fileserver.FID
 	1,  // 13: fileserver.ChangeDirResponse.new_fid:type_name -> fileserver.FID
 	1,  // 14: fileserver.ListDirRequest.fid:type_name -> fileserver.FID
 	1,  // 15: fileserver.DirEntry.fid:type_name -> fileserver.FID
@@ -1914,7 +1914,7 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	21, // 29: fileserver.FileServer.ListDir:input_type -> fileserver.ListDirRequest
 	24, // 30: fileserver.FileServer.Lookup:input_type -> fileserver.LookupRequest
 	17, // 31: fileserver.FileServer.Path:input_type -> fileserver.PathRequest
-	19, // 32: fileserver.FileServer.ChangeDir:input_type -> fileserver.ChangeDirtRequest
+	19, // 32: fileserver.FileServer.ChangeDir:input_type -> fileserver.ChangeDirRequest
 	27, // 33: fileserver.FileServer.RegisterClient:output_type -> fileserver.RegisterClientResponse
 	4,  // 34: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
 	6,  // 35: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse

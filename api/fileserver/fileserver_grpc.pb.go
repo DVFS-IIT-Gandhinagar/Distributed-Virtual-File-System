@@ -50,7 +50,7 @@ type FileServerClient interface {
 	ListDir(ctx context.Context, in *ListDirRequest, opts ...grpc.CallOption) (*ListDirResponse, error)
 	Lookup(ctx context.Context, in *LookupRequest, opts ...grpc.CallOption) (*LookupResponse, error)
 	Path(ctx context.Context, in *PathRequest, opts ...grpc.CallOption) (*PathResponse, error)
-	ChangeDir(ctx context.Context, in *ChangeDirtRequest, opts ...grpc.CallOption) (*ChangeDirResponse, error)
+	ChangeDir(ctx context.Context, in *ChangeDirRequest, opts ...grpc.CallOption) (*ChangeDirResponse, error)
 }
 
 type fileServerClient struct {
@@ -171,7 +171,7 @@ func (c *fileServerClient) Path(ctx context.Context, in *PathRequest, opts ...gr
 	return out, nil
 }
 
-func (c *fileServerClient) ChangeDir(ctx context.Context, in *ChangeDirtRequest, opts ...grpc.CallOption) (*ChangeDirResponse, error) {
+func (c *fileServerClient) ChangeDir(ctx context.Context, in *ChangeDirRequest, opts ...grpc.CallOption) (*ChangeDirResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ChangeDirResponse)
 	err := c.cc.Invoke(ctx, FileServer_ChangeDir_FullMethodName, in, out, cOpts...)
@@ -198,7 +198,7 @@ type FileServerServer interface {
 	ListDir(context.Context, *ListDirRequest) (*ListDirResponse, error)
 	Lookup(context.Context, *LookupRequest) (*LookupResponse, error)
 	Path(context.Context, *PathRequest) (*PathResponse, error)
-	ChangeDir(context.Context, *ChangeDirtRequest) (*ChangeDirResponse, error)
+	ChangeDir(context.Context, *ChangeDirRequest) (*ChangeDirResponse, error)
 	mustEmbedUnimplementedFileServerServer()
 }
 
@@ -242,7 +242,7 @@ func (UnimplementedFileServerServer) Lookup(context.Context, *LookupRequest) (*L
 func (UnimplementedFileServerServer) Path(context.Context, *PathRequest) (*PathResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Path not implemented")
 }
-func (UnimplementedFileServerServer) ChangeDir(context.Context, *ChangeDirtRequest) (*ChangeDirResponse, error) {
+func (UnimplementedFileServerServer) ChangeDir(context.Context, *ChangeDirRequest) (*ChangeDirResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ChangeDir not implemented")
 }
 func (UnimplementedFileServerServer) mustEmbedUnimplementedFileServerServer() {}
@@ -465,7 +465,7 @@ func _FileServer_Path_Handler(srv interface{}, ctx context.Context, dec func(int
 }
 
 func _FileServer_ChangeDir_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ChangeDirtRequest)
+	in := new(ChangeDirRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -477,7 +477,7 @@ func _FileServer_ChangeDir_Handler(srv interface{}, ctx context.Context, dec fun
 		FullMethod: FileServer_ChangeDir_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FileServerServer).ChangeDir(ctx, req.(*ChangeDirtRequest))
+		return srv.(FileServerServer).ChangeDir(ctx, req.(*ChangeDirRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

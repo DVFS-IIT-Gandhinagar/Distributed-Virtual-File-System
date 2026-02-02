@@ -95,55 +95,70 @@ func (fs *FileServer) loadExistingData() error {
 
 // scanUserDirectory scans a user's directory and creates inodes for first-level files and directories
 func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inode) error {
-	entries, err := os.ReadDir(userDir)
-	if err != nil {
-		return fmt.Errorf("failed to read user directory: %w", err)
+	type bfsItem struct {
+		dirPath string
+		inode   *domain.Inode
 	}
-
-	for _, entry := range entries {
-		// Generate new FID for this item
-		newFID := &domain.FID{
-			FileServerID:     fs.serverID,
-			InodeID:          fs.nextInodeID,
-			GenerationNumber: 1,
+	queue := []*bfsItem{}
+	queue = append(queue, &bfsItem{dirPath: userDir, inode: parentInode})
+	for len(queue) > 0{
+		userDir = queue[0].dirPath
+		parentInode = queue[0].inode
+		queue = queue[1:]
+		entries, err := os.ReadDir(userDir)
+		if err != nil {
+			return fmt.Errorf("failed to read user directory: %w", err)
 		}
+		for _, entry := range entries {
+			// Generate new FID for this item
+			newFID := &domain.FID{
+				FileServerID:     fs.serverID,
+				InodeID:          fs.nextInodeID,
+				GenerationNumber: 1,
+			}
 
-		// Determine type
-		var inodeType domain.InodeType
-		if entry.IsDir() {
-			inodeType = domain.InodeTypeDirectory
-		} else {
-			inodeType = domain.InodeTypeFile
-		}
+			// Determine type
+			var inodeType domain.InodeType
+			if entry.IsDir() {
+				inodeType = domain.InodeTypeDirectory
+			} else {
+				inodeType = domain.InodeTypeFile
+			}
 
-		// Create inode
-		itemPath := filepath.Join(userDir, entry.Name())
-		newInode := &domain.Inode{
-			FID:    newFID,
-			Type:   inodeType,
-			Name:   entry.Name(),
-			OSPath: itemPath,
-			Owner:  parentInode.Owner, // Same as parent (user)
-		}
+			// Create inode
+			itemPath := filepath.Join(userDir, entry.Name())
+			newInode := &domain.Inode{
+				FID:    newFID,
+				Type:   inodeType,
+				Name:   entry.Name(),
+				OSPath: itemPath,
+				Owner:  parentInode.Owner, // Same as parent (user)
+			}
 
-		// Set up directory-specific fields
-		if inodeType == domain.InodeTypeDirectory {
-			newInode.Children = make([]*domain.FID, 0)
-		} else {
-			// For files, get the current size
-			if info, err := entry.Info(); err == nil {
-				newInode.Size = uint64(info.Size())
+			// Set up directory-specific fields
+			if inodeType == domain.InodeTypeDirectory {
+				newInode.Children = make([]*domain.FID, 0)
+			} else {
+				// For files, get the current size
+				if info, err := entry.Info(); err == nil {
+					newInode.Size = uint64(info.Size())
+				}
+			}
+
+			// Store inode
+			fs.inodes[newFID.String()] = newInode
+
+			// Add to parent's children
+			parentInode.Children = append(parentInode.Children, newFID)
+
+			// Increment inode ID counter
+			atomic.AddUint64(&fs.nextInodeID, 1)
+
+			// If dir then add to queue
+			if inodeType == domain.InodeTypeDirectory {
+				queue = append(queue, &bfsItem{dirPath: itemPath, inode: newInode})
 			}
 		}
-
-		// Store inode
-		fs.inodes[newFID.String()] = newInode
-
-		// Add to parent's children
-		parentInode.Children = append(parentInode.Children, newFID)
-
-		// Increment inode ID counter
-		atomic.AddUint64(&fs.nextInodeID, 1)
 	}
 
 	return nil
@@ -293,6 +308,22 @@ func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
     	return "", fmt.Errorf("internal error can't compute path")
 	}
 	return path, nil
+}
+
+func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *domain.FID) (*domain.FID, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	CurrentInode, exists := fs.inodes[CurrentFID.String()]
+	if !exists {
+		return CurrentFID, fmt.Errorf("directory not found")
+	}
+
+	if CurrentInode.Type != domain.InodeTypeDirectory {
+		return CurrentFID, fmt.Errorf("not a directory")
+	}
+	CurrentFID.InodeID = 2
+	return CurrentFID, nil
 }
 
 // ListDirectory lists contents of a directory

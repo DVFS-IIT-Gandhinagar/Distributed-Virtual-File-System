@@ -124,7 +124,7 @@ message PathResponse {
   string error = 3;
 }
 
-message ChangeDirtRequest {
+message ChangeDirRequest {
   FID fid = 1;
   FID root_fid = 2;
   string path = 3;
@@ -190,7 +190,7 @@ service FileServer {
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
   rpc Path(PathRequest) returns (PathResponse);
-  rpc ChangeDir(ChangeDirtRequest) returns (ChangeDirResponse);
+  rpc ChangeDir(ChangeDirRequest) returns (ChangeDirResponse);
 }
 
 // To build these run: make proto

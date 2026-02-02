@@ -71,7 +71,20 @@ func (c *Client) Path() (string, error) {
 
 // CreateDirectory changes the current directory
 func (c *Client) ChangeDirectory(relative_path string) error {
-	c.currentFID.InodeID = 2
+	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
+		Fid:  c.currentFID.ToProto(),
+		RootFid: c.rootFID.ToProto(),
+		Path: relative_path,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to change directory: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	c.currentFID = domain.FIDFromProto(resp.NewFid)
 	return nil
 }
 

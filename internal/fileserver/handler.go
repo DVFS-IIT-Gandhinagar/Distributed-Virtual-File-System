@@ -101,9 +101,40 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 		}, nil
 	}
 
+	log.Printf("Path: success - found path: %v", path)
 	return &pb.PathResponse{
 		Path:    path,
 		Success: true,
+	}, nil
+}
+
+// Changes the current directory
+func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (*pb.ChangeDirResponse, error) {
+	log.Printf("Change Dir: from FID=%v to path=%v", req.Fid, req.Path)
+
+	if req.Fid == nil {
+		log.Printf("ChangeDir: error - FID is required")
+		return &pb.ChangeDirResponse{
+			Success: false,
+			Error:   "FID is required",
+		}, nil
+	}
+
+	fid := domain.FIDFromProto(req.Fid)
+	root_fid := domain.FIDFromProto(req.RootFid)
+	new_fid, err := h.fileServer.ChangeDir(fid, req.Path, root_fid)
+	if err != nil {
+		log.Printf("ChangeDir: error changing directory - %v", err)
+		return &pb.ChangeDirResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	log.Printf("ChangeDir: success - changed Dir to %v", fid)
+	return &pb.ChangeDirResponse{
+		Success: true,
+		NewFid:  new_fid.ToProto(),
 	}, nil
 }
 
