@@ -183,118 +183,6 @@ func (x *ACL) GetWriteUsers() []string {
 }
 
 // === File Operations ===
-type PathRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Fid           *FID                   `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
-	User          string                 `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PathRequest) Reset() {
-	*x = PathRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PathRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PathRequest) ProtoMessage() {}
-
-func (x *PathRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PathRequest.ProtoReflect.Descriptor instead.
-func (*PathRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PathRequest) GetFid() *FID {
-	if x != nil {
-		return x.Fid
-	}
-	return nil
-}
-
-func (x *PathRequest) GetUser() string {
-	if x != nil {
-		return x.User
-	}
-	return ""
-}
-
-type PathResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PathResponse) Reset() {
-	*x = PathResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PathResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PathResponse) ProtoMessage() {}
-
-func (x *PathResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PathResponse.ProtoReflect.Descriptor instead.
-func (*PathResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *PathResponse) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *PathResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *PathResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
 type CreateFileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ParentPath    string                 `protobuf:"bytes,1,opt,name=parent_path,json=parentPath,proto3" json:"parent_path,omitempty"` // path on server
@@ -307,7 +195,7 @@ type CreateFileRequest struct {
 
 func (x *CreateFileRequest) Reset() {
 	*x = CreateFileRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[4]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +207,7 @@ func (x *CreateFileRequest) String() string {
 func (*CreateFileRequest) ProtoMessage() {}
 
 func (x *CreateFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[4]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +220,7 @@ func (x *CreateFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFileRequest.ProtoReflect.Descriptor instead.
 func (*CreateFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{4}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateFileRequest) GetParentPath() string {
@@ -374,7 +262,7 @@ type CreateFileResponse struct {
 
 func (x *CreateFileResponse) Reset() {
 	*x = CreateFileResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[5]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -386,7 +274,7 @@ func (x *CreateFileResponse) String() string {
 func (*CreateFileResponse) ProtoMessage() {}
 
 func (x *CreateFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[5]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -399,7 +287,7 @@ func (x *CreateFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFileResponse.ProtoReflect.Descriptor instead.
 func (*CreateFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{5}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateFileResponse) GetFid() *FID {
@@ -434,7 +322,7 @@ type OpenFileRequest struct {
 
 func (x *OpenFileRequest) Reset() {
 	*x = OpenFileRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[6]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -446,7 +334,7 @@ func (x *OpenFileRequest) String() string {
 func (*OpenFileRequest) ProtoMessage() {}
 
 func (x *OpenFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[6]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -459,7 +347,7 @@ func (x *OpenFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenFileRequest.ProtoReflect.Descriptor instead.
 func (*OpenFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{6}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *OpenFileRequest) GetFid() *FID {
@@ -495,7 +383,7 @@ type OpenFileResponse struct {
 
 func (x *OpenFileResponse) Reset() {
 	*x = OpenFileResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[7]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +395,7 @@ func (x *OpenFileResponse) String() string {
 func (*OpenFileResponse) ProtoMessage() {}
 
 func (x *OpenFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[7]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +408,7 @@ func (x *OpenFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenFileResponse.ProtoReflect.Descriptor instead.
 func (*OpenFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{7}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *OpenFileResponse) GetSuccess() bool {
@@ -563,7 +451,7 @@ type ReadFileRequest struct {
 
 func (x *ReadFileRequest) Reset() {
 	*x = ReadFileRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[8]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +463,7 @@ func (x *ReadFileRequest) String() string {
 func (*ReadFileRequest) ProtoMessage() {}
 
 func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[8]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +476,7 @@ func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFileRequest.ProtoReflect.Descriptor instead.
 func (*ReadFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{8}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ReadFileRequest) GetFid() *FID {
@@ -630,7 +518,7 @@ type ReadFileResponse struct {
 
 func (x *ReadFileResponse) Reset() {
 	*x = ReadFileResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[9]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +530,7 @@ func (x *ReadFileResponse) String() string {
 func (*ReadFileResponse) ProtoMessage() {}
 
 func (x *ReadFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[9]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +543,7 @@ func (x *ReadFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFileResponse.ProtoReflect.Descriptor instead.
 func (*ReadFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{9}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ReadFileResponse) GetData() []byte {
@@ -692,7 +580,7 @@ type WriteFileRequest struct {
 
 func (x *WriteFileRequest) Reset() {
 	*x = WriteFileRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[10]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -704,7 +592,7 @@ func (x *WriteFileRequest) String() string {
 func (*WriteFileRequest) ProtoMessage() {}
 
 func (x *WriteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[10]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -717,7 +605,7 @@ func (x *WriteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileRequest.ProtoReflect.Descriptor instead.
 func (*WriteFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{10}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WriteFileRequest) GetFid() *FID {
@@ -766,7 +654,7 @@ type WriteFileResponse struct {
 
 func (x *WriteFileResponse) Reset() {
 	*x = WriteFileResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[11]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +666,7 @@ func (x *WriteFileResponse) String() string {
 func (*WriteFileResponse) ProtoMessage() {}
 
 func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[11]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +679,7 @@ func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileResponse.ProtoReflect.Descriptor instead.
 func (*WriteFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{11}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WriteFileResponse) GetSuccess() bool {
@@ -826,7 +714,7 @@ type CloseFileRequest struct {
 
 func (x *CloseFileRequest) Reset() {
 	*x = CloseFileRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[12]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -838,7 +726,7 @@ func (x *CloseFileRequest) String() string {
 func (*CloseFileRequest) ProtoMessage() {}
 
 func (x *CloseFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[12]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -851,7 +739,7 @@ func (x *CloseFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseFileRequest.ProtoReflect.Descriptor instead.
 func (*CloseFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{12}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CloseFileRequest) GetFid() *FID {
@@ -885,7 +773,7 @@ type CloseFileResponse struct {
 
 func (x *CloseFileResponse) Reset() {
 	*x = CloseFileResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[13]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -897,7 +785,7 @@ func (x *CloseFileResponse) String() string {
 func (*CloseFileResponse) ProtoMessage() {}
 
 func (x *CloseFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[13]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -910,7 +798,7 @@ func (x *CloseFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseFileResponse.ProtoReflect.Descriptor instead.
 func (*CloseFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{13}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CloseFileResponse) GetSuccess() bool {
@@ -937,7 +825,7 @@ type DeleteFileRequest struct {
 
 func (x *DeleteFileRequest) Reset() {
 	*x = DeleteFileRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[14]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -949,7 +837,7 @@ func (x *DeleteFileRequest) String() string {
 func (*DeleteFileRequest) ProtoMessage() {}
 
 func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[14]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +850,7 @@ func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{14}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DeleteFileRequest) GetFid() *FID {
@@ -989,7 +877,7 @@ type DeleteFileResponse struct {
 
 func (x *DeleteFileResponse) Reset() {
 	*x = DeleteFileResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[15]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1001,7 +889,7 @@ func (x *DeleteFileResponse) String() string {
 func (*DeleteFileResponse) ProtoMessage() {}
 
 func (x *DeleteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[15]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1014,7 +902,7 @@ func (x *DeleteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{15}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteFileResponse) GetSuccess() bool {
@@ -1041,7 +929,7 @@ type GetAttrRequest struct {
 
 func (x *GetAttrRequest) Reset() {
 	*x = GetAttrRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[16]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1053,7 +941,7 @@ func (x *GetAttrRequest) String() string {
 func (*GetAttrRequest) ProtoMessage() {}
 
 func (x *GetAttrRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[16]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +954,7 @@ func (x *GetAttrRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttrRequest.ProtoReflect.Descriptor instead.
 func (*GetAttrRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{16}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetAttrRequest) GetFid() *FID {
@@ -1097,7 +985,7 @@ type GetAttrResponse struct {
 
 func (x *GetAttrResponse) Reset() {
 	*x = GetAttrResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[17]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1109,7 +997,7 @@ func (x *GetAttrResponse) String() string {
 func (*GetAttrResponse) ProtoMessage() {}
 
 func (x *GetAttrResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[17]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1122,7 +1010,7 @@ func (x *GetAttrResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttrResponse.ProtoReflect.Descriptor instead.
 func (*GetAttrResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{17}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetAttrResponse) GetSuccess() bool {
@@ -1165,6 +1053,118 @@ func (x *GetAttrResponse) GetVersion() uint64 {
 		return x.Version
 	}
 	return 0
+}
+
+type PathRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fid           *FID                   `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
+	User          string                 `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PathRequest) Reset() {
+	*x = PathRequest{}
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PathRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PathRequest) ProtoMessage() {}
+
+func (x *PathRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PathRequest.ProtoReflect.Descriptor instead.
+func (*PathRequest) Descriptor() ([]byte, []int) {
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *PathRequest) GetFid() *FID {
+	if x != nil {
+		return x.Fid
+	}
+	return nil
+}
+
+func (x *PathRequest) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+type PathResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PathResponse) Reset() {
+	*x = PathResponse{}
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PathResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PathResponse) ProtoMessage() {}
+
+func (x *PathResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PathResponse.ProtoReflect.Descriptor instead.
+func (*PathResponse) Descriptor() ([]byte, []int) {
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *PathResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *PathResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *PathResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
 }
 
 type ListDirRequest struct {
@@ -1593,14 +1593,7 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\n" +
 	"read_users\x18\x01 \x03(\tR\treadUsers\x12\x1f\n" +
 	"\vwrite_users\x18\x02 \x03(\tR\n" +
-	"writeUsers\"D\n" +
-	"\vPathRequest\x12!\n" +
-	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12\x12\n" +
-	"\x04user\x18\x02 \x01(\tR\x04user\"R\n" +
-	"\fPathResponse\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x87\x01\n" +
+	"writeUsers\"\x87\x01\n" +
 	"\x11CreateFileRequest\x12\x1f\n" +
 	"\vparent_path\x18\x01 \x01(\tR\n" +
 	"parentPath\x12\x12\n" +
@@ -1661,7 +1654,14 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12)\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x15.fileserver.InodeTypeR\x04type\x12\x12\n" +
 	"\x04size\x18\x05 \x01(\x04R\x04size\x12\x18\n" +
-	"\aversion\x18\x06 \x01(\x04R\aversion\"G\n" +
+	"\aversion\x18\x06 \x01(\x04R\aversion\"D\n" +
+	"\vPathRequest\x12!\n" +
+	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12\x12\n" +
+	"\x04user\x18\x02 \x01(\tR\x04user\"R\n" +
+	"\fPathResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"G\n" +
 	"\x0eListDirRequest\x12!\n" +
 	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12\x12\n" +
 	"\x04user\x18\x02 \x01(\tR\x04user\"l\n" +
@@ -1727,22 +1727,22 @@ var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(InodeType)(0),                 // 0: fileserver.InodeType
 	(*FID)(nil),                    // 1: fileserver.FID
 	(*ACL)(nil),                    // 2: fileserver.ACL
-	(*PathRequest)(nil),            // 3: fileserver.PathRequest
-	(*PathResponse)(nil),           // 4: fileserver.PathResponse
-	(*CreateFileRequest)(nil),      // 5: fileserver.CreateFileRequest
-	(*CreateFileResponse)(nil),     // 6: fileserver.CreateFileResponse
-	(*OpenFileRequest)(nil),        // 7: fileserver.OpenFileRequest
-	(*OpenFileResponse)(nil),       // 8: fileserver.OpenFileResponse
-	(*ReadFileRequest)(nil),        // 9: fileserver.ReadFileRequest
-	(*ReadFileResponse)(nil),       // 10: fileserver.ReadFileResponse
-	(*WriteFileRequest)(nil),       // 11: fileserver.WriteFileRequest
-	(*WriteFileResponse)(nil),      // 12: fileserver.WriteFileResponse
-	(*CloseFileRequest)(nil),       // 13: fileserver.CloseFileRequest
-	(*CloseFileResponse)(nil),      // 14: fileserver.CloseFileResponse
-	(*DeleteFileRequest)(nil),      // 15: fileserver.DeleteFileRequest
-	(*DeleteFileResponse)(nil),     // 16: fileserver.DeleteFileResponse
-	(*GetAttrRequest)(nil),         // 17: fileserver.GetAttrRequest
-	(*GetAttrResponse)(nil),        // 18: fileserver.GetAttrResponse
+	(*CreateFileRequest)(nil),      // 3: fileserver.CreateFileRequest
+	(*CreateFileResponse)(nil),     // 4: fileserver.CreateFileResponse
+	(*OpenFileRequest)(nil),        // 5: fileserver.OpenFileRequest
+	(*OpenFileResponse)(nil),       // 6: fileserver.OpenFileResponse
+	(*ReadFileRequest)(nil),        // 7: fileserver.ReadFileRequest
+	(*ReadFileResponse)(nil),       // 8: fileserver.ReadFileResponse
+	(*WriteFileRequest)(nil),       // 9: fileserver.WriteFileRequest
+	(*WriteFileResponse)(nil),      // 10: fileserver.WriteFileResponse
+	(*CloseFileRequest)(nil),       // 11: fileserver.CloseFileRequest
+	(*CloseFileResponse)(nil),      // 12: fileserver.CloseFileResponse
+	(*DeleteFileRequest)(nil),      // 13: fileserver.DeleteFileRequest
+	(*DeleteFileResponse)(nil),     // 14: fileserver.DeleteFileResponse
+	(*GetAttrRequest)(nil),         // 15: fileserver.GetAttrRequest
+	(*GetAttrResponse)(nil),        // 16: fileserver.GetAttrResponse
+	(*PathRequest)(nil),            // 17: fileserver.PathRequest
+	(*PathResponse)(nil),           // 18: fileserver.PathResponse
 	(*ListDirRequest)(nil),         // 19: fileserver.ListDirRequest
 	(*DirEntry)(nil),               // 20: fileserver.DirEntry
 	(*ListDirResponse)(nil),        // 21: fileserver.ListDirResponse
@@ -1752,16 +1752,16 @@ var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(*RegisterClientResponse)(nil), // 25: fileserver.RegisterClientResponse
 }
 var file_api_fileserver_fileserver_proto_depIdxs = []int32{
-	1,  // 0: fileserver.PathRequest.fid:type_name -> fileserver.FID
-	0,  // 1: fileserver.CreateFileRequest.type:type_name -> fileserver.InodeType
-	1,  // 2: fileserver.CreateFileResponse.fid:type_name -> fileserver.FID
-	1,  // 3: fileserver.OpenFileRequest.fid:type_name -> fileserver.FID
-	1,  // 4: fileserver.ReadFileRequest.fid:type_name -> fileserver.FID
-	1,  // 5: fileserver.WriteFileRequest.fid:type_name -> fileserver.FID
-	1,  // 6: fileserver.CloseFileRequest.fid:type_name -> fileserver.FID
-	1,  // 7: fileserver.DeleteFileRequest.fid:type_name -> fileserver.FID
-	1,  // 8: fileserver.GetAttrRequest.fid:type_name -> fileserver.FID
-	0,  // 9: fileserver.GetAttrResponse.type:type_name -> fileserver.InodeType
+	0,  // 0: fileserver.CreateFileRequest.type:type_name -> fileserver.InodeType
+	1,  // 1: fileserver.CreateFileResponse.fid:type_name -> fileserver.FID
+	1,  // 2: fileserver.OpenFileRequest.fid:type_name -> fileserver.FID
+	1,  // 3: fileserver.ReadFileRequest.fid:type_name -> fileserver.FID
+	1,  // 4: fileserver.WriteFileRequest.fid:type_name -> fileserver.FID
+	1,  // 5: fileserver.CloseFileRequest.fid:type_name -> fileserver.FID
+	1,  // 6: fileserver.DeleteFileRequest.fid:type_name -> fileserver.FID
+	1,  // 7: fileserver.GetAttrRequest.fid:type_name -> fileserver.FID
+	0,  // 8: fileserver.GetAttrResponse.type:type_name -> fileserver.InodeType
+	1,  // 9: fileserver.PathRequest.fid:type_name -> fileserver.FID
 	1,  // 10: fileserver.ListDirRequest.fid:type_name -> fileserver.FID
 	1,  // 11: fileserver.DirEntry.fid:type_name -> fileserver.FID
 	0,  // 12: fileserver.DirEntry.type:type_name -> fileserver.InodeType
@@ -1770,27 +1770,27 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	1,  // 15: fileserver.LookupResponse.fid:type_name -> fileserver.FID
 	1,  // 16: fileserver.RegisterClientResponse.user_root_fid:type_name -> fileserver.FID
 	24, // 17: fileserver.FileServer.RegisterClient:input_type -> fileserver.RegisterClientRequest
-	5,  // 18: fileserver.FileServer.CreateFile:input_type -> fileserver.CreateFileRequest
-	7,  // 19: fileserver.FileServer.OpenFile:input_type -> fileserver.OpenFileRequest
-	9,  // 20: fileserver.FileServer.ReadFile:input_type -> fileserver.ReadFileRequest
-	11, // 21: fileserver.FileServer.WriteFile:input_type -> fileserver.WriteFileRequest
-	13, // 22: fileserver.FileServer.CloseFile:input_type -> fileserver.CloseFileRequest
-	15, // 23: fileserver.FileServer.DeleteFile:input_type -> fileserver.DeleteFileRequest
-	17, // 24: fileserver.FileServer.GetAttr:input_type -> fileserver.GetAttrRequest
+	3,  // 18: fileserver.FileServer.CreateFile:input_type -> fileserver.CreateFileRequest
+	5,  // 19: fileserver.FileServer.OpenFile:input_type -> fileserver.OpenFileRequest
+	7,  // 20: fileserver.FileServer.ReadFile:input_type -> fileserver.ReadFileRequest
+	9,  // 21: fileserver.FileServer.WriteFile:input_type -> fileserver.WriteFileRequest
+	11, // 22: fileserver.FileServer.CloseFile:input_type -> fileserver.CloseFileRequest
+	13, // 23: fileserver.FileServer.DeleteFile:input_type -> fileserver.DeleteFileRequest
+	15, // 24: fileserver.FileServer.GetAttr:input_type -> fileserver.GetAttrRequest
 	19, // 25: fileserver.FileServer.ListDir:input_type -> fileserver.ListDirRequest
 	22, // 26: fileserver.FileServer.Lookup:input_type -> fileserver.LookupRequest
-	3,  // 27: fileserver.FileServer.Path:input_type -> fileserver.PathRequest
+	17, // 27: fileserver.FileServer.Path:input_type -> fileserver.PathRequest
 	25, // 28: fileserver.FileServer.RegisterClient:output_type -> fileserver.RegisterClientResponse
-	6,  // 29: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
-	8,  // 30: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse
-	10, // 31: fileserver.FileServer.ReadFile:output_type -> fileserver.ReadFileResponse
-	12, // 32: fileserver.FileServer.WriteFile:output_type -> fileserver.WriteFileResponse
-	14, // 33: fileserver.FileServer.CloseFile:output_type -> fileserver.CloseFileResponse
-	16, // 34: fileserver.FileServer.DeleteFile:output_type -> fileserver.DeleteFileResponse
-	18, // 35: fileserver.FileServer.GetAttr:output_type -> fileserver.GetAttrResponse
+	4,  // 29: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
+	6,  // 30: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse
+	8,  // 31: fileserver.FileServer.ReadFile:output_type -> fileserver.ReadFileResponse
+	10, // 32: fileserver.FileServer.WriteFile:output_type -> fileserver.WriteFileResponse
+	12, // 33: fileserver.FileServer.CloseFile:output_type -> fileserver.CloseFileResponse
+	14, // 34: fileserver.FileServer.DeleteFile:output_type -> fileserver.DeleteFileResponse
+	16, // 35: fileserver.FileServer.GetAttr:output_type -> fileserver.GetAttrResponse
 	21, // 36: fileserver.FileServer.ListDir:output_type -> fileserver.ListDirResponse
 	23, // 37: fileserver.FileServer.Lookup:output_type -> fileserver.LookupResponse
-	4,  // 38: fileserver.FileServer.Path:output_type -> fileserver.PathResponse
+	18, // 38: fileserver.FileServer.Path:output_type -> fileserver.PathResponse
 	28, // [28:39] is the sub-list for method output_type
 	17, // [17:28] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name

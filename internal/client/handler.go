@@ -164,7 +164,7 @@ func (h *CommandHandler) handleInfo() {
 		return
 	}
 
-	fmt.Printf("Root Directory Information:\n")
+	fmt.Printf("Directory Information:\n")
 	fmt.Printf("  Name: %s\n", info.Name)
 	fmt.Printf("  Type: %s\n", info.Type)
 	fmt.Printf("  Size: %d bytes\n", info.Size)

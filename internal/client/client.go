@@ -14,6 +14,7 @@ import (
 type Client struct {
 	username   string
 	rootFID    *domain.FID
+	currentFID *domain.FID
 	serverConn pb.FileServerClient
 }
 
@@ -47,13 +48,14 @@ func (c *Client) Connect(serverAddress string) error {
 	}
 
 	c.rootFID = domain.FIDFromProto(resp.UserRootFid)
+	c.currentFID = c.rootFID
 	return nil
 }
 
 // ListFiles lists files in user's root directory
 func (c *Client) ListFiles() ([]*FileInfo, error) {
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
-		Fid:  c.rootFID.ToProto(),
+		Fid:  c.currentFID.ToProto(),
 		User: c.username,
 	})
 	if err != nil {
@@ -80,7 +82,7 @@ func (c *Client) ListFiles() ([]*FileInfo, error) {
 // Returns current user path
 func (c *Client) Path() (string, error) {
 	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
-		Fid:  c.rootFID.ToProto(),
+		Fid:  c.currentFID.ToProto(),
 		User: c.username,
 	})
 	if err != nil {
@@ -97,7 +99,7 @@ func (c *Client) Path() (string, error) {
 // GetFileInfo gets information about user's root directory
 func (c *Client) GetFileInfo() (*FileInfo, error) {
 	resp, err := c.serverConn.GetAttr(context.Background(), &pb.GetAttrRequest{
-		Fid:  c.rootFID.ToProto(),
+		Fid:  c.currentFID.ToProto(),
 		User: c.username,
 	})
 	if err != nil {
@@ -109,7 +111,7 @@ func (c *Client) GetFileInfo() (*FileInfo, error) {
 	}
 
 	return &FileInfo{
-		FID:  c.rootFID,
+		FID:  c.currentFID,
 		Name: resp.Name,
 		Type: domain.InodeTypeFromProto(resp.Type),
 		Size: resp.Size,

@@ -25,17 +25,6 @@ enum InodeType {
 }
 
 // === File Operations ===
-message PathRequest {
-  FID fid = 1;
-  string user = 2;
-}
-
-message PathResponse {
-  string path =1;
-  bool success = 2;
-  string error = 3;
-}
-
 message CreateFileRequest {
   string parent_path = 1; // path on server
   string name = 2;
@@ -122,6 +111,17 @@ message GetAttrResponse {
   InodeType type = 4;
   uint64 size = 5;
   uint64 version = 6;
+}
+
+message PathRequest {
+  FID fid = 1;
+  string user = 2;
+}
+
+message PathResponse {
+  string path =1;
+  bool success = 2;
+  string error = 3;
 }
 
 message ListDirRequest {
