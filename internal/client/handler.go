@@ -119,6 +119,12 @@ func (h *CommandHandler) handleCreateFile(filename string) {
 		return
 	}
 
+	// check for nested paths
+	if strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		fmt.Println("Error: nested paths are not supported")
+		return
+	}
+
 	file, err := h.client.CreateFile(filename)
 	if err != nil {
 		fmt.Printf("Error creating file '%s': %v\n", filename, err)
@@ -132,6 +138,12 @@ func (h *CommandHandler) handleCreateFile(filename string) {
 func (h *CommandHandler) handleCreateDir(dirname string) {
 	if dirname == "" {
 		fmt.Println("Error: directory name cannot be empty")
+		return
+	}
+
+	// check for nested paths
+	if strings.Contains(dirname, "/") || strings.Contains(dirname, "\\") {
+		fmt.Println("Error: nested paths are not supported")
 		return
 	}
 

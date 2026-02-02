@@ -3,6 +3,7 @@ package fileserver
 import (
 	"context"
 	"log"
+	"strings"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -148,12 +149,20 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 // CreateFile creates a new file or directory
 func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
 	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.User, req.Type)
-
+	
 	if req.Name == "" || req.User == "" {
 		log.Printf("CreateFile: error - name and user are required")
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   "name and user are required",
+		}, nil
+	}
+
+	if strings.Contains(req.Name, "/") || strings.Contains(req.Name, "\\") {
+		log.Printf("CreateFile: error - nested paths are not supported")
+		return &pb.CreateFileResponse{
+			Success: false,
+			Error:   "nested paths are not supported",
 		}, nil
 	}
 
