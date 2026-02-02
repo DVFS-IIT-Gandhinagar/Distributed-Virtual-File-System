@@ -149,7 +149,7 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 // CreateFile creates a new file or directory
 func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
 	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.User, req.Type)
-	
+
 	if req.Name == "" || req.User == "" {
 		log.Printf("CreateFile: error - name and user are required")
 		return &pb.CreateFileResponse{
