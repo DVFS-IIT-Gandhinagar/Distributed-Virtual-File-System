@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"strings"
 
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
@@ -101,7 +102,7 @@ func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inod
 	}
 	queue := []*bfsItem{}
 	queue = append(queue, &bfsItem{dirPath: userDir, inode: parentInode})
-	for len(queue) > 0{
+	for len(queue) > 0 {
 		userDir = queue[0].dirPath
 		parentInode = queue[0].inode
 		queue = queue[1:]
@@ -322,7 +323,38 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 	if CurrentInode.Type != domain.InodeTypeDirectory {
 		return CurrentFID, fmt.Errorf("not a directory")
 	}
-	CurrentFID.InodeID = 2
+
+	if path == "/" {
+		return RootFID, nil
+	}
+
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		found := false
+
+		for _, childFID := range CurrentInode.Children {
+			childInode, exists := fs.inodes[childFID.String()]
+			if !exists {
+				continue
+			}
+
+			if childInode.Name == part {
+				if childInode.Type != domain.InodeTypeDirectory {
+					return CurrentFID, fmt.Errorf("%s is not a directory", part)
+				}
+
+				CurrentInode = childInode
+				CurrentFID = childInode.FID
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return CurrentFID, fmt.Errorf("incorrect path")
+		}
+	}
+
 	return CurrentFID, nil
 }
 

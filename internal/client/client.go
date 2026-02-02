@@ -59,7 +59,7 @@ func (c *Client) Path() (string, error) {
 		User: c.username,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to get attributes: %w", err)
+		return "", fmt.Errorf("failed to get path: %w", err)
 	}
 
 	if !resp.Success {
