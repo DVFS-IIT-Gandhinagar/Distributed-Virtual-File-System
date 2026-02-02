@@ -52,6 +52,29 @@ func (c *Client) Connect(serverAddress string) error {
 	return nil
 }
 
+// Returns current user path
+func (c *Client) Path() (string, error) {
+	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
+		Fid:  c.currentFID.ToProto(),
+		User: c.username,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to get attributes: %w", err)
+	}
+
+	if !resp.Success {
+		return "", fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	return resp.Path, nil
+}
+
+// CreateDirectory changes the current directory
+func (c *Client) ChangeDirectory(relative_path string) error {
+	c.currentFID.InodeID = 2
+	return nil
+}
+
 // ListFiles lists files in user's root directory
 func (c *Client) ListFiles() ([]*FileInfo, error) {
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
@@ -77,23 +100,6 @@ func (c *Client) ListFiles() ([]*FileInfo, error) {
 	}
 
 	return files, nil
-}
-
-// Returns current user path
-func (c *Client) Path() (string, error) {
-	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
-		Fid:  c.currentFID.ToProto(),
-		User: c.username,
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to get attributes: %w", err)
-	}
-
-	if !resp.Success {
-		return "", fmt.Errorf("server error: %s", resp.Error)
-	}
-
-	return resp.Path, nil
 }
 
 // GetFileInfo gets information about user's root directory
@@ -123,6 +129,7 @@ func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
 		Name: name,
 		User: c.username,
+		Fid:  c.currentFID.ToProto(),
 		Type: pb.InodeType_FILE,
 	})
 	if err != nil {
@@ -146,6 +153,7 @@ func (c *Client) CreateDirectory(name string) (*FileInfo, error) {
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
 		Name: name,
 		User: c.username,
+		Fid:  c.currentFID.ToProto(),
 		Type: pb.InodeType_DIRECTORY,
 	})
 	if err != nil {

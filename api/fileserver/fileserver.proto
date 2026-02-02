@@ -26,9 +26,9 @@ enum InodeType {
 
 // === File Operations ===
 message CreateFileRequest {
-  string parent_path = 1; // path on server
-  string name = 2;
-  string user = 3;
+  string name = 1;
+  string user = 2;
+  FID fid = 3;
   InodeType type = 4;
 }
 
@@ -124,6 +124,18 @@ message PathResponse {
   string error = 3;
 }
 
+message ChangeDirtRequest {
+  FID fid = 1;
+  FID root_fid = 2;
+  string path = 3;
+}
+
+message ChangeDirResponse {
+  bool success = 1;
+  string error = 2;
+  FID new_fid = 3; // FID of new directory
+}
+
 message ListDirRequest {
   FID fid = 1;
   string user = 2;
@@ -178,6 +190,7 @@ service FileServer {
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
   rpc Path(PathRequest) returns (PathResponse);
+  rpc ChangeDir(ChangeDirtRequest) returns (ChangeDirResponse);
 }
 
 // To build these run: make proto

@@ -166,16 +166,8 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 		}, nil
 	}
 
-	// For simplicity, assume parent is user root if not specified
-	// In real implementation, you'd parse parent_path to get parent FID
-	parentFID, err := h.fileServer.GetUserRoot(req.User)
-	if err != nil {
-		log.Printf("CreateFile: error getting user root - %v", err)
-		return &pb.CreateFileResponse{
-			Success: false,
-			Error:   "failed to get user root: " + err.Error(),
-		}, nil
-	}
+	// get parent FID
+	parentFID := domain.FIDFromProto(req.Fid)
 
 	fileType := domain.InodeTypeFromProto(req.Type)
 	newFID, err := h.fileServer.CreateFile(parentFID, req.Name, req.User, fileType)
