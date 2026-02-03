@@ -1,7 +1,7 @@
 - [x] Test server-client on different machines 
-- [] implement cd .. command - @Umang-Shikarvar
+- [x] implement cd .. command - @Umang-Shikarvar
 - [x] handle correct scanning of nested file's inodes
-- [] show path after user root dir - @Umang-Shikarvar
+- [x] show path after user root dir - @Umang-Shikarvar
 - [] handle read/write operations - @Reckadon
 - [] CLI args parsing with flags
 - [x] Handle current inode (in some subdir)
