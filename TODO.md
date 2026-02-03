@@ -1,4 +1,5 @@
 - Test server-client on different machines
-- implement cd .. command 
+- implement cd .. command
 - show path after user root dir
 - handle read/write operations
+- CLI args parsing with flags

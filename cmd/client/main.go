@@ -11,11 +11,14 @@ import (
 func main() {
 	// Client configuration
 	username := "romit"
+	serverAddress := "127.0.0.1:50051"
 	// Parse command line args
 	if len(os.Args) > 1 {
 		username = os.Args[1]
 	}
-	serverAddress := "127.0.0.1:50051"
+	 if len(os.Args) > 2 {
+		serverAddress = os.Args[2] + ":50051"
+	}
 
 	// Create and connect client
 	c := client.NewClient(username)

@@ -96,12 +96,15 @@ func (fs *FileServer) loadExistingData() error {
 
 // scanUserDirectory scans a user's directory and creates inodes for first-level files and directories
 func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inode) error {
+
 	type bfsItem struct {
 		dirPath string
 		inode   *domain.Inode
 	}
+
 	queue := []*bfsItem{}
 	queue = append(queue, &bfsItem{dirPath: userDir, inode: parentInode})
+	
 	for len(queue) > 0 {
 		userDir = queue[0].dirPath
 		parentInode = queue[0].inode
