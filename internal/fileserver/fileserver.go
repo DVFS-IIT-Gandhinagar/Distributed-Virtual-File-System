@@ -34,11 +34,14 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 
 	// Check if rootDir already exists
 	if _, err := os.Stat(rootDir); err == nil {
-		// Root directory exists, scan and load existing data
-		if err := fs.loadExistingData(); err != nil {
+		// Root directory exists, scan and load existing data using FileScanner
+		fileScanner := &FileScanner{rootDir: rootDir, serverID: serverID}
+
+		if err := fileScanner.loadExistingData(&fs.nextInodeID, &fs.inodes, &fs.users); err != nil {
 			return nil, fmt.Errorf("failed to load existing data: %w", err)
 		}
 		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
+		
 	} else {
 		// Root directory doesn't exist, create it
 		if err := os.MkdirAll(rootDir, 0755); err != nil {
@@ -47,126 +50,6 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 	}
 
 	return fs, nil
-}
-
-// loadExistingData scans the root directory and creates inodes for existing files and directories
-func (fs *FileServer) loadExistingData() error {
-	// Scan user directories (first level under rootDir)
-	entries, err := os.ReadDir(fs.rootDir)
-	if err != nil {
-		return fmt.Errorf("failed to read root directory: %w", err)
-	}
-
-	// user volumes are at first level
-	for _, entry := range entries {
-		if entry.IsDir() {
-			username := entry.Name()
-			userDir := filepath.Join(fs.rootDir, username)
-
-			// Create root inode for this user (always inode ID 0)
-			userRootFID := &domain.FID{
-				FileServerID:     fs.serverID,
-				InodeID:          fs.nextInodeID,
-				GenerationNumber: 1,
-			}
-			atomic.AddUint64(&fs.nextInodeID, 1)
-			fs.users[username] = userRootFID
-
-			// Create root inode
-			userRootInode := &domain.Inode{
-				FID:      userRootFID,
-				Type:     domain.InodeTypeDirectory,
-				Name:     username,
-				OSPath:   userDir,
-				Owner:    username,
-				Children: make([]*domain.FID, 0),
-			}
-
-			fs.inodes[userRootFID.String()] = userRootInode
-
-			// Scan user's files and directories (first level only)
-			if err := fs.scanUserDirectory(userDir, userRootInode); err != nil {
-				return fmt.Errorf("failed to scan user directory %s: %w", username, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// scanUserDirectory scans a user's directory and creates inodes for first-level files and directories
-func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inode) error {
-
-	type bfsItem struct {
-		dirPath string
-		inode   *domain.Inode
-	}
-
-	queue := []*bfsItem{}
-	queue = append(queue, &bfsItem{dirPath: userDir, inode: parentInode})
-	
-	for len(queue) > 0 {
-		userDir = queue[0].dirPath
-		parentInode = queue[0].inode
-		queue = queue[1:]
-		entries, err := os.ReadDir(userDir)
-		if err != nil {
-			return fmt.Errorf("failed to read user directory: %w", err)
-		}
-		for _, entry := range entries {
-			// Generate new FID for this item
-			newFID := &domain.FID{
-				FileServerID:     fs.serverID,
-				InodeID:          fs.nextInodeID,
-				GenerationNumber: 1,
-			}
-
-			// Determine type
-			var inodeType domain.InodeType
-			if entry.IsDir() {
-				inodeType = domain.InodeTypeDirectory
-			} else {
-				inodeType = domain.InodeTypeFile
-			}
-
-			// Create inode
-			itemPath := filepath.Join(userDir, entry.Name())
-			newInode := &domain.Inode{
-				FID:    newFID,
-				Type:   inodeType,
-				Name:   entry.Name(),
-				OSPath: itemPath,
-				Owner:  parentInode.Owner, // Same as parent (user)
-				Parent: parentInode,
-			}
-
-			// Set up directory-specific fields
-			if inodeType == domain.InodeTypeDirectory {
-				newInode.Children = make([]*domain.FID, 0)
-			} else {
-				// For files, get the current size
-				if info, err := entry.Info(); err == nil {
-					newInode.Size = uint64(info.Size())
-				}
-			}
-
-			// Store inode
-			fs.inodes[newFID.String()] = newInode
-
-			// Add to parent's children
-			parentInode.Children = append(parentInode.Children, newFID)
-
-			// Increment inode ID counter
-			atomic.AddUint64(&fs.nextInodeID, 1)
-
-			// If dir then add to queue
-			if inodeType == domain.InodeTypeDirectory {
-				queue = append(queue, &bfsItem{dirPath: itemPath, inode: newInode})
-			}
-		}
-	}
-
-	return nil
 }
 
 // GetUserRoot returns the root FID for a user, creating it if necessary
@@ -210,71 +93,6 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	atomic.AddUint64(&fs.nextInodeID, 1)
 
 	return rootFID, nil
-}
-
-// CreateFile creates a new file or directory
-func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, fileType domain.InodeType) (*domain.FID, error) {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
-	// Get parent inode
-	parent, exists := fs.inodes[parentFID.String()]
-	if !exists {
-		return nil, fmt.Errorf("parent directory not found")
-	}
-
-	// Check if parent is directory
-	if parent.Type != domain.InodeTypeDirectory {
-		return nil, fmt.Errorf("parent is not a directory")
-	}
-
-	// Generate new FID
-	newFID := &domain.FID{
-		FileServerID:     fs.serverID,
-		InodeID:          fs.nextInodeID,
-		GenerationNumber: 1,
-	}
-
-	// Create OS path
-	osPath := filepath.Join(parent.OSPath, name)
-
-	// Create on filesystem
-	switch fileType {
-	case domain.InodeTypeFile:
-		file, err := os.Create(osPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create file: %w", err)
-		}
-		file.Close()
-	case domain.InodeTypeDirectory:
-		if err := os.Mkdir(osPath, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
-
-	// Create inode
-	newInode := &domain.Inode{
-		FID:    newFID,
-		Type:   fileType,
-		Name:   name,
-		OSPath: osPath,
-		Owner:  username,
-		Parent: parent,
-	}
-
-	if fileType == domain.InodeTypeDirectory {
-		newInode.Children = make([]*domain.FID, 0)
-	}
-
-	// Store inode
-	fs.inodes[newFID.String()] = newInode
-
-	// Add to parent's children
-	parent.Children = append(parent.Children, newFID)
-
-	atomic.AddUint64(&fs.nextInodeID, 1)
-
-	return newFID, nil
 }
 
 // GetInode retrieves an inode by FID
@@ -397,6 +215,96 @@ func (fs *FileServer) ListDirectory(dirFID *domain.FID) ([]*domain.Inode, error)
 	}
 
 	return children, nil
+}
+
+// CreateFile creates a new file or directory
+func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, fileType domain.InodeType) (*domain.FID, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	// Get parent inode
+	parent, exists := fs.inodes[parentFID.String()]
+	if !exists {
+		return nil, fmt.Errorf("parent directory not found")
+	}
+
+	// Check if parent is directory
+	if parent.Type != domain.InodeTypeDirectory {
+		return nil, fmt.Errorf("parent is not a directory")
+	}
+
+	// Generate new FID
+	newFID := &domain.FID{
+		FileServerID:     fs.serverID,
+		InodeID:          fs.nextInodeID,
+		GenerationNumber: 1,
+	}
+
+	// Create OS path
+	osPath := filepath.Join(parent.OSPath, name)
+
+	// Create on filesystem
+	switch fileType {
+	case domain.InodeTypeFile:
+		file, err := os.Create(osPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create file: %w", err)
+		}
+		file.Close()
+	case domain.InodeTypeDirectory:
+		if err := os.Mkdir(osPath, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
+	// Create inode
+	newInode := &domain.Inode{
+		FID:    newFID,
+		Type:   fileType,
+		Name:   name,
+		OSPath: osPath,
+		Owner:  username,
+		Parent: parent,
+	}
+
+	if fileType == domain.InodeTypeDirectory {
+		newInode.Children = make([]*domain.FID, 0)
+	}
+
+	// Store inode
+	fs.inodes[newFID.String()] = newInode
+
+	// Add to parent's children
+	parent.Children = append(parent.Children, newFID)
+
+	atomic.AddUint64(&fs.nextInodeID, 1)
+
+	return newFID, nil
+}
+
+// ReadFile reads data from a file
+func (fs *FileServer) ReadFile(fid *domain.FID, offset, length uint64) ([]byte, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	inode, exists := fs.inodes[fid.String()]
+	if !exists {
+		return nil, fmt.Errorf("file not found")
+	}
+	if inode.Type != domain.InodeTypeFile {
+		return nil, fmt.Errorf("not a file")
+	}
+	file, err := os.Open(inode.OSPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	data := make([]byte, length)
+	n, err := file.ReadAt(data, int64(offset))
+	if err != nil && err.Error() != "EOF" {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	return data[:n], nil
 }
 
 // DeleteFile deletes a file or directory
