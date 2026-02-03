@@ -137,6 +137,7 @@ func (fs *FileServer) scanUserDirectory(userDir string, parentInode *domain.Inod
 				Name:   entry.Name(),
 				OSPath: itemPath,
 				Owner:  parentInode.Owner, // Same as parent (user)
+				Parent: parentInode,
 			}
 
 			// Set up directory-specific fields
@@ -201,6 +202,8 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 		Children: make([]*domain.FID, 0),
 	}
 
+	rootInode.Parent = rootInode
+
 	fs.inodes[rootFID.String()] = rootInode
 	fs.users[username] = rootFID
 
@@ -256,6 +259,7 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, f
 		Name:   name,
 		OSPath: osPath,
 		Owner:  username,
+		Parent: parent,
 	}
 
 	if fileType == domain.InodeTypeDirectory {
@@ -329,6 +333,10 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 
 	if path == "/" {
 		return RootFID, nil
+	}
+
+	if path == ".." {
+		return CurrentInode.Parent.FID, nil
 	}
 
 	parts := strings.Split(path, "/")

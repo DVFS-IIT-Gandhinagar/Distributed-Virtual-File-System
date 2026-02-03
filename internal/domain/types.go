@@ -92,4 +92,5 @@ type Inode struct {
 	Owner    string
 	Children []*FID // for directories
 	Size     uint64
+	Parent	*Inode
 }

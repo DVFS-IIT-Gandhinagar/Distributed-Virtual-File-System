@@ -3,6 +3,7 @@ package fileserver
 import (
 	"context"
 	"log"
+	"path/filepath"
 	"strings"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
@@ -84,7 +85,7 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 // Returns current path
 func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathResponse, error) {
 	if req.Fid == nil {
-		log.Printf("ListDir: error - FID is required")
+		log.Printf("Path: error - FID is required")
 		return &pb.PathResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -102,6 +103,11 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 	}
 
 	log.Printf("Path: success - found path: %v", path)
+	path, err = filepath.Rel(req.User, path)
+	if err != nil {
+		log.Printf("Path: error - error in path computation")
+	}
+	path = filepath.Join("mydrive", path)
 	return &pb.PathResponse{
 		Path:    path,
 		Success: true,
