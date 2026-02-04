@@ -324,6 +324,33 @@ func (fs *FileServer) ReadFile(parentFID *domain.FID, name string, offset, lengt
 	return data, nil
 }
 
+// WriteFile writes given data to a file
+func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint64, data []byte) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	// Get parent inode
+	parentInode, err := fs.GetInode(parentFID)
+	if err != nil {
+		return fmt.Errorf("parent directory not found, %s", parentFID.String())
+	}
+
+	inode, err := fs.GetChildInodeByName(parentInode, name)
+	if err != nil {
+		return fmt.Errorf("file not found, %s", name)
+	}
+	// check if file
+	if inode.Type != domain.InodeTypeFile {
+		return fmt.Errorf("not a file, %s", name)
+	}
+
+	// write data to file
+	if err := os.WriteFile(inode.OSPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return nil
+}
+
 // DeleteFile deletes a file or directory
 func (fs *FileServer) DeleteFile(fid *domain.FID) error {
 	fs.mu.Lock()

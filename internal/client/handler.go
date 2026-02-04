@@ -68,6 +68,12 @@ func (h *CommandHandler) Start() {
 				continue
 			}
 			h.handleReadFile(parts[1])
+		case "write":
+			if len(parts) < 2 {
+				fmt.Println("Usage: write <filename> <data>")
+				continue
+			}
+			h.handleWriteFile(parts[1], strings.Join(parts[2:], " "))
 		case "mkdir":
 			if len(parts) < 2 {
 				fmt.Println("Usage: mkdir <dirname>")
@@ -170,6 +176,19 @@ func (h *CommandHandler) handleReadFile(filename string) {
 	fmt.Printf("Contents of '%s':\n%s\n", filename, string(data))
 }
 
+func (h *CommandHandler) handleWriteFile(filename, data string) {
+	if filename == "" {
+		fmt.Println("Error: filename cannot be empty")
+		return
+	}
+	err := h.client.WriteFile(filename, []byte(data))
+	if err != nil {
+		fmt.Printf("Error writing to file '%s': %v\n", filename, err)
+		return
+	}
+	fmt.Printf("Successfully wrote to file '%s'\n", filename)
+}
+
 // handleCreateDir creates a new directory
 func (h *CommandHandler) handleCreateDir(dirname string) {
 	if dirname == "" {
@@ -216,6 +235,7 @@ func (h *CommandHandler) handleHelp() {
 	fmt.Println("  create <filename>  - Create a new file")
 	fmt.Println("  mkdir <dirname>    - Create a new directory")
 	fmt.Println("  read <filename>    - Read the file from current directory")
+	fmt.Println("  write <filename> <data> - Write data to a file in the current directory")
 	fmt.Println("  info               - Show root directory information")
 	fmt.Println("  help               - Show this help message")
 	fmt.Println("  exit, quit         - Exit the client")

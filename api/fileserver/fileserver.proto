@@ -66,11 +66,11 @@ message ReadFileResponse {
 }
 
 message WriteFileRequest {
-  FID fid = 1;
-  uint64 offset = 2;
-  bytes data = 3;
-  string user = 4;
-  string client_id = 5;
+  FID parentFid = 1;
+  string name = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+  string user = 5;
 }
 
 message WriteFileResponse {

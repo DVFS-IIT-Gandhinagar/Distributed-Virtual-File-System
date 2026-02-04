@@ -250,3 +250,29 @@ func (h *GRPCHandler) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*p
 		Data:    data,
 	}, nil
 }
+
+// WriteFile writes data to a file
+func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (*pb.WriteFileResponse, error) {
+	parentFID := domain.FIDFromProto(req.ParentFid)
+	log.Printf("WriteFile: Name=%s, data length=%d", req.Name, len(req.Data))
+	if req.Name == "" {
+		log.Printf("WriteFile: error - Name is required")
+		return &pb.WriteFileResponse{
+			Success: false,
+			Error:   "Name is required",
+		}, nil
+	}
+
+	err := h.fileServer.WriteFile(parentFID, req.Name, req.Offset, req.Data)
+	if err != nil {
+		log.Printf("WriteFile: error writing file - %v", err)
+		return &pb.WriteFileResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &pb.WriteFileResponse{
+		Success: true,
+	}, nil
+}

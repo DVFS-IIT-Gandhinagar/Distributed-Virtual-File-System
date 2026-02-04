@@ -2,7 +2,7 @@
 - [x] implement cd .. command - @Umang-Shikarvar
 - [x] handle correct scanning of nested file's inodes
 - [x] show path after user root dir - @Umang-Shikarvar
-- [] handle read/write operations - @Reckadon
+- [x] handle read/write operations - @Reckadon
 - [x] CLI args parsing with flags
 - [x] Handle current inode (in some subdir)
 - [] Dockerize

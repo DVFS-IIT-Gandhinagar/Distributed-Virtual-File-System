@@ -204,6 +204,23 @@ func (c *Client) ReadFile(name string) ([]byte, error) {
 	return resp.Data, nil
 }
 
+// WriteFile writes given data to a file
+func (c *Client) WriteFile(name string, data []byte) error {
+	resp, err := c.serverConn.WriteFile(context.Background(), &pb.WriteFileRequest{
+		ParentFid: c.currentFID.ToProto(),
+		Name: name,
+		Data: data,
+		User: c.username,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+	return nil
+}
+
 // FileInfo represents file information
 type FileInfo struct {
 	FID  *domain.FID
