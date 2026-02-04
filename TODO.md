@@ -3,7 +3,7 @@
 - [x] handle correct scanning of nested file's inodes
 - [x] show path after user root dir - @Umang-Shikarvar
 - [] handle read/write operations - @Reckadon
-- [] CLI args parsing with flags
+- [x] CLI args parsing with flags
 - [x] Handle current inode (in some subdir)
 - [] Dockerize
 - [] Handle fid -> inode map in better way
