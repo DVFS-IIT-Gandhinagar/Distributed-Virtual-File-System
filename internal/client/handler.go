@@ -215,6 +215,7 @@ func (h *CommandHandler) handleHelp() {
 	fmt.Println("  cd <relative_path> - Change current directory")
 	fmt.Println("  create <filename>  - Create a new file")
 	fmt.Println("  mkdir <dirname>    - Create a new directory")
+	fmt.Println("  read <filename>    - Read the file from current directory")
 	fmt.Println("  info               - Show root directory information")
 	fmt.Println("  help               - Show this help message")
 	fmt.Println("  exit, quit         - Exit the client")
