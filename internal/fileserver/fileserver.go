@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
-	"strings"
 
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
@@ -40,8 +40,9 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 		if err := fileScanner.loadExistingData(&fs.nextInodeID, &fs.inodes, &fs.users); err != nil {
 			return nil, fmt.Errorf("failed to load existing data: %w", err)
 		}
-		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
 		
+		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
+
 	} else {
 		// Root directory doesn't exist, create it
 		if err := os.MkdirAll(rootDir, 0755); err != nil {
@@ -95,14 +96,11 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 	return rootFID, nil
 }
 
-// GetInode retrieves an inode by FID
+// GetInode retrieves an inode by FID from the file server (assumes lock is held)
 func (fs *FileServer) GetInode(fid *domain.FID) (*domain.Inode, error) {
-	fs.mu.RLock()
-	defer fs.mu.RUnlock()
-
 	inode, exists := fs.inodes[fid.String()]
 	if !exists {
-		return nil, fmt.Errorf("inode not found")
+		return nil, fmt.Errorf("inode not found, %s", fid.String())
 	}
 
 	// Update size for files
@@ -115,14 +113,35 @@ func (fs *FileServer) GetInode(fid *domain.FID) (*domain.Inode, error) {
 	return inode, nil
 }
 
+// find the inode in parent's children
+func (fs *FileServer) GetChildInodeByName(parentInode *domain.Inode, name string) (*domain.Inode, error) {	
+	var inode *domain.Inode
+	found := false
+	for _, childFID := range parentInode.Children {
+		childInode, exists := fs.inodes[childFID.String()]
+		if !exists {
+			continue
+		}
+		if childInode.Name == name {
+			inode = childInode
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("inode not found, %s", name)
+	}
+	return inode, nil
+}
+
 // Return path as pwd
 func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	dirInode, exists := fs.inodes[dirFID.String()]
-	if !exists {
-		return "", fmt.Errorf("directory not found")
+	dirInode, err := fs.GetInode(dirFID)
+	if err != nil {
+		return "", fmt.Errorf("directory not found, %s", dirFID.String())
 	}
 
 	if dirInode.Type != domain.InodeTypeDirectory {
@@ -140,13 +159,13 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	CurrentInode, exists := fs.inodes[CurrentFID.String()]
-	if !exists {
-		return CurrentFID, fmt.Errorf("directory not found")
+	CurrentInode, err := fs.GetInode(CurrentFID)
+	if err != nil {
+		return CurrentFID, fmt.Errorf("directory not found, %s", CurrentFID.String())
 	}
 
 	if CurrentInode.Type != domain.InodeTypeDirectory {
-		return CurrentFID, fmt.Errorf("not a directory")
+		return CurrentFID, fmt.Errorf("not a directory, %s", CurrentFID.String())
 	}
 
 	if path == "/" {
@@ -158,6 +177,7 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 	}
 
 	parts := strings.Split(path, "/")
+	log.Println("Parts:", parts)
 	for _, part := range parts {
 		found := false
 
@@ -180,7 +200,7 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 		}
 
 		if !found {
-			return CurrentFID, fmt.Errorf("incorrect path")
+			return CurrentFID, fmt.Errorf("incorrect path, %s", path)
 		}
 	}
 
@@ -192,24 +212,18 @@ func (fs *FileServer) ListDirectory(dirFID *domain.FID) ([]*domain.Inode, error)
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	dirInode, exists := fs.inodes[dirFID.String()]
-	if !exists {
-		return nil, fmt.Errorf("directory not found")
+	dirInode, err := fs.GetInode(dirFID)
+	if err != nil {
+		return nil, fmt.Errorf("directory not found, %s", dirFID.String())
 	}
 
 	if dirInode.Type != domain.InodeTypeDirectory {
-		return nil, fmt.Errorf("not a directory")
+		return nil, fmt.Errorf("not a directory, %s", dirFID.String())
 	}
 
 	children := make([]*domain.Inode, 0, len(dirInode.Children))
 	for _, childFID := range dirInode.Children {
-		if childInode, exists := fs.inodes[childFID.String()]; exists {
-			// Update file size
-			if childInode.Type == domain.InodeTypeFile {
-				if info, err := os.Stat(childInode.OSPath); err == nil {
-					childInode.Size = uint64(info.Size())
-				}
-			}
+		if childInode, err := fs.GetInode(childFID); err == nil {
 			children = append(children, childInode)
 		}
 	}
@@ -221,16 +235,16 @@ func (fs *FileServer) ListDirectory(dirFID *domain.FID) ([]*domain.Inode, error)
 func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, fileType domain.InodeType) (*domain.FID, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-
+	log.Printf("Creating %s with name %s under parent FID %s", fileType.String(), name, parentFID.String())
 	// Get parent inode
-	parent, exists := fs.inodes[parentFID.String()]
-	if !exists {
-		return nil, fmt.Errorf("parent directory not found")
+	parent, err := fs.GetInode(parentFID)
+	if err != nil {
+		return nil, fmt.Errorf("parent directory not found, %s", parentFID.String())
 	}
 
 	// Check if parent is directory
 	if parent.Type != domain.InodeTypeDirectory {
-		return nil, fmt.Errorf("parent is not a directory")
+		return nil, fmt.Errorf("parent is not a directory, %s", parentFID.String())
 	}
 
 	// Generate new FID
@@ -283,28 +297,31 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, f
 }
 
 // ReadFile reads data from a file
-func (fs *FileServer) ReadFile(fid *domain.FID, offset, length uint64) ([]byte, error) {
+func (fs *FileServer) ReadFile(parentFID *domain.FID, name string, offset, length uint64) ([]byte, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	inode, exists := fs.inodes[fid.String()]
-	if !exists {
-		return nil, fmt.Errorf("file not found")
-	}
-	if inode.Type != domain.InodeTypeFile {
-		return nil, fmt.Errorf("not a file")
-	}
-	file, err := os.Open(inode.OSPath)
+	// Get parent inode
+	parentInode, err := fs.GetInode(parentFID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
+		return nil, fmt.Errorf("parent directory not found, %s", parentFID.String())
 	}
-	defer file.Close()
+	
+	inode, err := fs.GetChildInodeByName(parentInode, name)
+	if err != nil {
+		return nil, fmt.Errorf("file not found, %s", name)
+	}
+	// check if file
+	if inode.Type != domain.InodeTypeFile {
+		return nil, fmt.Errorf("not a file, %s", name)
+	}
 
-	data := make([]byte, length)
-	n, err := file.ReadAt(data, int64(offset))
-	if err != nil && err.Error() != "EOF" {
+	// read the whole file for now
+	fmt.Println(inode.OSPath)
+	data, err := os.ReadFile(inode.OSPath)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	return data[:n], nil
+	return data, nil
 }
 
 // DeleteFile deletes a file or directory
@@ -312,14 +329,14 @@ func (fs *FileServer) DeleteFile(fid *domain.FID) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	inode, exists := fs.inodes[fid.String()]
-	if !exists {
-		return fmt.Errorf("file not found")
+	inode, err := fs.GetInode(fid)
+	if err != nil {
+		return fmt.Errorf("file not found, %s", fid.String())
 	}
 
 	// For directories, ensure they're empty
 	if inode.Type == domain.InodeTypeDirectory && len(inode.Children) > 0 {
-		return fmt.Errorf("directory not empty")
+		return fmt.Errorf("directory not empty, %s", fid.String())
 	}
 
 	// Delete from filesystem

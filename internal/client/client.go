@@ -185,6 +185,25 @@ func (c *Client) CreateDirectory(name string) (*FileInfo, error) {
 	}, nil
 }
 
+// ReadFile reads a file
+func (c *Client) ReadFile(name string) ([]byte, error) {
+	resp, err := c.serverConn.ReadFile(context.Background(), &pb.ReadFileRequest{
+		ParentFid: c.currentFID.ToProto(),
+		Name: name,
+		Offset: 0,
+		Length: 0, // 0 means read whole file
+		User: c.username,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("server error: %s", resp.Error)
+	}
+	return resp.Data, nil
+}
+
 // FileInfo represents file information
 type FileInfo struct {
 	FID  *domain.FID

@@ -52,10 +52,11 @@ message OpenFileResponse {
 }
 
 message ReadFileRequest {
-  FID fid = 1;
-  uint64 offset = 2;
-  uint64 length = 3;
-  string user = 4;
+  FID parentFid = 1;
+  string name = 2;
+  uint64 offset = 3;
+  uint64 length = 4;
+  string user = 5;
 }
 
 message ReadFileResponse {

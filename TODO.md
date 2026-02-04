@@ -6,3 +6,4 @@
 - [] CLI args parsing with flags
 - [x] Handle current inode (in some subdir)
 - [] Dockerize
+- [] Handle fid -> inode map in better way

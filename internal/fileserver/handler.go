@@ -116,15 +116,15 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 
 // Changes the current directory
 func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (*pb.ChangeDirResponse, error) {
-	log.Printf("Change Dir: from FID=%v to path=%v", req.Fid, req.Path)
-
 	if req.Fid == nil {
 		log.Printf("ChangeDir: error - FID is required")
 		return &pb.ChangeDirResponse{
 			Success: false,
 			Error:   "FID is required",
-		}, nil
-	}
+			}, nil
+		}
+
+	log.Printf("Change Dir: from FID=%v to path=%v %v", req.Fid, req.Path, req.RootFid)
 
 	fid := domain.FIDFromProto(req.Fid)
 	root_fid := domain.FIDFromProto(req.RootFid)
@@ -223,30 +223,30 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	}, nil
 }
 
-// OpenFile handles file opening (simplified - just returns success)
-func (h *GRPCHandler) OpenFile(ctx context.Context, req *pb.OpenFileRequest) (*pb.OpenFileResponse, error) {
-	log.Printf("OpenFile: FID=%v", req.Fid)
+// ReadFile reads data from a file
+func (h *GRPCHandler) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+	parentFID := domain.FIDFromProto(req.ParentFid)
 
-	if req.Fid == nil {
-		log.Printf("OpenFile: error - FID is required")
-		return &pb.OpenFileResponse{
+	log.Printf("ReadFile: Name=%s, offset=%d, length=%d", req.Name, req.Offset, req.Length)
+	if req.Name == "" {
+		log.Printf("ReadFile: error - Name is required")
+		return &pb.ReadFileResponse{
 			Success: false,
-			Error:   "FID is required",
+			Error:   "Name is required",
 		}, nil
 	}
 
-	fid := domain.FIDFromProto(req.Fid)
-	_, err := h.fileServer.GetInode(fid)
+	data, err := h.fileServer.ReadFile(parentFID, req.Name, req.Offset, req.Length)
 	if err != nil {
-		log.Printf("OpenFile: error getting inode - %v", err)
-		return &pb.OpenFileResponse{
+		log.Printf("ReadFile: error reading file - %v", err)
+		return &pb.ReadFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
-	log.Printf("OpenFile: success")
-	return &pb.OpenFileResponse{
+	return &pb.ReadFileResponse{
 		Success: true,
+		Data:    data,
 	}, nil
 }

@@ -91,6 +91,6 @@ type Inode struct {
 	OSPath   string
 	Owner    string
 	Children []*FID // for directories
-	Size     uint64
+	Size     uint64 // for files
 	Parent	*Inode
 }

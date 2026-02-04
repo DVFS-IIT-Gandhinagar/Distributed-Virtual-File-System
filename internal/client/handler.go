@@ -26,7 +26,7 @@ func NewCommandHandler(client *Client) *CommandHandler {
 // Start begins the interactive command loop
 func (h *CommandHandler) Start() {
 	fmt.Println("=== Distributed VFS Client ===")
-	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, info, help, exit")
+	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, read, info, help, exit")
 	fmt.Println()
 
 	for {
@@ -62,6 +62,12 @@ func (h *CommandHandler) Start() {
 				continue
 			}
 			h.handleCreateFile(parts[1])
+		case "read":
+			if len(parts) < 2 {
+				fmt.Println("Usage: read <filename>")
+				continue
+			}
+			h.handleReadFile(parts[1])
 		case "mkdir":
 			if len(parts) < 2 {
 				fmt.Println("Usage: mkdir <dirname>")
@@ -147,6 +153,21 @@ func (h *CommandHandler) handleCreateFile(filename string) {
 	}
 
 	fmt.Printf("File '%s' created successfully (FID: %s)\n", file.Name, file.FID.String())
+}
+
+// handleReadFile reads a file
+func (h *CommandHandler) handleReadFile(filename string) {
+	if filename == "" {
+		fmt.Println("Error: filename cannot be empty")
+		return
+	}
+	// read full file for now
+	data, err := h.client.ReadFile(filename)
+	if err != nil {
+		fmt.Printf("Error reading file '%s': %v\n", filename, err)
+		return
+	}
+	fmt.Printf("Contents of '%s':\n%s\n", filename, string(data))
 }
 
 // handleCreateDir creates a new directory
