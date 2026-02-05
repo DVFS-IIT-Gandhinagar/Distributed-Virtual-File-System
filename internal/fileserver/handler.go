@@ -2,6 +2,7 @@ package fileserver
 
 import (
 	"context"
+	"io"
 	"log"
 	"path/filepath"
 	"strings"
@@ -121,8 +122,8 @@ func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (
 		return &pb.ChangeDirResponse{
 			Success: false,
 			Error:   "FID is required",
-			}, nil
-		}
+		}, nil
+	}
 
 	log.Printf("Change Dir: from FID=%v to path=%v %v", req.Fid, req.Path, req.RootFid)
 
@@ -221,6 +222,39 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 		Success: true,
 		Fid:     newFID.ToProto(),
 	}, nil
+}
+
+// UploadFile uploads a file in the working directory
+func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
+	var offset uint64 = 0
+	var name string
+
+	first := true
+
+	for {
+		req, err := stream.Recv()
+		parentFID := domain.FIDFromProto(req.ParentFid)
+		if err == io.EOF {
+			return stream.SendAndClose(&pb.UploadFileResponse{
+				Success: true,
+			})
+		}
+		if err != nil {
+			return err
+		}
+
+		if first {
+			name = req.Name
+			first = false
+		}
+
+		err = h.fileServer.WriteFile(parentFID, name, offset, req.Chunk)
+		if err != nil {
+			return err
+		}
+
+		offset += uint64(len(req.Chunk))
+	}
 }
 
 // ReadFile reads data from a file

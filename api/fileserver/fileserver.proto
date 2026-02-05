@@ -166,6 +166,18 @@ message LookupResponse {
   FID fid = 3;
 }
 
+message UploadFileRequest {
+  string name = 1;
+  string user = 2;
+  FID parent_fid = 3;
+  bytes chunk = 4; // file data chunk
+}
+
+message UploadFileResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 message RegisterClientRequest {
   string client_id = 1;
   string callback_address = 2; // host:port for callbacks
@@ -192,6 +204,7 @@ service FileServer {
   rpc Lookup(LookupRequest) returns (LookupResponse);
   rpc Path(PathRequest) returns (PathResponse);
   rpc ChangeDir(ChangeDirRequest) returns (ChangeDirResponse);
+  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
 }
 
 // To build these run: make proto

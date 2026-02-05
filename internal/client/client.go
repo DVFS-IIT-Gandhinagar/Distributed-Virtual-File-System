@@ -3,6 +3,10 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"os"
+	"strings"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -17,6 +21,8 @@ type Client struct {
 	currentFID *domain.FID
 	serverConn pb.FileServerClient
 }
+
+const chunkSize = 1024 * 32 // 32KB
 
 // NewClient creates a new VFS client
 func NewClient(username string) *Client {
@@ -72,9 +78,9 @@ func (c *Client) Path() (string, error) {
 // CreateDirectory changes the current directory
 func (c *Client) ChangeDirectory(relative_path string) error {
 	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
-		Fid:  c.currentFID.ToProto(),
+		Fid:     c.currentFID.ToProto(),
 		RootFid: c.rootFID.ToProto(),
-		Path: relative_path,
+		Path:    relative_path,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to change directory: %w", err)
@@ -161,6 +167,66 @@ func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	}, nil
 }
 
+// CreateFile creates a new file
+func (c *Client) UploadFile(path string) (error) {
+
+	file, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	parts := strings.Split(path, "/")
+	name := parts[len(parts)-1]
+
+	stream, err := c.serverConn.UploadFile(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	buf := make([]byte, chunkSize)
+
+	first := true
+
+	for {
+		n, err := file.Read(buf)
+
+		if n > 0 {
+			req := &pb.UploadFileRequest{
+				Chunk: buf[:n],
+			}
+
+			if first {
+				req.Name = name
+				first = false
+			}
+
+			if err := stream.Send(req); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	res, err := stream.CloseAndRecv()
+	if err != nil {
+		return err
+	}
+
+	if !res.Success {
+		return fmt.Errorf("upload failed: %s", res.Error)
+	}
+
+	return nil
+
+}
+
 // CreateDirectory creates a new directory
 func (c *Client) CreateDirectory(name string) (*FileInfo, error) {
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
@@ -189,10 +255,10 @@ func (c *Client) CreateDirectory(name string) (*FileInfo, error) {
 func (c *Client) ReadFile(name string) ([]byte, error) {
 	resp, err := c.serverConn.ReadFile(context.Background(), &pb.ReadFileRequest{
 		ParentFid: c.currentFID.ToProto(),
-		Name: name,
-		Offset: 0,
-		Length: 0, // 0 means read whole file
-		User: c.username,
+		Name:      name,
+		Offset:    0,
+		Length:    0, // 0 means read whole file
+		User:      c.username,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
@@ -208,9 +274,10 @@ func (c *Client) ReadFile(name string) ([]byte, error) {
 func (c *Client) WriteFile(name string, data []byte) error {
 	resp, err := c.serverConn.WriteFile(context.Background(), &pb.WriteFileRequest{
 		ParentFid: c.currentFID.ToProto(),
-		Name: name,
-		Data: data,
-		User: c.username,
+		Name:      name,
+		Data:      data,
+		User:      c.username,
+		Offset:    0,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)

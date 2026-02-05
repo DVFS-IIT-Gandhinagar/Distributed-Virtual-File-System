@@ -80,6 +80,12 @@ func (h *CommandHandler) Start() {
 				continue
 			}
 			h.handleCreateDir(parts[1])
+		case "upload":
+			if len(parts) < 2 {
+				fmt.Println("Usage: cd <relative_path>")
+				continue
+			}
+			h.handleUploadFile(parts[1])
 		case "info":
 			h.handleInfo()
 		case "help":
@@ -108,6 +114,15 @@ func (h *CommandHandler) handlePath() {
 // handleChangeDir changes current Dir
 func (h *CommandHandler) handleChangeDir(relative_path string) {
 	err := h.client.ChangeDirectory(relative_path)
+	if err != nil {
+		fmt.Printf("Error changing the current directory: %v\n", err)
+		return
+	}
+}
+
+// handleUploadFile uploads the file to current directory
+func (h *CommandHandler) handleUploadFile(path string) {
+	err := h.client.UploadFile(path)
 	if err != nil {
 		fmt.Printf("Error changing the current directory: %v\n", err)
 		return

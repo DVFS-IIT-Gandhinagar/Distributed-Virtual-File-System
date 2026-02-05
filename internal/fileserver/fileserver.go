@@ -330,8 +330,15 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 	}
 
 	// write data to file
-	if err := os.WriteFile(inode.OSPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+	f, err := os.OpenFile(inode.OSPath, os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("open failed: %w", err)
+	}
+	defer f.Close()
+
+	_, err = f.WriteAt(data, int64(offset))
+	if err != nil {
+		return fmt.Errorf("write failed: %w", err)
 	}
 
 	return nil
