@@ -179,29 +179,15 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 	parts := strings.Split(path, "/")
 	log.Println("Parts:", parts)
 	for _, part := range parts {
-		found := false
 
-		for _, childFID := range CurrentInode.Children {
-			childInode, exists := fs.inodes[childFID.String()]
-			if !exists {
-				continue
-			}
+		childInode, found := fs.GetChildInodeByName(CurrentInode, part)
 
-			if childInode.Name == part {
-				if childInode.Type != domain.InodeTypeDirectory {
-					return CurrentFID, fmt.Errorf("%s is not a directory", part)
-				}
-
-				CurrentInode = childInode
-				CurrentFID = childInode.FID
-				found = true
-				break
-			}
+		if found != nil {
+			return CurrentFID, fmt.Errorf("incorrect path: %s", path)
 		}
 
-		if !found {
-			return CurrentFID, fmt.Errorf("incorrect path, %s", path)
-		}
+		CurrentInode = childInode
+		CurrentFID = childInode.FID
 	}
 
 	return CurrentFID, nil

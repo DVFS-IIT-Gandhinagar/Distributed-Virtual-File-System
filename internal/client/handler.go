@@ -26,7 +26,7 @@ func NewCommandHandler(client *Client) *CommandHandler {
 // Start begins the interactive command loop
 func (h *CommandHandler) Start() {
 	fmt.Println("=== Distributed VFS Client ===")
-	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, read, info, help, exit")
+	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, read, write, info, help, exit")
 	fmt.Println()
 
 	for {
