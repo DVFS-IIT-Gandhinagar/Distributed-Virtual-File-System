@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"strings"
+	"path/filepath"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -167,50 +166,65 @@ func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	}, nil
 }
 
-// CreateFile creates a new file
-func (c *Client) UploadFile(path string) (error) {
+// UploadeFile uploads a file
+func (c *Client) UploadFile(path string) error {
 
 	file, err := os.Open(path)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer file.Close()
 
-	parts := strings.Split(path, "/")
-	name := parts[len(parts)-1]
+	name := filepath.Base(path)
+
+	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
+		Name: name,
+		User: c.username,
+		Fid:  c.currentFID.ToProto(),
+		Type: pb.InodeType_FILE,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	if !resp.Success {
+		return fmt.Errorf(resp.Error)
+	}
 
 	stream, err := c.serverConn.UploadFile(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	buf := make([]byte, chunkSize)
 
-	first := true
+	offset := uint64(0)
 
 	for {
 		n, err := file.Read(buf)
 
 		if n > 0 {
 			req := &pb.UploadFileRequest{
-				Chunk: buf[:n],
-			}
-
-			if first {
-				req.Name = name
-				first = false
+				Chunk:  buf[:n],
+				Offset: offset,
+				Name: name,
+				User: c.username,
+				ParentFid: c.currentFID.ToProto(),
 			}
 
 			if err := stream.Send(req); err != nil {
-				log.Fatal(err)
+				return err
 			}
+
+			offset += uint64(n)
 		}
 
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
 
@@ -224,7 +238,6 @@ func (c *Client) UploadFile(path string) (error) {
 	}
 
 	return nil
-
 }
 
 // CreateDirectory creates a new directory

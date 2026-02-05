@@ -226,35 +226,44 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 
 // UploadFile uploads a file in the working directory
 func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
-	var offset uint64 = 0
-	var name string
 
-	first := true
+    var name string
+    first := true
 
-	for {
-		req, err := stream.Recv()
-		parentFID := domain.FIDFromProto(req.ParentFid)
-		if err == io.EOF {
-			return stream.SendAndClose(&pb.UploadFileResponse{
-				Success: true,
-			})
-		}
-		if err != nil {
-			return err
-		}
+    for {
+        req, err := stream.Recv()
 
-		if first {
-			name = req.Name
-			first = false
-		}
+        if err == io.EOF {
+            return stream.SendAndClose(&pb.UploadFileResponse{
+                Success: true,
+            })
+        }
+        if err != nil {
+            return err
+        }
 
-		err = h.fileServer.WriteFile(parentFID, name, offset, req.Chunk)
-		if err != nil {
-			return err
-		}
+        if req.ParentFid == nil {
+            return stream.SendAndClose(&pb.UploadFileResponse{
+                Success: false,
+                Error:   "missing parentFid",
+            })
+        }
 
-		offset += uint64(len(req.Chunk))
-	}
+        parentFID := domain.FIDFromProto(req.ParentFid)
+
+        if first {
+            name = req.Name
+            first = false
+        }
+
+        err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
+        if err != nil {
+            return stream.SendAndClose(&pb.UploadFileResponse{
+                Success: false,
+                Error:   err.Error(),
+            })
+        }
+    }
 }
 
 // ReadFile reads data from a file

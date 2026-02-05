@@ -1589,10 +1589,11 @@ func (x *LookupResponse) GetFid() *FID {
 
 type UploadFileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	User          string                 `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
-	ParentFid     *FID                   `protobuf:"bytes,3,opt,name=parent_fid,json=parentFid,proto3" json:"parent_fid,omitempty"`
-	Chunk         []byte                 `protobuf:"bytes,4,opt,name=chunk,proto3" json:"chunk,omitempty"` // file data chunk
+	ParentFid     *FID                   `protobuf:"bytes,1,opt,name=parentFid,proto3" json:"parentFid,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Offset        uint64                 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	User          string                 `protobuf:"bytes,4,opt,name=user,proto3" json:"user,omitempty"`
+	Chunk         []byte                 `protobuf:"bytes,5,opt,name=chunk,proto3" json:"chunk,omitempty"` // file data chunk
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1627,6 +1628,13 @@ func (*UploadFileRequest) Descriptor() ([]byte, []int) {
 	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{25}
 }
 
+func (x *UploadFileRequest) GetParentFid() *FID {
+	if x != nil {
+		return x.ParentFid
+	}
+	return nil
+}
+
 func (x *UploadFileRequest) GetName() string {
 	if x != nil {
 		return x.Name
@@ -1634,18 +1642,18 @@ func (x *UploadFileRequest) GetName() string {
 	return ""
 }
 
+func (x *UploadFileRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
 func (x *UploadFileRequest) GetUser() string {
 	if x != nil {
 		return x.User
 	}
 	return ""
-}
-
-func (x *UploadFileRequest) GetParentFid() *FID {
-	if x != nil {
-		return x.ParentFid
-	}
-	return nil
 }
 
 func (x *UploadFileRequest) GetChunk() []byte {
@@ -1937,13 +1945,13 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\x0eLookupResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
-	"\x03fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\x03fid\"\x81\x01\n" +
-	"\x11UploadFileRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04user\x18\x02 \x01(\tR\x04user\x12.\n" +
-	"\n" +
-	"parent_fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\tparentFid\x12\x14\n" +
-	"\x05chunk\x18\x04 \x01(\fR\x05chunk\"D\n" +
+	"\x03fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\x03fid\"\x98\x01\n" +
+	"\x11UploadFileRequest\x12-\n" +
+	"\tparentFid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\tparentFid\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x04R\x06offset\x12\x12\n" +
+	"\x04user\x18\x04 \x01(\tR\x04user\x12\x14\n" +
+	"\x05chunk\x18\x05 \x01(\fR\x05chunk\"D\n" +
 	"\x12UploadFileResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"{\n" +
@@ -2044,7 +2052,7 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	22, // 17: fileserver.ListDirResponse.entries:type_name -> fileserver.DirEntry
 	1,  // 18: fileserver.LookupRequest.parent_fid:type_name -> fileserver.FID
 	1,  // 19: fileserver.LookupResponse.fid:type_name -> fileserver.FID
-	1,  // 20: fileserver.UploadFileRequest.parent_fid:type_name -> fileserver.FID
+	1,  // 20: fileserver.UploadFileRequest.parentFid:type_name -> fileserver.FID
 	1,  // 21: fileserver.RegisterClientResponse.user_root_fid:type_name -> fileserver.FID
 	28, // 22: fileserver.FileServer.RegisterClient:input_type -> fileserver.RegisterClientRequest
 	3,  // 23: fileserver.FileServer.CreateFile:input_type -> fileserver.CreateFileRequest

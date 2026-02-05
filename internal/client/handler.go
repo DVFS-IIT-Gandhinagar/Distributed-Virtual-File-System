@@ -124,7 +124,7 @@ func (h *CommandHandler) handleChangeDir(relative_path string) {
 func (h *CommandHandler) handleUploadFile(path string) {
 	err := h.client.UploadFile(path)
 	if err != nil {
-		fmt.Printf("Error changing the current directory: %v\n", err)
+		fmt.Printf("Error uploading the file: %v\n", err)
 		return
 	}
 }

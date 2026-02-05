@@ -167,10 +167,11 @@ message LookupResponse {
 }
 
 message UploadFileRequest {
-  string name = 1;
-  string user = 2;
-  FID parent_fid = 3;
-  bytes chunk = 4; // file data chunk
+  FID parentFid = 1;
+  string name = 2;
+  uint64 offset = 3;
+  string user = 4;
+  bytes chunk = 5; // file data chunk
 }
 
 message UploadFileResponse {
