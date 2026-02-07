@@ -30,6 +30,7 @@ Thumbs.db
 
 # File server runtime data
 fileserver_data/
+Download/
 
 # Development and temporary files
 *.tmp

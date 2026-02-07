@@ -22,6 +22,7 @@ type Client struct {
 }
 
 const chunkSize = 1024 * 1024 * 4 // 4MB
+const DownloadDir = "./Download"
 
 // NewClient creates a new VFS client
 func NewClient(username string) *Client {
@@ -166,7 +167,7 @@ func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	}, nil
 }
 
-// UploadeFile uploads a file
+// UploadFile uploads a file
 func (c *Client) UploadFile(path string) error {
 
 	file, err := os.Open(path)
@@ -235,6 +236,55 @@ func (c *Client) UploadFile(path string) error {
 
 	if !res.Success {
 		return fmt.Errorf("upload failed: %s", res.Error)
+	}
+
+	return nil
+}
+
+// DownloadFile downloads a file
+func (c *Client) DownloadFile(name string) error {
+	req := &pb.DownloadFileRequest{
+		Name: name,
+		User: c.username,
+		ParentFid:  c.currentFID.ToProto(),
+	}
+	
+	stream, err := c.serverConn.DownloadFile(context.Background(), req)
+	if err != nil {
+		return err
+	}
+
+	osPath := filepath.Join(DownloadDir, name)
+	// ensure directory exists
+	if err := os.MkdirAll(DownloadDir, 0755); err != nil {
+		return err
+	}
+
+	file, err := os.Create(osPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	for {
+		res, err := stream.Recv()
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		if !res.Success {
+			return fmt.Errorf(res.Error)
+		}
+
+		_, err = file.WriteAt(res.Chunk, int64(res.Offset))
+		if err != nil {
+			return fmt.Errorf("download failed: %w", err)
+		}
 	}
 
 	return nil

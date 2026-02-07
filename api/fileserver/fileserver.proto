@@ -179,6 +179,19 @@ message UploadFileResponse {
   string error = 2;
 }
 
+message DownloadFileRequest {
+  FID parentFid = 1;
+  string name = 2;
+  string user = 3;
+}
+
+message DownloadFileResponse {
+  bool success = 1;
+  string error = 2;
+  uint64 offset = 3;
+  bytes chunk = 4;
+}
+
 message RegisterClientRequest {
   string client_id = 1;
   string callback_address = 2; // host:port for callbacks
@@ -206,6 +219,7 @@ service FileServer {
   rpc Path(PathRequest) returns (PathResponse);
   rpc ChangeDir(ChangeDirRequest) returns (ChangeDirResponse);
   rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse);
 }
 
 // To build these run: make proto

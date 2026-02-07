@@ -32,6 +32,7 @@ const (
 	FileServer_Path_FullMethodName           = "/fileserver.FileServer/Path"
 	FileServer_ChangeDir_FullMethodName      = "/fileserver.FileServer/ChangeDir"
 	FileServer_UploadFile_FullMethodName     = "/fileserver.FileServer/UploadFile"
+	FileServer_DownloadFile_FullMethodName   = "/fileserver.FileServer/DownloadFile"
 )
 
 // FileServerClient is the client API for FileServer service.
@@ -53,6 +54,7 @@ type FileServerClient interface {
 	Path(ctx context.Context, in *PathRequest, opts ...grpc.CallOption) (*PathResponse, error)
 	ChangeDir(ctx context.Context, in *ChangeDirRequest, opts ...grpc.CallOption) (*ChangeDirResponse, error)
 	UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse], error)
+	DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadFileResponse], error)
 }
 
 type fileServerClient struct {
@@ -196,6 +198,25 @@ func (c *fileServerClient) UploadFile(ctx context.Context, opts ...grpc.CallOpti
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type FileServer_UploadFileClient = grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse]
 
+func (c *fileServerClient) DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadFileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &FileServer_ServiceDesc.Streams[1], FileServer_DownloadFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DownloadFileRequest, DownloadFileResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FileServer_DownloadFileClient = grpc.ServerStreamingClient[DownloadFileResponse]
+
 // FileServerServer is the server API for FileServer service.
 // All implementations must embed UnimplementedFileServerServer
 // for forward compatibility.
@@ -215,6 +236,7 @@ type FileServerServer interface {
 	Path(context.Context, *PathRequest) (*PathResponse, error)
 	ChangeDir(context.Context, *ChangeDirRequest) (*ChangeDirResponse, error)
 	UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error
+	DownloadFile(*DownloadFileRequest, grpc.ServerStreamingServer[DownloadFileResponse]) error
 	mustEmbedUnimplementedFileServerServer()
 }
 
@@ -263,6 +285,9 @@ func (UnimplementedFileServerServer) ChangeDir(context.Context, *ChangeDirReques
 }
 func (UnimplementedFileServerServer) UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error {
 	return status.Error(codes.Unimplemented, "method UploadFile not implemented")
+}
+func (UnimplementedFileServerServer) DownloadFile(*DownloadFileRequest, grpc.ServerStreamingServer[DownloadFileResponse]) error {
+	return status.Error(codes.Unimplemented, "method DownloadFile not implemented")
 }
 func (UnimplementedFileServerServer) mustEmbedUnimplementedFileServerServer() {}
 func (UnimplementedFileServerServer) testEmbeddedByValue()                    {}
@@ -508,6 +533,17 @@ func _FileServer_UploadFile_Handler(srv interface{}, stream grpc.ServerStream) e
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type FileServer_UploadFileServer = grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]
 
+func _FileServer_DownloadFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DownloadFileRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(FileServerServer).DownloadFile(m, &grpc.GenericServerStream[DownloadFileRequest, DownloadFileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FileServer_DownloadFileServer = grpc.ServerStreamingServer[DownloadFileResponse]
+
 // FileServer_ServiceDesc is the grpc.ServiceDesc for FileServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -569,6 +605,11 @@ var FileServer_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "UploadFile",
 			Handler:       _FileServer_UploadFile_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "DownloadFile",
+			Handler:       _FileServer_DownloadFile_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "api/fileserver/fileserver.proto",

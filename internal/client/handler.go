@@ -26,7 +26,7 @@ func NewCommandHandler(client *Client) *CommandHandler {
 // Start begins the interactive command loop
 func (h *CommandHandler) Start() {
 	fmt.Println("=== Distributed VFS Client ===")
-	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, read, write, info, help, exit")
+	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, upload, download, read, write, info, help, exit")
 	fmt.Println()
 
 	for {
@@ -86,6 +86,12 @@ func (h *CommandHandler) Start() {
 				continue
 			}
 			h.handleUploadFile(parts[1])
+		case "download":
+			if len(parts) < 2 {
+				fmt.Println("Usage: download <<filename>")
+				continue
+			}
+			h.handleDownloadFile(parts[1])
 		case "info":
 			h.handleInfo()
 		case "help":
@@ -191,6 +197,21 @@ func (h *CommandHandler) handleReadFile(filename string) {
 	fmt.Printf("Contents of '%s':\n%s\n", filename, string(data))
 }
 
+// handleDownloadFile reads a file
+func (h *CommandHandler) handleDownloadFile(filename string) {
+	if filename == "" {
+		fmt.Println("Error: filename cannot be empty")
+		return
+	}
+	// read full file for now
+	err := h.client.DownloadFile(filename)
+	if err != nil {
+		fmt.Printf("Error downloading file '%s': %v\n", filename, err)
+		return
+	}
+	fmt.Printf("File downloaded successfully\n")
+}
+
 func (h *CommandHandler) handleWriteFile(filename, data string) {
 	if filename == "" {
 		fmt.Println("Error: filename cannot be empty")
@@ -244,17 +265,18 @@ func (h *CommandHandler) handleInfo() {
 // handleHelp displays available commands
 func (h *CommandHandler) handleHelp() {
 	fmt.Println("Available commands:")
-	fmt.Println("  ls, list           - List files and directories")
-	fmt.Println("  pwd                - Returns parent working directory")
-	fmt.Println("  cd <relative_path> - Change current directory")
+	fmt.Println("  ls, list            - List files and directories")
+	fmt.Println("  pwd                 - Returns parent working directory")
+	fmt.Println("  cd <relative_path>  - Change current directory")
 	fmt.Println("  upload <local_path> - Upload a new file the current directory")
-	fmt.Println("  create <filename>  - Create a new file")
-	fmt.Println("  mkdir <dirname>    - Create a new directory")
-	fmt.Println("  read <filename>    - Read the file from current directory")
+	fmt.Println("  download <filename> - Download the file from current directory")
+	fmt.Println("  create <filename>   - Create a new file")
+	fmt.Println("  mkdir <dirname>     - Create a new directory")
+	fmt.Println("  read <filename>     - Read the file from current directory")
 	fmt.Println("  write <filename> <data> - Write data to a file in the current directory")
-	fmt.Println("  info               - Show root directory information")
-	fmt.Println("  help               - Show this help message")
-	fmt.Println("  exit, quit         - Exit the client")
+	fmt.Println("  info                - Show root directory information")
+	fmt.Println("  help                - Show this help message")
+	fmt.Println("  exit, quit          - Exit the client")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  create hello.txt")

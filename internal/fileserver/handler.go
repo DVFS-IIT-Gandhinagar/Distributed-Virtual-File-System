@@ -4,8 +4,10 @@ import (
 	"context"
 	"io"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
+	"fmt"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -16,6 +18,8 @@ type GRPCHandler struct {
 	pb.UnimplementedFileServerServer
 	fileServer *FileServer
 }
+
+const chunkSize = 1024 * 1024 * 4 // 4MB
 
 // NewGRPCHandler creates a new gRPC handler
 func NewGRPCHandler(fileServer *FileServer) *GRPCHandler {
@@ -264,6 +268,70 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
             })
         }
     }
+}
+
+// DownloadFile downloads the file by it's name in cwd
+func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileServer_DownloadFileServer) error {
+
+	parentFID := domain.FIDFromProto(req.ParentFid)
+	parentInode, err := h.fileServer.GetInode(parentFID)
+	if err != nil {
+		return err
+	}
+
+	inode, err := h.fileServer.GetChildInodeByName(parentInode, req.Name)
+	if err != nil {
+		return err
+	}
+
+	if inode.Type != domain.InodeTypeFile {
+		err := fmt.Errorf("Only files can be downloaded")
+		return stream.Send(&pb.DownloadFileResponse{
+            Success: false,
+            Error:   err.Error(),
+        })
+	}
+
+	path := inode.OSPath
+	file, err := os.Open(path)
+	if err != nil {
+        return stream.Send(&pb.DownloadFileResponse{
+            Success: false,
+            Error:   err.Error(),
+        })
+    }
+	defer file.Close()
+
+	buf := make([]byte, chunkSize)
+
+	offset := uint64(0)
+
+	for {
+		n, err := file.Read(buf)
+
+		if n > 0 {
+			res := &pb.DownloadFileResponse{
+				Chunk:     buf[:n],
+				Offset:    offset,
+				Success:   true,
+			}
+
+			if err := stream.Send(res); err != nil {
+				return err
+			}
+
+			offset += uint64(n)
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ReadFile reads data from a file

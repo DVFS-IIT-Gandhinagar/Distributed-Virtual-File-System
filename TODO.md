@@ -8,7 +8,7 @@
 - [] Dockerize
 - [] Handle fid -> inode map in better way
 - [] Delete File function - @ShardulJunagade
-- [] Upload/Download of files - @Umang-Shikarvar
+- [x] Upload/Download of files - @Umang-Shikarvar
 - [] Compression in Upload/Download
 - [] Client Side Caching - @Reckadon
 - [] New CLI using Cobra - @jsmaskeen
