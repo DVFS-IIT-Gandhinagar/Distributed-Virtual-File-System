@@ -1,4 +1,4 @@
-- [x] Test server-client on different machines 
+- [x] Test server-client on different machines
 - [x] implement cd .. command - @Umang-Shikarvar
 - [x] handle correct scanning of nested file's inodes
 - [x] show path after user root dir - @Umang-Shikarvar
@@ -7,3 +7,8 @@
 - [x] Handle current inode (in some subdir)
 - [] Dockerize
 - [] Handle fid -> inode map in better way
+- [] Delete File function - @ShardulJunagade
+- [] Upload/Download of files - @Umang-Shikarvar
+- [] Compression in Upload/Download
+- [] Client Side Caching - @Reckadon
+- [] New CLI using Cobra - @jsmaskeen
