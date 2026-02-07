@@ -21,7 +21,7 @@ type Client struct {
 	serverConn pb.FileServerClient
 }
 
-const chunkSize = 1024 * 32 // 32KB
+const chunkSize = 1024 * 1024 * 4 // 4MB
 
 // NewClient creates a new VFS client
 func NewClient(username string) *Client {
@@ -206,10 +206,10 @@ func (c *Client) UploadFile(path string) error {
 
 		if n > 0 {
 			req := &pb.UploadFileRequest{
-				Chunk:  buf[:n],
-				Offset: offset,
-				Name: name,
-				User: c.username,
+				Chunk:     buf[:n],
+				Offset:    offset,
+				Name:      name,
+				User:      c.username,
 				ParentFid: c.currentFID.ToProto(),
 			}
 

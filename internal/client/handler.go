@@ -133,7 +133,7 @@ func (h *CommandHandler) handleUploadFile(path string) {
 func (h *CommandHandler) handleList() {
 	files, err := h.client.ListFiles()
 	if err != nil {
-		fmt.Printf("Error listing files: %v\n", err)
+		fmt.Printf("Error uploading the file: %v\n", err)
 		return
 	}
 
@@ -247,6 +247,7 @@ func (h *CommandHandler) handleHelp() {
 	fmt.Println("  ls, list           - List files and directories")
 	fmt.Println("  pwd                - Returns parent working directory")
 	fmt.Println("  cd <relative_path> - Change current directory")
+	fmt.Println("  upload <local_path> - Upload a new file the current directory")
 	fmt.Println("  create <filename>  - Create a new file")
 	fmt.Println("  mkdir <dirname>    - Create a new directory")
 	fmt.Println("  read <filename>    - Read the file from current directory")
