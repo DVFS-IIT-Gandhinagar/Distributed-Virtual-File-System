@@ -1,0 +1,19 @@
+services:
+  server:
+    build: .
+    image: dvfs:latest
+    container_name: dvfs-server
+    command: make exec-server
+    volumes:
+      - ./fileserver_data:/app/fileserver_data
+    ports:
+      - "50051:50051"
+
+  client:
+    build: .
+    image: dvfs:latest
+    depends_on:
+      - server
+    stdin_open: true 
+    tty: true        
+    command: tail -f /dev/null

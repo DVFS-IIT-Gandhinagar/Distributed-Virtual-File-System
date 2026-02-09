@@ -45,11 +45,18 @@ run-server: build
 	@echo "Starting file server..."
 	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
 
-# Run client (usage: make run-client USER=alice)
+exec-server:
+	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
+
+# Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice
+IP_ADDR ?= 127.0.0.1
 run-client: build
-	@echo "Starting client for user $(USER)..."
-	@./$(CLIENT_BINARY) -username=$(USER)
+	@echo "Starting client for user $(USER) connecting to $(IP_ADDR)..."
+	@./$(CLIENT_BINARY) -username=$(USER) -ip_addr=$(IP_ADDR)
+
+exec-client:
+	@./$(CLIENT_BINARY) -username=$(USER) -ip_addr=$(IP_ADDR)
 
 # Install dependencies
 deps:
