@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net"
 
@@ -11,12 +13,15 @@ import (
 
 func main() {
 	// Server configuration
-	serverID := "fs1"
-	rootDir := "./fileserver_data"
-	listenAddr := "0.0.0.0:50051" // Listen on all interfaces
+	serverID := flag.String("id", "fs1", "Server ID")
+	port := flag.Int("port", 50051, "Port to listen on")
+	rootDir := flag.String("data", "./fileserver_data", "Data directory")
+	flag.Parse()
+
+	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
 	// Create file server
-	server, err := fileserver.NewFileServer(serverID, rootDir)
+	server, err := fileserver.NewFileServer(*serverID, *rootDir)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}

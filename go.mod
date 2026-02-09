@@ -3,6 +3,7 @@ module github.com/umangshikarvar/dvfs
 go 1.24.0
 
 require (
+	github.com/chzyer/readline v1.5.1
 	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11
 )

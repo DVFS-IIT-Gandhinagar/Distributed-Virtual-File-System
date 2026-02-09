@@ -1,48 +1,133 @@
 package client
 
 import (
-	"bufio"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 
+	"github.com/chzyer/readline"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
 
 // CommandHandler handles terminal-based commands for the client
 type CommandHandler struct {
-	client *Client
-	reader *bufio.Reader
+	client   *Client
+	instance *readline.Instance
 }
 
 // NewCommandHandler creates a new command handler
 func NewCommandHandler(client *Client) *CommandHandler {
-	return &CommandHandler{
+	h := &CommandHandler{
 		client: client,
-		reader: bufio.NewReader(os.Stdin),
 	}
+	return h
+}
+
+// Completer implements readline.Completer interface
+type Completer struct {
+	handler *CommandHandler
+}
+
+func (c *Completer) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	lineStr := string(line[:pos])
+	parts := strings.Fields(lineStr)
+
+	if len(parts) == 0 {
+		return nil, 0
+	}
+
+	command := parts[0]
+	
+	// If it's just the command being typed, we can suggest commands
+	if len(parts) == 1 && !strings.HasSuffix(lineStr, " ") {
+		commands := []string{"ls", "pwd", "cd", "create", "mkdir", "upload", "download", "read", "write", "info", "help", "clear", "exit"}
+		var suggestions [][]rune
+		for _, cmd := range commands {
+			if strings.HasPrefix(cmd, command) {
+				suggestions = append(suggestions, []rune(cmd[len(command):]))
+			}
+		}
+		return suggestions, len(command)
+	}
+
+	// For commands that take a filename/path, fetch from server
+	needsFile := map[string]bool{
+		"cd":       true,
+		"read":     true,
+		"write":    true,
+		"download": true,
+	}
+
+	if needsFile[command] {
+		prefix := ""
+		if len(parts) > 1 {
+			prefix = parts[1]
+		}
+		if strings.HasSuffix(lineStr, " ") && len(parts) == 1 {
+			prefix = ""
+		}
+
+		files, err := c.handler.client.ListFiles()
+		if err != nil {
+			return nil, 0
+		}
+
+		var suggestions [][]rune
+		for _, f := range files {
+			if strings.HasPrefix(f.Name, prefix) {
+				suggestions = append(suggestions, []rune(f.Name[len(prefix):]))
+			}
+		}
+		return suggestions, len(prefix)
+	}
+
+	return nil, 0
 }
 
 // Start begins the interactive command loop
 func (h *CommandHandler) Start() {
+	completer := &Completer{handler: h}
+
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "\033[32mdvfs>\033[0m ",
+		HistoryFile:     "/tmp/readline.tmp",
+		AutoComplete:    completer,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if err != nil {
+		fmt.Printf("Error initializing readline: %v\n", err)
+		return
+	}
+	defer rl.Close()
+	h.instance = rl
+
 	fmt.Println("=== Distributed VFS Client ===")
 	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, upload, download, read, write, info, help, exit")
 	fmt.Println()
 
 	for {
-		fmt.Print("dvfs> ")
-		input, err := h.reader.ReadString('\n')
+		line, err := rl.Readline()
 		if err != nil {
+			if err == readline.ErrInterrupt {
+				if len(line) == 0 {
+					break
+				} else {
+					continue
+				}
+			} else if err == io.EOF {
+				break
+			}
 			fmt.Printf("Error reading input: %v\n", err)
 			continue
 		}
 
-		input = strings.TrimSpace(input)
-		if input == "" {
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
 		}
 
-		parts := strings.Fields(input)
+		parts := strings.Fields(line)
 		command := parts[0]
 
 		switch command {
@@ -82,18 +167,20 @@ func (h *CommandHandler) Start() {
 			h.handleCreateDir(parts[1])
 		case "upload":
 			if len(parts) < 2 {
-				fmt.Println("Usage: cd <relative_path>")
+				fmt.Println("Usage: upload <local_path>")
 				continue
 			}
 			h.handleUploadFile(parts[1])
 		case "download":
 			if len(parts) < 2 {
-				fmt.Println("Usage: download <<filename>")
+				fmt.Println("Usage: download <filename>")
 				continue
 			}
 			h.handleDownloadFile(parts[1])
 		case "info":
 			h.handleInfo()
+		case "clear":
+			h.handleClear()
 		case "help":
 			h.handleHelp()
 		case "exit", "quit":
@@ -262,6 +349,11 @@ func (h *CommandHandler) handleInfo() {
 	fmt.Printf("  FID:  %s\n", info.FID.String())
 }
 
+// handleClear clears the terminal screen
+func (h *CommandHandler) handleClear() {
+	fmt.Print("\033[H\033[2J")
+}
+
 // handleHelp displays available commands
 func (h *CommandHandler) handleHelp() {
 	fmt.Println("Available commands:")
@@ -275,6 +367,7 @@ func (h *CommandHandler) handleHelp() {
 	fmt.Println("  read <filename>     - Read the file from current directory")
 	fmt.Println("  write <filename> <data> - Write data to a file in the current directory")
 	fmt.Println("  info                - Show root directory information")
+	fmt.Println("  clear               - Clear the terminal screen")
 	fmt.Println("  help                - Show this help message")
 	fmt.Println("  exit, quit          - Exit the client")
 	fmt.Println()
