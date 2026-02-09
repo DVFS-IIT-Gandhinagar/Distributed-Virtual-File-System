@@ -43,13 +43,13 @@ clean:
 # Run file server
 run-server: build
 	@echo "Starting file server..."
-	@./$(FILESERVER_BINARY) fs1 50051 ./fileserver_data
+	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
 
 # Run client (usage: make run-client USER=alice)
 USER ?= alice
 run-client: build
 	@echo "Starting client for user $(USER)..."
-	@./$(CLIENT_BINARY) $(USER)
+	@./$(CLIENT_BINARY) -username=$(USER)
 
 # Install dependencies
 deps:
