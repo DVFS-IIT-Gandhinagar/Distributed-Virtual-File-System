@@ -190,7 +190,7 @@ func (c *Client) UploadFile(path string) error {
 	}
 
 	if !resp.Success {
-		return fmt.Errorf(resp.Error)
+		return fmt.Errorf("server error %s",resp.Error)
 	}
 
 	stream, err := c.serverConn.UploadFile(context.Background())
@@ -278,7 +278,7 @@ func (c *Client) DownloadFile(name string) error {
 		}
 
 		if !res.Success {
-			return fmt.Errorf(res.Error)
+			return fmt.Errorf("server error %s",res.Error)
 		}
 
 		_, err = file.WriteAt(res.Chunk, int64(res.Offset))
