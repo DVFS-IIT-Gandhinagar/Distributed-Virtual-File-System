@@ -39,7 +39,7 @@ func main() {
 	}
 
 	log.Printf("File server starting on %s", listenAddr)
-	log.Printf("Data directory: %s", rootDir)
+	log.Printf("Data directory: %s", *rootDir)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
