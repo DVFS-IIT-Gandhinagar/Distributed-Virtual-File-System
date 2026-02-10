@@ -190,7 +190,7 @@ func (c *Client) UploadFile(path string) error {
 	}
 
 	if !resp.Success {
-		return fmt.Errorf(resp.Error)
+		return fmt.Errorf("%s", resp.Error)
 	}
 
 	stream, err := c.serverConn.UploadFile(context.Background())
@@ -241,22 +241,115 @@ func (c *Client) UploadFile(path string) error {
 	return nil
 }
 
-// DownloadFile downloads a file
-func (c *Client) DownloadFile(name string) error {
-	req := &pb.DownloadFileRequest{
-		Name: name,
-		User: c.username,
-		ParentFid:  c.currentFID.ToProto(),
+// GetFIDForPath returns the FID of a path relative to current or root directory
+func (c *Client) GetFIDForPath(path string) (*domain.FID, error) {
+	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
+		Fid:     c.currentFID.ToProto(),
+		RootFid: c.rootFID.ToProto(),
+		Path:    path,
+	})
+	if err != nil {
+		return nil, err
 	}
-	
+	if !resp.Success {
+		return nil, fmt.Errorf("%s", resp.Error)
+	}
+	return domain.FIDFromProto(resp.NewFid), nil
+}
+
+// Download downloads a file or a directory recursively
+func (c *Client) Download(path string) error {
+	// Handle path components
+	dirPath := filepath.Dir(path)
+	baseName := filepath.Base(path)
+
+	parentFID := c.currentFID
+	if dirPath != "." && dirPath != "/" && dirPath != "\\" {
+		var err error
+		parentFID, err = c.GetFIDForPath(dirPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve path %s: %w", dirPath, err)
+		}
+	} else if dirPath == "/" || dirPath == "\\" {
+		parentFID = c.rootFID
+	}
+
+	// get current directory contents to find 'baseName'
+	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
+		Fid:  parentFID.ToProto(),
+		User: c.username,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list directory: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	var target *pb.DirEntry
+	for _, entry := range resp.Entries {
+		if entry.Name == baseName {
+			target = entry
+			break
+		}
+	}
+
+	if target == nil {
+		return fmt.Errorf("'%s' not found", path)
+	}
+
+	return c.downloadRecursive(parentFID, target, DownloadDir)
+}
+
+func (c *Client) downloadRecursive(parentFID *domain.FID, entry *pb.DirEntry, localParentDir string) error {
+	if domain.InodeTypeFromProto(entry.Type) == domain.InodeTypeFile {
+		return c.downloadFileInternal(parentFID, entry.Name, localParentDir)
+	}
+
+	// It's a directory
+	localDirPath := filepath.Join(localParentDir, entry.Name)
+	if err := os.MkdirAll(localDirPath, 0755); err != nil {
+		return fmt.Errorf("failed to create local directory %s: %w", localDirPath, err)
+	}
+
+	// List children of this directory
+	childFID := domain.FIDFromProto(entry.Fid)
+	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
+		Fid:  childFID.ToProto(),
+		User: c.username,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list directory %s: %w", entry.Name, err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("server error listing %s: %s", entry.Name, resp.Error)
+	}
+
+	for _, child := range resp.Entries {
+		if err := c.downloadRecursive(childFID, child, localDirPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// downloadFileInternal downloads a single file from a specific parent directory
+func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localDir string) error {
+	req := &pb.DownloadFileRequest{
+		Name:      name,
+		User:      c.username,
+		ParentFid: parentFID.ToProto(),
+	}
+
 	stream, err := c.serverConn.DownloadFile(context.Background(), req)
 	if err != nil {
 		return err
 	}
 
-	osPath := filepath.Join(DownloadDir, name)
+	osPath := filepath.Join(localDir, name)
 	// ensure directory exists
-	if err := os.MkdirAll(DownloadDir, 0755); err != nil {
+	if err := os.MkdirAll(localDir, 0755); err != nil {
 		return err
 	}
 
@@ -278,7 +371,7 @@ func (c *Client) DownloadFile(name string) error {
 		}
 
 		if !res.Success {
-			return fmt.Errorf(res.Error)
+			return fmt.Errorf("%s", res.Error)
 		}
 
 		_, err = file.WriteAt(res.Chunk, int64(res.Offset))
@@ -288,6 +381,10 @@ func (c *Client) DownloadFile(name string) error {
 	}
 
 	return nil
+}
+
+func (c *Client) DownloadFile(name string) error {
+	return c.Download(name)
 }
 
 // CreateDirectory creates a new directory
