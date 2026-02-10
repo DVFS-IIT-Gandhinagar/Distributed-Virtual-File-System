@@ -12,3 +12,4 @@
 - [] Compression in Upload/Download
 - [] Client Side Caching - @Reckadon
 - [] New CLI using Cobra - @jsmaskeen
+- [x] Download of folders - @jsmaskeen
