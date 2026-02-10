@@ -167,9 +167,64 @@ func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	}, nil
 }
 
-// UploadFile uploads a file
-func (c *Client) UploadFile(path string) error {
+// Upload uploads a file or a directory recursively
+func (c *Client) Upload(localPath string) error {
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return err
+	}
 
+	if !info.IsDir() {
+		return c.uploadFileInternal(localPath, c.currentFID)
+	}
+
+	// It's a directory
+	return c.uploadRecursive(localPath, c.currentFID)
+}
+
+func (c *Client) uploadRecursive(localPath string, parentFID *domain.FID) error {
+	baseName := filepath.Base(localPath)
+
+	// 1. Create directory on server
+	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
+		Name: baseName,
+		User: c.username,
+		Fid:  parentFID.ToProto(),
+		Type: pb.InodeType_DIRECTORY,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", baseName, err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("server error creating directory %s: %s", baseName, resp.Error)
+	}
+
+	dirFID := domain.FIDFromProto(resp.Fid)
+
+	// 2. Read local directory contents
+	entries, err := os.ReadDir(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to read local directory %s: %w", localPath, err)
+	}
+
+	for _, entry := range entries {
+		fullPath := filepath.Join(localPath, entry.Name())
+		if entry.IsDir() {
+			if err := c.uploadRecursive(fullPath, dirFID); err != nil {
+				return err
+			}
+		} else {
+			if err := c.uploadFileInternal(fullPath, dirFID); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// uploadFileInternal uploads a single file to a specific parent directory
+func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -181,7 +236,7 @@ func (c *Client) UploadFile(path string) error {
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
 		Name: name,
 		User: c.username,
-		Fid:  c.currentFID.ToProto(),
+		Fid:  parentFID.ToProto(),
 		Type: pb.InodeType_FILE,
 	})
 
@@ -199,25 +254,22 @@ func (c *Client) UploadFile(path string) error {
 	}
 
 	buf := make([]byte, chunkSize)
-
 	offset := uint64(0)
 
 	for {
 		n, err := file.Read(buf)
-
 		if n > 0 {
 			req := &pb.UploadFileRequest{
 				Chunk:     buf[:n],
 				Offset:    offset,
 				Name:      name,
 				User:      c.username,
-				ParentFid: c.currentFID.ToProto(),
+				ParentFid: parentFID.ToProto(),
 			}
 
 			if err := stream.Send(req); err != nil {
 				return err
 			}
-
 			offset += uint64(n)
 		}
 
@@ -239,6 +291,10 @@ func (c *Client) UploadFile(path string) error {
 	}
 
 	return nil
+}
+
+func (c *Client) UploadFile(path string) error {
+	return c.Upload(path)
 }
 
 // GetFIDForPath returns the FID of a path relative to current or root directory
