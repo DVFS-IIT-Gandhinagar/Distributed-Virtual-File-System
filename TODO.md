@@ -3,13 +3,16 @@
 - [x] handle correct scanning of nested file's inodes
 - [x] show path after user root dir - @Umang-Shikarvar
 - [x] handle read/write operations - @Reckadon
-- [x] CLI args parsing with flags
-- [x] Handle current inode (in some subdir)
-- [x] Dockerize
-- [] Handle fid -> inode map in better way
-- [] Delete File function - @ShardulJunagade
+- [x] CLI args parsing with flags - @Umang-Shikarvar
 - [x] Upload/Download of files - @Umang-Shikarvar
-- [] Compression in Upload/Download
-- [] Client Side Caching - @Reckadon
+- [x] Handle current inode (in some subdir) - @Umang-Shikarvar
+- [x] Dockerize - @jsmaskeen
 - [x] New CLI using Cobra - @jsmaskeen
 - [x] Upload/Download of folders - @jsmaskeen
+- [] Handle fid -> inode map in better way
+- [] Delete File function - @ShardulJunagade
+- [] Compression in Upload/Download
+- [] Client Side Caching - @Reckadon
+- [ ] Remove Read/Write and integrate with 'open'
+- [ ] TLS handshake
+- [ ] test tradeoff between ping and callbacks
