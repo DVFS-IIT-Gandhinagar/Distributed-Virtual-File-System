@@ -28,6 +28,6 @@ func main() {
 	fmt.Printf("Connected successfully!\n\n")
 
 	// Start interactive command handler
-	handler := client.NewCommandHandler(c)
+	handler := client.NewCobraHandler(c)
 	handler.Start()
 }

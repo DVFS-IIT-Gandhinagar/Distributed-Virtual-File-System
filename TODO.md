@@ -11,5 +11,5 @@
 - [x] Upload/Download of files - @Umang-Shikarvar
 - [] Compression in Upload/Download
 - [] Client Side Caching - @Reckadon
-- [] New CLI using Cobra - @jsmaskeen
-- [x] Download of folders - @jsmaskeen
+- [x] New CLI using Cobra - @jsmaskeen
+- [x] Upload/Download of folders - @jsmaskeen
