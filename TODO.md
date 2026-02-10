@@ -5,10 +5,11 @@
 - [x] handle read/write operations - @Reckadon
 - [x] CLI args parsing with flags
 - [x] Handle current inode (in some subdir)
-- [] Dockerize
+- [x] Dockerize
 - [] Handle fid -> inode map in better way
 - [] Delete File function - @ShardulJunagade
 - [x] Upload/Download of files - @Umang-Shikarvar
 - [] Compression in Upload/Download
 - [] Client Side Caching - @Reckadon
-- [] New CLI using Cobra - @jsmaskeen
+- [x] New CLI using Cobra - @jsmaskeen
+- [x] Upload/Download of folders - @jsmaskeen
