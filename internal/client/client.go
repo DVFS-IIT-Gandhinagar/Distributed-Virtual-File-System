@@ -31,7 +31,7 @@ func NewClient(username string) *Client {
 	}
 }
 
-// Connect connects to a file server and gets user root
+// Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) error {
 	// Connect to server
 	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))

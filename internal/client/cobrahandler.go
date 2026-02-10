@@ -13,15 +13,15 @@ import (
 
 // CobraHandler handles commands using Cobra
 type CobraHandler struct {
-	client  *Client
+	cacheHandler  *CacheHandler
 	rootCmd *cobra.Command
 	rl      *readline.Instance
 }
 
 // NewCobraHandler creates a new Cobra-based command handler
-func NewCobraHandler(client *Client) *CobraHandler {
+func NewCobraHandler(cacheHandler *CacheHandler) *CobraHandler {
 	h := &CobraHandler{
-		client: client,
+		cacheHandler: cacheHandler,
 	}
 	h.setupCommands()
 	return h
@@ -39,7 +39,7 @@ func (h *CobraHandler) setupCommands() {
 		Use:   "ls",
 		Short: "List files and directories",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files, err := h.client.ListFiles()
+			files, err := h.cacheHandler.ListFiles()
 			if err != nil {
 				return err
 			}
@@ -65,7 +65,7 @@ func (h *CobraHandler) setupCommands() {
 		Use:   "pwd",
 		Short: "Returns parent working directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := h.client.Path()
+			path, err := h.cacheHandler.Path()
 			if err != nil {
 				return err
 			}
@@ -80,7 +80,7 @@ func (h *CobraHandler) setupCommands() {
 		Short: "Change current directory",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return h.client.ChangeDirectory(args[0])
+			return h.cacheHandler.ChangeDirectory(args[0])
 		},
 	})
 
@@ -91,7 +91,7 @@ func (h *CobraHandler) setupCommands() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Uploading '%s'...\n", args[0])
-			err := h.client.Upload(args[0])
+			err := h.cacheHandler.Upload(args[0])
 			if err == nil {
 				fmt.Printf("'%s' uploaded successfully\n", args[0])
 			}
@@ -106,7 +106,7 @@ func (h *CobraHandler) setupCommands() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Downloading '%s'...\n", args[0])
-			err := h.client.Download(args[0])
+			err := h.cacheHandler.Download(args[0])
 			if err == nil {
 				fmt.Printf("'%s' downloaded successfully\n", args[0])
 			}
@@ -120,7 +120,7 @@ func (h *CobraHandler) setupCommands() {
 		Short: "Create a new file",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			file, err := h.client.CreateFile(args[0])
+			file, err := h.cacheHandler.CreateFile(args[0])
 			if err == nil {
 				fmt.Printf("File '%s' created successfully (FID: %s)\n", file.Name, file.FID.String())
 			}
@@ -134,7 +134,7 @@ func (h *CobraHandler) setupCommands() {
 		Short: "Create a new directory",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir, err := h.client.CreateDirectory(args[0])
+			dir, err := h.cacheHandler.CreateDirectory(args[0])
 			if err == nil {
 				fmt.Printf("Directory '%s' created successfully (FID: %s)\n", dir.Name, dir.FID.String())
 			}
@@ -148,7 +148,7 @@ func (h *CobraHandler) setupCommands() {
 		Short: "Read a file from current directory",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := h.client.ReadFile(args[0])
+			data, err := h.cacheHandler.ReadFile(args[0])
 			if err == nil {
 				fmt.Printf("Contents of '%s':\n%s\n", args[0], string(data))
 			}
@@ -164,7 +164,7 @@ func (h *CobraHandler) setupCommands() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filename := args[0]
 			data := strings.Join(args[1:], " ")
-			err := h.client.WriteFile(filename, []byte(data))
+			err := h.cacheHandler.WriteFile(filename, []byte(data))
 			if err == nil {
 				fmt.Printf("Successfully wrote to file '%s'\n", filename)
 			}
@@ -177,7 +177,7 @@ func (h *CobraHandler) setupCommands() {
 		Use:   "info",
 		Short: "Show current directory information",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			info, err := h.client.GetFileInfo()
+			info, err := h.cacheHandler.GetFileInfo()
 			if err != nil {
 				return err
 			}
@@ -314,7 +314,7 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 			prefix = parts[len(parts)-1]
 		}
 
-		files, err := c.handler.client.ListFiles()
+		files, err := c.handler.cacheHandler.ListFiles()
 		if err != nil {
 			return nil, 0
 		}
