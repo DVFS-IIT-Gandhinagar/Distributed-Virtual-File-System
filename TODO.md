@@ -5,7 +5,7 @@
 - [x] handle read/write operations - @Reckadon
 - [x] CLI args parsing with flags
 - [x] Handle current inode (in some subdir)
-- [] Dockerize
+- [x] Dockerize
 - [] Handle fid -> inode map in better way
 - [] Delete File function - @ShardulJunagade
 - [x] Upload/Download of files - @Umang-Shikarvar
