@@ -112,10 +112,10 @@ func (h *CommandHandler) Start() {
 			h.handleUploadFile(parts[1])
 		case "download":
 			if len(parts) < 2 {
-				fmt.Println("Usage: download <filename>")
+				fmt.Println("Usage: download <name>")
 				continue
 			}
-			h.handleDownloadFile(parts[1])
+			h.handleDownload(parts[1])
 		case "info":
 			h.handleInfo()
 		case "clear":
@@ -223,19 +223,19 @@ func (h *CommandHandler) handleReadFile(filename string) {
 	fmt.Printf("Contents of '%s':\n%s\n", filename, string(data))
 }
 
-// handleDownloadFile reads a file
-func (h *CommandHandler) handleDownloadFile(filename string) {
-	if filename == "" {
-		fmt.Println("Error: filename cannot be empty")
+// handleDownload downloads a file or directory
+func (h *CommandHandler) handleDownload(name string) {
+	if name == "" {
+		fmt.Println("Error: name cannot be empty")
 		return
 	}
-	// read full file for now
-	err := h.client.DownloadFile(filename)
+	fmt.Printf("Downloading '%s'...\n", name)
+	err := h.client.Download(name)
 	if err != nil {
-		fmt.Printf("Error downloading file '%s': %v\n", filename, err)
+		fmt.Printf("Error downloading '%s': %v\n", name, err)
 		return
 	}
-	fmt.Printf("File downloaded successfully\n")
+	fmt.Printf("'%s' downloaded successfully\n", name)
 }
 
 func (h *CommandHandler) handleWriteFile(filename, data string) {
@@ -300,7 +300,7 @@ func (h *CommandHandler) handleHelp() {
 	fmt.Println("  pwd                 - Returns parent working directory")
 	fmt.Println("  cd <relative_path>  - Change current directory")
 	fmt.Println("  upload <local_path> - Upload a new file the current directory")
-	fmt.Println("  download <filename> - Download the file from current directory")
+	fmt.Println("  download <name>     - Download the file or folder from current directory")
 	fmt.Println("  create <filename>   - Create a new file")
 	fmt.Println("  mkdir <dirname>     - Create a new directory")
 	fmt.Println("  read <filename>     - Read the file from current directory")
