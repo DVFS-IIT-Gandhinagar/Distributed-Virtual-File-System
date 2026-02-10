@@ -109,7 +109,7 @@ func (h *CommandHandler) Start() {
 				fmt.Println("Usage: upload <local_path>")
 				continue
 			}
-			h.handleUploadFile(parts[1])
+			h.handleUpload(parts[1])
 		case "download":
 			if len(parts) < 2 {
 				fmt.Println("Usage: download <name>")
@@ -152,13 +152,15 @@ func (h *CommandHandler) handleChangeDir(relative_path string) {
 	}
 }
 
-// handleUploadFile uploads the file to current directory
-func (h *CommandHandler) handleUploadFile(path string) {
-	err := h.client.UploadFile(path)
+// handleUpload uploads the file or folder to current directory
+func (h *CommandHandler) handleUpload(path string) {
+	fmt.Printf("Uploading '%s'...\n", path)
+	err := h.client.Upload(path)
 	if err != nil {
-		fmt.Printf("Error uploading the file: %v\n", err)
+		fmt.Printf("Error uploading: %v\n", err)
 		return
 	}
+	fmt.Printf("'%s' uploaded successfully\n", path)
 }
 
 // handleList lists files in the current directory
@@ -299,7 +301,7 @@ func (h *CommandHandler) handleHelp() {
 	fmt.Println("  ls, list            - List files and directories")
 	fmt.Println("  pwd                 - Returns parent working directory")
 	fmt.Println("  cd <relative_path>  - Change current directory")
-	fmt.Println("  upload <local_path> - Upload a new file the current directory")
+	fmt.Println("  upload <local_path> - Upload a file or folder to the current directory")
 	fmt.Println("  download <name>     - Download the file or folder from current directory")
 	fmt.Println("  create <filename>   - Create a new file")
 	fmt.Println("  mkdir <dirname>     - Create a new directory")
