@@ -246,7 +246,6 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
 
 	if !resp.Success {
 		return fmt.Errorf("server error %s",resp.Error)
-		return fmt.Errorf("%s", resp.Error)
 	}
 
 	stream, err := c.serverConn.UploadFile(context.Background())
@@ -429,7 +428,6 @@ func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localD
 
 		if !res.Success {
 			return fmt.Errorf("server error %s",res.Error)
-			return fmt.Errorf("%s", res.Error)
 		}
 
 		_, err = file.WriteAt(res.Chunk, int64(res.Offset))
