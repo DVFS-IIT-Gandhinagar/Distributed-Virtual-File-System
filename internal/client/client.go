@@ -2,15 +2,18 @@ package client
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
+	"github.com/umangshikarvar/dvfs/internal/certs"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 // Client provides basic VFS client functionality
@@ -33,8 +36,21 @@ func NewClient(username string) *Client {
 
 // Connect connects to a file server and gets user root
 func (c *Client) Connect(serverAddress string) error {
+	// TLS configuration
+	cp := x509.NewCertPool()
+	if !cp.AppendCertsFromPEM(certs.CACert) {
+		return fmt.Errorf("failed to append CA certificate")
+	}
+
+	// Extract host for TLS verification
+	host, _, err := net.SplitHostPort(serverAddress)
+	if err != nil {
+		host = serverAddress // Fallback if no port specified
+	}
+	creds := credentials.NewClientTLSFromCert(cp, host)
+
 	// Connect to server
-	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
