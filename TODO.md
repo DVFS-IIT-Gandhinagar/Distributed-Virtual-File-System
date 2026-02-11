@@ -10,7 +10,7 @@
 - [x] New CLI using Cobra - @jsmaskeen
 - [x] Upload/Download of folders - @jsmaskeen
 - [] Handle fid -> inode map in better way
-- [] Delete File function - @ShardulJunagade
+- [x] Delete File function - @ShardulJunagade
 - [] Compression in Upload/Download
 - [] Client Side Caching - @Reckadon
 - [ ] Remove Read/Write and integrate with 'open'
