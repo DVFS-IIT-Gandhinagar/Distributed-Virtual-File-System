@@ -245,7 +245,7 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("server error %s",resp.Error)
+		return fmt.Errorf("server error %s", resp.Error)
 	}
 
 	stream, err := c.serverConn.UploadFile(context.Background())
@@ -427,7 +427,7 @@ func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localD
 		}
 
 		if !res.Success {
-			return fmt.Errorf("server error %s",res.Error)
+			return fmt.Errorf("server error %s", res.Error)
 		}
 
 		_, err = file.WriteAt(res.Chunk, int64(res.Offset))
@@ -501,6 +501,45 @@ func (c *Client) WriteFile(name string, data []byte) error {
 	if !resp.Success {
 		return fmt.Errorf("server error: %s", resp.Error)
 	}
+	return nil
+}
+
+// DeleteFile deletes a file or directory by name in the current directory
+// If recursive is true, non-empty directories will be deleted with all contents
+func (c *Client) DeleteFile(name string, recursive bool) error {
+	// First, we need to get the FID of the file to delete
+	// We'll list the directory and find the matching file
+	files, err := c.ListFiles()
+	if err != nil {
+		return fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	var targetFID *domain.FID
+	for _, file := range files {
+		if file.Name == name {
+			targetFID = file.FID
+			break
+		}
+	}
+
+	if targetFID == nil {
+		return fmt.Errorf("file or directory '%s' not found", name)
+	}
+
+	// Call delete on the server
+	resp, err := c.serverConn.DeleteFile(context.Background(), &pb.DeleteFileRequest{
+		Fid:       targetFID.ToProto(),
+		User:      c.username,
+		Recursive: recursive,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+
 	return nil
 }
 
