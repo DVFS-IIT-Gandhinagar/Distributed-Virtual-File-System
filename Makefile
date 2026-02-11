@@ -11,7 +11,7 @@ PROTOC=protoc
 all: build
 
 # Build all binaries
-build: $(BINARY_DIR)
+build: certs $(BINARY_DIR)
 	@echo "Building file server..."
 	@$(GO) build -o $(FILESERVER_BINARY) cmd/fileserver/main.go
 	@echo "Building client..."
@@ -82,6 +82,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make build        - Build all binaries"
 	@echo "  make proto        - Generate protobuf code"
+	@echo "  make certs        - Generate TLS certificates"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make run-server   - Build and run file server"
 	@echo "  make run-client   - Build and run client (default user: alice)"
@@ -90,3 +91,10 @@ help:
 	@echo "  make fmt          - Format code"
 	@echo "  make vet          - Run go vet"
 	@echo "  make help         - Show this help message"
+
+# Generate TLS certificates
+SERVER ?= localhost
+certs:
+	@echo "Generating TLS certificates..."
+	@go run scripts/gen-certs/main.go $(SERVER)
+	@echo "Certificates generated!"

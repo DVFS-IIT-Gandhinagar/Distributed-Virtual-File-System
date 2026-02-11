@@ -9,6 +9,8 @@ RUN go mod download
 
 COPY . .
 
+RUN make certs
+
 RUN make build
 
 FROM alpine:latest
