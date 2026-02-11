@@ -36,5 +36,13 @@ Download/
 *.tmp
 *.log
 
+# TLS Certificates
+internal/certs/*.crt
+internal/certs/*.key
+internal/certs/*.srl
+
+# Personal notes
+jaskirat/
+
 # Generated protobuf files (uncomment to regenerate on each build)
 # *.pb.go
