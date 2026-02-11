@@ -16,3 +16,6 @@
 - [ ] Remove Read/Write and integrate with 'open'
 - [x] TLS handshake @jsmaskeen
 - [ ] test tradeoff between ping and callbacks
+- [ ] chunked upload/download + read_at @jsmaskeen
+- [ ] CI @jsmaskeen
+- [ ] unittests @jsmaskeen
