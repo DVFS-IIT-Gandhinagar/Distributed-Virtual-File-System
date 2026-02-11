@@ -14,5 +14,5 @@
 - [] Compression in Upload/Download
 - [] Client Side Caching - @Reckadon
 - [ ] Remove Read/Write and integrate with 'open'
-- [ ] TLS handshake
+- [x] TLS handshake @jsmaskeen
 - [ ] test tradeoff between ping and callbacks

@@ -327,6 +327,27 @@ On restart:
 
 ---
 
-## 15. Summary
+## 15. Security (TLS)
+
+The system uses gRPC over TLS for secure communication between clients and servers.
+
+### 15.1 Out-of-the-box Security
+For ease of use, a default set of certificates is generated and **embedded** into the binaries using Go's `embed` package. This means:
+- You don't need to manually manage `.crt` or `.key` files to run the system.
+- The client automatically trusts the server using an embedded CA certificate.
+
+### 15.2 Regenerating Certificates
+For production or private deployments, you should regenerate the certificates:
+```bash
+make certs
+```
+This will run the generation script and update the files in `internal/certs/`. You must then rebuild the project:
+```bash
+make build
+```
+
+---
+
+## 16. Summary
 
 Each user interacts with exactly two namespaces—`mydrive` for private data and `shared` for shared data. File servers maintain authoritative metadata and enforce ACLs, while the metadata server maintains a denormalized shared index to optimize listing without participating in access control.
