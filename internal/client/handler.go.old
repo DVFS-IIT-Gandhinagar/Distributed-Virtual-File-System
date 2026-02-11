@@ -42,7 +42,7 @@ func (h *CommandHandler) Start() {
 	h.instance = rl
 
 	fmt.Println("=== Distributed VFS Client ===")
-	fmt.Println("Available commands: ls, pwd, cd, create, mkdir, upload, download, read, write, info, help, exit")
+	fmt.Println("Type 'help' to see all available commands")
 	fmt.Println()
 
 	for {
@@ -115,7 +115,24 @@ func (h *CommandHandler) Start() {
 				fmt.Println("Usage: download <name>")
 				continue
 			}
-			h.handleDownload(parts[1])
+			h.handleDownloadFile(parts[1])
+		case "rm", "delete":
+			if len(parts) < 2 {
+				fmt.Println("Usage: rm [-r] <filename>")
+				continue
+			}
+			// Check for -r flag
+			recursive := false
+			filename := parts[1]
+			if parts[1] == "-r" || parts[1] == "--recursive" {
+				if len(parts) < 3 {
+					fmt.Println("Usage: rm -r <filename>")
+					continue
+				}
+				recursive = true
+				filename = parts[2]
+			}
+			h.handleDeleteFile(filename, recursive)
 		case "info":
 			h.handleInfo()
 		case "clear":
@@ -253,6 +270,26 @@ func (h *CommandHandler) handleWriteFile(filename, data string) {
 	fmt.Printf("Successfully wrote to file '%s'\n", filename)
 }
 
+// handleDeleteFile deletes a file or directory
+func (h *CommandHandler) handleDeleteFile(name string, recursive bool) {
+	if name == "" {
+		fmt.Println("Error: filename cannot be empty")
+		return
+	}
+
+	err := h.client.DeleteFile(name, recursive)
+	if err != nil {
+		fmt.Printf("Error deleting '%s': %v\n", name, err)
+		return
+	}
+
+	if recursive {
+		fmt.Printf("Successfully deleted '%s' and all its contents\n", name)
+	} else {
+		fmt.Printf("Successfully deleted '%s'\n", name)
+	}
+}
+
 // handleCreateDir creates a new directory
 func (h *CommandHandler) handleCreateDir(dirname string) {
 	if dirname == "" {
@@ -297,23 +334,47 @@ func (h *CommandHandler) handleClear() {
 
 // handleHelp displays available commands
 func (h *CommandHandler) handleHelp() {
-	fmt.Println("Available commands:")
-	fmt.Println("  ls, list            - List files and directories")
-	fmt.Println("  pwd                 - Returns parent working directory")
-	fmt.Println("  cd <relative_path>  - Change current directory")
-	fmt.Println("  upload <local_path> - Upload a file or folder to the current directory")
-	fmt.Println("  download <name>     - Download the file or folder from current directory")
-	fmt.Println("  create <filename>   - Create a new file")
+	fmt.Println("\n=== DVFS Client - Available Commands ===\n")
+	
+	fmt.Println("File Operations:")
+	fmt.Println("  create <filename>   - Create a new empty file")
+	fmt.Println("  read <filename>     - Display file contents")
+	fmt.Println("  write <filename> <data> - Write data to a file")
+	fmt.Println("  upload <local_path> - Upload a file from local filesystem")
+	fmt.Println("  download <filename> - Download the file from current directory")
+	fmt.Println()
+	
+	fmt.Println("Directory Operations:")
+	fmt.Println("  ls, list            - List files and directories in current directory")
+	fmt.Println("  pwd                 - Print current working directory path")
+	fmt.Println("  cd <path>           - Change directory (supports: /, .., or relative path)")
 	fmt.Println("  mkdir <dirname>     - Create a new directory")
-	fmt.Println("  read <filename>     - Read the file from current directory")
-	fmt.Println("  write <filename> <data> - Write data to a file in the current directory")
-	fmt.Println("  info                - Show root directory information")
+	fmt.Println()
+	
+	fmt.Println("Delete Operations:")
+	fmt.Println("  rm <name>           - Delete a file or empty directory")
+	fmt.Println("  rm -r <name>        - Delete directory and all its contents recursively")
+	fmt.Println("  rm --recursive <name> - Same as -r (recursive delete)")
+	fmt.Println()
+	
+	fmt.Println("Other Commands:")
+	fmt.Println("  info                - Show current directory information")
 	fmt.Println("  clear               - Clear the terminal screen")
 	fmt.Println("  help                - Show this help message")
 	fmt.Println("  exit, quit          - Exit the client")
 	fmt.Println()
+	
 	fmt.Println("Examples:")
-	fmt.Println("  create hello.txt")
-	fmt.Println("  mkdir documents")
-	fmt.Println("  ls")
+	fmt.Println("  help                          # Show this help")
+	fmt.Println("  create hello.txt              # Create a file")
+	fmt.Println("  write hello.txt Hello World!  # Write to file")
+	fmt.Println("  read hello.txt                # Read file")
+	fmt.Println("  mkdir documents               # Create directory")
+	fmt.Println("  cd documents                  # Enter directory")
+	fmt.Println("  upload ~/photo.jpg            # Upload file")
+	fmt.Println("  rm hello.txt                  # Delete file")
+	fmt.Println("  rm -r old_project             # Delete directory with contents")
+	fmt.Println("  cd ..                         # Go to parent directory")
+	fmt.Println("  ls                            # List contents")
+	fmt.Println()
 }

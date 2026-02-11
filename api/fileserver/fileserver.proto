@@ -93,6 +93,7 @@ message CloseFileResponse {
 message DeleteFileRequest {
   FID fid = 1;
   string user = 2;
+  bool recursive = 3; // if true, allows deletion of non-empty directories
 }
 
 message DeleteFileResponse {

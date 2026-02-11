@@ -2,12 +2,12 @@ package fileserver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"fmt"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -231,43 +231,43 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 // UploadFile uploads a file in the working directory
 func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 
-    var name string
-    first := true
+	var name string
+	first := true
 
-    for {
-        req, err := stream.Recv()
+	for {
+		req, err := stream.Recv()
 
-        if err == io.EOF {
-            return stream.SendAndClose(&pb.UploadFileResponse{
-                Success: true,
-            })
-        }
-        if err != nil {
-            return err
-        }
+		if err == io.EOF {
+			return stream.SendAndClose(&pb.UploadFileResponse{
+				Success: true,
+			})
+		}
+		if err != nil {
+			return err
+		}
 
-        if req.ParentFid == nil {
-            return stream.SendAndClose(&pb.UploadFileResponse{
-                Success: false,
-                Error:   "missing parentFid",
-            })
-        }
+		if req.ParentFid == nil {
+			return stream.SendAndClose(&pb.UploadFileResponse{
+				Success: false,
+				Error:   "missing parentFid",
+			})
+		}
 
-        parentFID := domain.FIDFromProto(req.ParentFid)
+		parentFID := domain.FIDFromProto(req.ParentFid)
 
-        if first {
-            name = req.Name
-            first = false
-        }
+		if first {
+			name = req.Name
+			first = false
+		}
 
-        err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
-        if err != nil {
-            return stream.SendAndClose(&pb.UploadFileResponse{
-                Success: false,
-                Error:   err.Error(),
-            })
-        }
-    }
+		err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
+		if err != nil {
+			return stream.SendAndClose(&pb.UploadFileResponse{
+				Success: false,
+				Error:   err.Error(),
+			})
+		}
+	}
 }
 
 // DownloadFile downloads the file by it's name in cwd
@@ -287,19 +287,19 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 	if inode.Type != domain.InodeTypeFile {
 		err := fmt.Errorf("Only files can be downloaded")
 		return stream.Send(&pb.DownloadFileResponse{
-            Success: false,
-            Error:   err.Error(),
-        })
+			Success: false,
+			Error:   err.Error(),
+		})
 	}
 
 	path := inode.OSPath
 	file, err := os.Open(path)
 	if err != nil {
-        return stream.Send(&pb.DownloadFileResponse{
-            Success: false,
-            Error:   err.Error(),
-        })
-    }
+		return stream.Send(&pb.DownloadFileResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+	}
 	defer file.Close()
 
 	buf := make([]byte, chunkSize)
@@ -311,9 +311,9 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 
 		if n > 0 {
 			res := &pb.DownloadFileResponse{
-				Chunk:     buf[:n],
-				Offset:    offset,
-				Success:   true,
+				Chunk:   buf[:n],
+				Offset:  offset,
+				Success: true,
 			}
 
 			if err := stream.Send(res); err != nil {
@@ -384,6 +384,48 @@ func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (
 	}
 
 	return &pb.WriteFileResponse{
+		Success: true,
+	}, nil
+}
+
+// DeleteFile deletes a file or directory
+func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest) (*pb.DeleteFileResponse, error) {
+	log.Printf("DeleteFile: FID=%v, user=%s", req.Fid, req.User)
+
+	// Validate request
+	if req.Fid == nil {
+		log.Printf("DeleteFile: error - FID is required")
+		return &pb.DeleteFileResponse{
+			Success: false,
+			Error:   "FID is required",
+		}, nil
+	}
+
+	if req.User == "" {
+		log.Printf("DeleteFile: error - user is required")
+		return &pb.DeleteFileResponse{
+			Success: false,
+			Error:   "user is required",
+		}, nil
+	}
+
+	fid := domain.FIDFromProto(req.Fid)
+
+	// Get recursive flag from request (defaults to false for safety)
+	recursive := req.Recursive
+
+	// Attempt deletion
+	err := h.fileServer.DeleteFile(fid, req.User, recursive)
+	if err != nil {
+		log.Printf("DeleteFile: error deleting file - %v", err)
+		return &pb.DeleteFileResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	log.Printf("DeleteFile: success for FID %s", fid.String())
+	return &pb.DeleteFileResponse{
 		Success: true,
 	}, nil
 }

@@ -172,6 +172,30 @@ func (h *CobraHandler) setupCommands() {
 		},
 	})
 
+	// rm / delete
+	rmCmd := &cobra.Command{
+		Use:     "rm <name>",
+		Aliases: []string{"delete"},
+		Short:   "Delete a file or directory",
+		Long:    "Delete a file or empty directory. Use -r flag to delete directories with contents recursively.",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			recursive, _ := cmd.Flags().GetBool("recursive")
+			fmt.Printf("[DEBUG] Deleting '%s' with recursive=%v\n", args[0], recursive)
+			err := h.client.DeleteFile(args[0], recursive)
+			if err == nil {
+				if recursive {
+					fmt.Printf("Successfully deleted '%s' and all its contents\n", args[0])
+				} else {
+					fmt.Printf("Successfully deleted '%s'\n", args[0])
+				}
+			}
+			return err
+		},
+	}
+	rmCmd.Flags().BoolP("recursive", "r", false, "Delete directories recursively")
+	h.rootCmd.AddCommand(rmCmd)
+
 	// info
 	h.rootCmd.AddCommand(&cobra.Command{
 		Use:   "info",
@@ -306,6 +330,8 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 		"read":     true,
 		"write":    true,
 		"download": true,
+		"rm":       true,
+		"delete":   true,
 	}
 
 	if needsRemoteFile[commandName] {

@@ -40,7 +40,7 @@ func NewFileServer(serverID, rootDir string) (*FileServer, error) {
 		if err := fileScanner.loadExistingData(&fs.nextInodeID, &fs.inodes, &fs.users); err != nil {
 			return nil, fmt.Errorf("failed to load existing data: %w", err)
 		}
-		
+
 		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
 
 	} else {
@@ -114,7 +114,7 @@ func (fs *FileServer) GetInode(fid *domain.FID) (*domain.Inode, error) {
 }
 
 // find the inode in parent's children
-func (fs *FileServer) GetChildInodeByName(parentInode *domain.Inode, name string) (*domain.Inode, error) {	
+func (fs *FileServer) GetChildInodeByName(parentInode *domain.Inode, name string) (*domain.Inode, error) {
 	var inode *domain.Inode
 	found := false
 	for _, childFID := range parentInode.Children {
@@ -150,7 +150,7 @@ func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
 
 	path, err := filepath.Rel(fs.rootDir, dirInode.OSPath)
 	if err != nil {
-    	return "", fmt.Errorf("internal error can't compute path")
+		return "", fmt.Errorf("internal error can't compute path")
 	}
 	return path, nil
 }
@@ -291,7 +291,7 @@ func (fs *FileServer) ReadFile(parentFID *domain.FID, name string, offset, lengt
 	if err != nil {
 		return nil, fmt.Errorf("parent directory not found, %s", parentFID.String())
 	}
-	
+
 	inode, err := fs.GetChildInodeByName(parentInode, name)
 	if err != nil {
 		return nil, fmt.Errorf("file not found, %s", name)
@@ -344,28 +344,163 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 	return nil
 }
 
-// DeleteFile deletes a file or directory
-func (fs *FileServer) DeleteFile(fid *domain.FID) error {
+// DeleteFile deletes a file or directory with comprehensive error handling
+// Parameters:
+//   - fid: File identifier to delete
+//   - username: User attempting the deletion (for permission checking)
+//   - recursive: If true, allows deletion of non-empty directories
+//
+// Implementation notes:
+// - Uses two-phase approach: validate first, then delete
+// - Deletes from OS filesystem first, then updates in-memory structures
+// - For directories, uses post-order DFS traversal (children before parents)
+// - Maintains atomicity: if OS deletion fails, memory state unchanged
+func (fs *FileServer) DeleteFile(fid *domain.FID, username string, recursive bool) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
+	log.Printf("DeleteFile called: FID=%s, user=%s, recursive=%v", fid.String(), username, recursive)
+
+	// Phase 1: Validation
+	if fid == nil {
+		return fmt.Errorf("invalid FID: cannot be nil")
+	}
+
 	inode, err := fs.GetInode(fid)
 	if err != nil {
-		return fmt.Errorf("file not found, %s", fid.String())
+		return fmt.Errorf("file not found: %s", fid.String())
 	}
 
-	// For directories, ensure they're empty
+	log.Printf("DeleteFile: target inode: name=%s, type=%s, children=%d", 
+		inode.Name, inode.Type.String(), len(inode.Children))
+
+	// Prevent deletion of root directory
+	if rootFID, exists := fs.users[username]; exists && rootFID.String() == fid.String() {
+		return fmt.Errorf("cannot delete user root directory")
+	}
+
+	// Validate ownership/permissions for entire subtree
+	if err := fs.validateDeletePermissions(inode, username, recursive); err != nil {
+		return err
+	}
+
+	// Phase 2: Collect all inodes to delete (post-order traversal)
+	var toDelete []*domain.Inode
 	if inode.Type == domain.InodeTypeDirectory && len(inode.Children) > 0 {
-		return fmt.Errorf("directory not empty, %s", fid.String())
+		if err := fs.collectInodesToDelete(inode, &toDelete); err != nil {
+			return err
+		}
+	}
+	// Add the target inode itself (deleted last in post-order)
+	toDelete = append(toDelete, inode)
+
+	// Phase 3: Delete from OS filesystem (children first, then parent)
+	// If any deletion fails, we stop and return error before modifying memory
+	for _, inodeToDelete := range toDelete {
+		if err := os.RemoveAll(inodeToDelete.OSPath); err != nil {
+			return fmt.Errorf("failed to delete '%s' from filesystem: %w", inodeToDelete.Name, err)
+		}
 	}
 
-	// Delete from filesystem
-	if err := os.RemoveAll(inode.OSPath); err != nil {
-		return fmt.Errorf("failed to delete from filesystem: %w", err)
+	// Phase 4: Update in-memory structures (only after successful OS deletions)
+	// Remove all deleted inodes from the map
+	for _, deletedInode := range toDelete {
+		delete(fs.inodes, deletedInode.FID.String())
 	}
 
-	// Remove from storage
-	delete(fs.inodes, fid.String())
+	// Remove main inode from parent's children list
+	if err := fs.removeFromParent(inode); err != nil {
+		log.Printf("Warning: failed to remove from parent: %v", err)
+	}
 
+	log.Printf("Successfully deleted %s: %s (FID: %s) with %d total items",
+		inode.Type.String(), inode.Name, fid.String(), len(toDelete))
+	return nil
+}
+
+// validateDeletePermissions validates that user can delete the inode and all its children
+func (fs *FileServer) validateDeletePermissions(inode *domain.Inode, username string, recursive bool) error {
+	// Check ownership of the target
+	if inode.Owner != username {
+		return fmt.Errorf("permission denied: user '%s' does not own '%s'", username, inode.Name)
+	}
+
+	// For directories with children
+	if inode.Type == domain.InodeTypeDirectory && len(inode.Children) > 0 {
+		log.Printf("validateDeletePermissions: directory '%s' has %d children, recursive=%v", 
+			inode.Name, len(inode.Children), recursive)
+		
+		if !recursive {
+			return fmt.Errorf("directory '%s' not empty: use recursive deletion (-r flag)", inode.Name)
+		}
+
+		// Recursively validate permissions for all children
+		for _, childFID := range inode.Children {
+			childInode, exists := fs.inodes[childFID.String()]
+			if !exists {
+				log.Printf("Warning: child inode %s not found during validation", childFID.String())
+				continue
+			}
+
+			if err := fs.validateDeletePermissions(childInode, username, recursive); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// collectInodesToDelete performs post-order DFS to collect all inodes to delete
+// Post-order ensures children are deleted before parents
+// Note: Does NOT include the root inode passed in (caller adds it)
+func (fs *FileServer) collectInodesToDelete(parentInode *domain.Inode, result *[]*domain.Inode) error {
+	// Create a copy to avoid modification during traversal
+	childrenCopy := make([]*domain.FID, len(parentInode.Children))
+	copy(childrenCopy, parentInode.Children)
+
+	for _, childFID := range childrenCopy {
+		childInode, exists := fs.inodes[childFID.String()]
+		if !exists {
+			log.Printf("Warning: child inode %s not found, skipping", childFID.String())
+			continue
+		}
+
+		// Recursively collect children first (post-order)
+		if childInode.Type == domain.InodeTypeDirectory && len(childInode.Children) > 0 {
+			if err := fs.collectInodesToDelete(childInode, result); err != nil {
+				return err
+			}
+		}
+
+		// Add this child to deletion list
+		*result = append(*result, childInode)
+	}
+
+	return nil
+}
+
+// removeFromParent removes an inode from its parent's children list
+// Note: This function assumes the parent lock is already held
+func (fs *FileServer) removeFromParent(inode *domain.Inode) error {
+	if inode.Parent == nil {
+		return fmt.Errorf("inode has no parent")
+	}
+
+	// Don't remove root from itself
+	if inode.Parent.FID.String() == inode.FID.String() {
+		return nil
+	}
+
+	parent := inode.Parent
+	newChildren := make([]*domain.FID, 0, len(parent.Children)-1)
+
+	for _, childFID := range parent.Children {
+		if childFID.String() != inode.FID.String() {
+			newChildren = append(newChildren, childFID)
+		}
+	}
+
+	parent.Children = newChildren
 	return nil
 }
