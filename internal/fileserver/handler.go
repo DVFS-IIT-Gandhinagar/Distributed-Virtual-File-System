@@ -272,7 +272,7 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 
 // DownloadFile downloads the file by it's name in cwd
 func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileServer_DownloadFileServer) error {
-
+	log.Printf("DownloadFile: Name=%s", req.Name)
 	parentFID := domain.FIDFromProto(req.ParentFid)
 	parentInode, err := h.fileServer.GetInode(parentFID)
 	if err != nil {
@@ -281,6 +281,7 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 
 	inode, err := h.fileServer.GetChildInodeByName(parentInode, req.Name)
 	if err != nil {
+		log.Printf("DownloadFile: error getting child inode - %v", err)
 		return err
 	}
 

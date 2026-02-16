@@ -32,11 +32,11 @@ func NewClient(username string) *Client {
 }
 
 // Connect connects to a file server and gets user root and files/dir in the root
-func (c *Client) Connect(serverAddress string) error {
+func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	// Connect to server
 	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
 
 	c.serverConn = pb.NewFileServerClient(conn)
@@ -46,16 +46,16 @@ func (c *Client) Connect(serverAddress string) error {
 		Username: c.username,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to register: %w", err)
+		return nil, fmt.Errorf("failed to register: %w", err)
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("registration failed: %s", resp.Error)
+		return nil, fmt.Errorf("registration failed: %s", resp.Error)
 	}
 
 	c.rootFID = domain.FIDFromProto(resp.UserRootFid)
 	c.currentFID = c.rootFID
-	return nil
+	return c.currentFID, nil
 }
 
 // Returns current user path
@@ -76,22 +76,22 @@ func (c *Client) Path() (string, error) {
 }
 
 // CreateDirectory changes the current directory
-func (c *Client) ChangeDirectory(relative_path string) error {
+func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
 	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
 		Fid:     c.currentFID.ToProto(),
 		RootFid: c.rootFID.ToProto(),
 		Path:    relative_path,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to change directory: %w", err)
+		return domain.FID{}, fmt.Errorf("failed to change directory: %w", err)
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("server error: %s", resp.Error)
+		return domain.FID{}, fmt.Errorf("server error: %s", resp.Error)
 	}
 
 	c.currentFID = domain.FIDFromProto(resp.NewFid)
-	return nil
+	return *c.currentFID, nil
 }
 
 // ListFiles lists files in user's root directory
@@ -359,7 +359,7 @@ func (c *Client) Download(path string) error {
 
 func (c *Client) downloadRecursive(parentFID *domain.FID, entry *pb.DirEntry, localParentDir string) error {
 	if domain.InodeTypeFromProto(entry.Type) == domain.InodeTypeFile {
-		return c.downloadFileInternal(parentFID, entry.Name, localParentDir)
+		return c.downloadFileInternalAs(parentFID, entry.Name, localParentDir, entry.Name)
 	}
 
 	// It's a directory
@@ -390,8 +390,8 @@ func (c *Client) downloadRecursive(parentFID *domain.FID, entry *pb.DirEntry, lo
 	return nil
 }
 
-// downloadFileInternal downloads a single file from a specific parent directory
-func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localDir string) error {
+// downloadFileInternal downloads a single file with `name` from a specific parent directory to the localDir and saves it with the name `saveAs`
+func (c *Client) downloadFileInternalAs(parentFID *domain.FID, name, localDir, saveAs string) error {
 	req := &pb.DownloadFileRequest{
 		Name:      name,
 		User:      c.username,
@@ -403,7 +403,7 @@ func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localD
 		return err
 	}
 
-	osPath := filepath.Join(localDir, name)
+	osPath := filepath.Join(localDir, saveAs)
 	// ensure directory exists
 	if err := os.MkdirAll(localDir, 0755); err != nil {
 		return err
@@ -486,23 +486,23 @@ func (c *Client) ReadFile(name string) ([]byte, error) {
 	return resp.Data, nil
 }
 
-// WriteFile writes given data to a file
-func (c *Client) WriteFile(name string, data []byte) error {
-	resp, err := c.serverConn.WriteFile(context.Background(), &pb.WriteFileRequest{
-		ParentFid: c.currentFID.ToProto(),
-		Name:      name,
-		Data:      data,
-		User:      c.username,
-		Offset:    0,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
-	}
-	if !resp.Success {
-		return fmt.Errorf("server error: %s", resp.Error)
-	}
-	return nil
-}
+// // WriteFile writes given data to a file
+// func (c *Client) WriteFile(name string, data []byte) error {
+// 	resp, err := c.serverConn.WriteFile(context.Background(), &pb.WriteFileRequest{
+// 		ParentFid: c.currentFID.ToProto(),
+// 		Name:      name,
+// 		Data:      data,
+// 		User:      c.username,
+// 		Offset:    0,
+// 	})
+// 	if err != nil {
+// 		return fmt.Errorf("failed to write file: %w", err)
+// 	}
+// 	if !resp.Success {
+// 		return fmt.Errorf("server error: %s", resp.Error)
+// 	}
+// 	return nil
+// }
 
 // FileInfo represents file information
 type FileInfo struct {

@@ -21,13 +21,16 @@ func main() {
 	
 	fmt.Printf("Connecting to server at %s as user %s...\n", serverAddress, *username)
 	
-	if err := c.Connect(serverAddress); err != nil {
+	fid, err := c.Connect(serverAddress)
+	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+	} else {
+		fmt.Printf("Connected successfully! Root FID: %s\n\n", fid.String())
 	}
 	
 	fmt.Printf("Connected successfully!\n\n")
 	
-	cacheHandler := client.NewCacheHandler(c)   // initialise and populate cache handler with root directory and its contents from server
+	cacheHandler := client.NewCacheHandler(c, fid)   // initialise and populate cache handler with root directory and its contents from server
 	if cacheHandler == nil {
 		log.Fatalf("Failed to initialize cache handler")
 	}

@@ -156,21 +156,21 @@ func (h *CobraHandler) setupCommands() {
 		},
 	})
 
-	// write
-	h.rootCmd.AddCommand(&cobra.Command{
-		Use:   "write <filename> <data>",
-		Short: "Write data to a file in the current directory",
-		Args:  cobra.MinimumNArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			filename := args[0]
-			data := strings.Join(args[1:], " ")
-			err := h.cacheHandler.WriteFile(filename, []byte(data))
-			if err == nil {
-				fmt.Printf("Successfully wrote to file '%s'\n", filename)
-			}
-			return err
-		},
-	})
+	// // write
+	// h.rootCmd.AddCommand(&cobra.Command{
+	// 	Use:   "write <filename> <data>",
+	// 	Short: "Write data to a file in the current directory",
+	// 	Args:  cobra.MinimumNArgs(2),
+	// 	RunE: func(cmd *cobra.Command, args []string) error {
+	// 		filename := args[0]
+	// 		data := strings.Join(args[1:], " ")
+	// 		err := h.cacheHandler.WriteFile(filename, []byte(data))
+	// 		if err == nil {
+	// 			fmt.Printf("Successfully wrote to file '%s'\n", filename)
+	// 		}
+	// 		return err
+	// 	},
+	// })
 
 	// info
 	h.rootCmd.AddCommand(&cobra.Command{
@@ -205,7 +205,17 @@ func (h *CobraHandler) setupCommands() {
 		Short: "Exit the client",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Goodbye!")
+			h.cacheHandler.ClearCache()
 			os.Exit(0)
+		},
+	})
+
+	// visualize cache
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "viscache",
+		Short: "Visualize the current cache structure",
+		Run: func(cmd *cobra.Command, args []string) {
+			h.cacheHandler.VisualizeCache("")
 		},
 	})
 }
@@ -304,7 +314,7 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 	needsRemoteFile := map[string]bool{
 		"cd":       true,
 		"read":     true,
-		"write":    true,
+		// "write":    true,
 		"download": true,
 	}
 
