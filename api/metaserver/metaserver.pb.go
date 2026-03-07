@@ -125,6 +125,110 @@ func (x *RegisterFileServerResponse) GetError() string {
 	return ""
 }
 
+type NavigateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          string                 `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NavigateRequest) Reset() {
+	*x = NavigateRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NavigateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NavigateRequest) ProtoMessage() {}
+
+func (x *NavigateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NavigateRequest.ProtoReflect.Descriptor instead.
+func (*NavigateRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *NavigateRequest) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+type NavigateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	FileServer    string                 `protobuf:"bytes,3,opt,name=file_server,json=fileServer,proto3" json:"file_server,omitempty"` // address of the file server to connect to
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NavigateResponse) Reset() {
+	*x = NavigateResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NavigateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NavigateResponse) ProtoMessage() {}
+
+func (x *NavigateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NavigateResponse.ProtoReflect.Descriptor instead.
+func (*NavigateResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *NavigateResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *NavigateResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *NavigateResponse) GetFileServer() string {
+	if x != nil {
+		return x.FileServer
+	}
+	return ""
+}
+
 var File_api_metaserver_metaserver_proto protoreflect.FileDescriptor
 
 const file_api_metaserver_metaserver_proto_rawDesc = "" +
@@ -136,10 +240,18 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\x05users\x18\x02 \x03(\tR\x05users\"L\n" +
 	"\x1aRegisterFileServerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error2q\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"%\n" +
+	"\x0fNavigateRequest\x12\x12\n" +
+	"\x04user\x18\x02 \x01(\tR\x04user\"c\n" +
+	"\x10NavigateResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\vfile_server\x18\x03 \x01(\tR\n" +
+	"fileServer2\xb8\x01\n" +
 	"\n" +
 	"MetaServer\x12c\n" +
-	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"
+	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponse\x12E\n" +
+	"\bNavigate\x12\x1b.metaserver.NavigateRequest\x1a\x1c.metaserver.NavigateResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"
 
 var (
 	file_api_metaserver_metaserver_proto_rawDescOnce sync.Once
@@ -153,16 +265,20 @@ func file_api_metaserver_metaserver_proto_rawDescGZIP() []byte {
 	return file_api_metaserver_metaserver_proto_rawDescData
 }
 
-var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*RegisterFileServerRequest)(nil),  // 0: metaserver.RegisterFileServerRequest
 	(*RegisterFileServerResponse)(nil), // 1: metaserver.RegisterFileServerResponse
+	(*NavigateRequest)(nil),            // 2: metaserver.NavigateRequest
+	(*NavigateResponse)(nil),           // 3: metaserver.NavigateResponse
 }
 var file_api_metaserver_metaserver_proto_depIdxs = []int32{
 	0, // 0: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
-	1, // 1: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
+	1, // 2: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
+	3, // 3: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -179,7 +295,7 @@ func file_api_metaserver_metaserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_metaserver_metaserver_proto_rawDesc), len(file_api_metaserver_metaserver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
