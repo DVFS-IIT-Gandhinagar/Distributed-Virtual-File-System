@@ -4,6 +4,7 @@
 BINARY_DIR=bin
 FILESERVER_BINARY=$(BINARY_DIR)/fileserver
 CLIENT_BINARY=$(BINARY_DIR)/client
+METASERVER_BINARY=$(BINARY_DIR)/metaserver
 API_DIR=api
 GO=go
 PROTOC=protoc
@@ -16,6 +17,8 @@ build: certs $(BINARY_DIR)
 	@$(GO) build -o $(FILESERVER_BINARY) cmd/fileserver/main.go
 	@echo "Building client..."
 	@$(GO) build -o $(CLIENT_BINARY) cmd/client/main.go
+	@echo "Building meta server..."
+	@$(GO) build -o $(METASERVER_BINARY) cmd/metaserver/main.go
 	@echo "Build complete!"
 
 # Create binary directory
@@ -50,6 +53,14 @@ run-server: build
 
 exec-server:
 	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
+
+# Run meta server
+run-metaserver: build
+	@echo "Starting meta server..."
+	@./$(METASERVER_BINARY) -id=ms1 -port=50052 -data=./metaserver_data
+
+exec-metaserver:
+	@./$(METASERVER_BINARY) -id=ms1 -port=50052 -data=./metaserver_data
 
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice

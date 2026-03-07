@@ -94,3 +94,9 @@ type Inode struct {
 	Size     uint64 // for files
 	Parent	*Inode
 }
+
+// Represents a fileserver stores add and usercount
+type FileServerInfo struct {
+	Address   string
+	UserCount int
+}

@@ -76,6 +76,7 @@ func (x *RegisterFileServerRequest) GetUsers() []string {
 type RegisterFileServerResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,6 +118,13 @@ func (x *RegisterFileServerResponse) GetSuccess() bool {
 	return false
 }
 
+func (x *RegisterFileServerResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_api_metaserver_metaserver_proto protoreflect.FileDescriptor
 
 const file_api_metaserver_metaserver_proto_rawDesc = "" +
@@ -125,9 +133,10 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"metaserver\"K\n" +
 	"\x19RegisterFileServerRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x14\n" +
-	"\x05users\x18\x02 \x03(\tR\x05users\"6\n" +
+	"\x05users\x18\x02 \x03(\tR\x05users\"L\n" +
 	"\x1aRegisterFileServerResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2q\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error2q\n" +
 	"\n" +
 	"MetaServer\x12c\n" +
 	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"

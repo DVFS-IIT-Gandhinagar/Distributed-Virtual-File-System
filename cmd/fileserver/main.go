@@ -19,6 +19,10 @@ func main() {
 	serverID := flag.String("id", "fs1", "Server ID")
 	port := flag.Int("port", 50051, "Port to listen on")
 	rootDir := flag.String("data", "./fileserver_data", "Data directory")
+	// addr is this server's advertised host:port sent to the meta server.
+	addr := flag.String("addr", "", "Advertised address for meta server (e.g. 127.0.0.1:50051)")
+	// metaserver is the meta server's host:port; leave empty to skip registration.
+	msAddr := flag.String("metaserver", "", "Meta server address (e.g. 127.0.0.1:50052)")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -46,6 +50,17 @@ func main() {
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
+	}
+
+	// Register with meta server if address was provided.
+	selfAddr := *addr
+	if selfAddr == "" {
+		selfAddr = fmt.Sprintf("127.0.0.1:%d", *port)
+	}
+	if err := server.RegisterWithMetaServer(*msAddr, selfAddr); err != nil {
+		log.Printf("Warning: failed to register with meta server: %v", err)
+	} else if *msAddr != "" {
+		log.Printf("Registered with meta server at %s", *msAddr)
 	}
 
 	log.Printf("File server starting on %s", listenAddr)
