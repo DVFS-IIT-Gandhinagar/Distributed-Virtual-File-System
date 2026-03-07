@@ -31,6 +31,9 @@ proto:
 	@$(PROTOC) --go_out=. --go_opt=paths=source_relative \
 		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
 		$(API_DIR)/callback/callback.proto
+	@$(PROTOC) --go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		$(API_DIR)/metaserver/metaserver.proto
 	@echo "Protobuf generation complete!"
 
 # Clean build artifacts

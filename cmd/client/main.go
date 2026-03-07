@@ -12,9 +12,10 @@ func main() {
 	// Client configuration
 	username := flag.String("username", "romit", "enter username")
 	ip_addr := flag.String("ip_addr", "127.0.0.1", "enter ip_addr")
+	port := flag.String("port", "50051", "enter port")
 	flag.Parse()
 
-	serverAddress := *ip_addr + ":50051"
+	serverAddress := *ip_addr + ":" + *port
 
 	// Create and connect client
 	c := client.NewClient(*username)

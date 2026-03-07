@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package metaserver;
+
+option go_package = "github.com/umangshikarvar/dvfs/api/metaserver";
+
+message RegisterFileServerRequest {
+  string address = 1;
+  repeated string users = 2;
+}
+
+message RegisterFileServerResponse {
+  bool success = 1;
+}
+
+// MetaServer service
+service MetaServer {
+  rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
+}
