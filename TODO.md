@@ -9,10 +9,15 @@
 - [x] Dockerize - @jsmaskeen
 - [x] New CLI using Cobra - @jsmaskeen
 - [x] Upload/Download of folders - @jsmaskeen
-- [] Handle fid -> inode map in better way
+- [x] Implement MDS backbone - @Umang-Shikarvar
+- [ ] Implement crash recovery for MDS
+- [ ] Implement heartbeat
+- [ ] Implement storage quotas
+- [ ] Implement authentication of users
+- [ ] Handle fid -> inode map in better way
 - [x] Delete File function - @ShardulJunagade
-- [] Compression in Upload/Download
-- [] Client Side Caching - @Reckadon
+- [ ] Compression in Upload/Download
+- [ ] Client Side Caching - @Reckadon
 - [ ] Remove Read/Write and integrate with 'open'
 - [x] TLS handshake @jsmaskeen
 - [ ] test tradeoff between ping and callbacks
