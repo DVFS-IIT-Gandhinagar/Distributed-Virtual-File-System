@@ -71,10 +71,16 @@ func main() {
 	} else {
 		cert.DNSNames = append(cert.DNSNames, hostName)
 	}
-	
+
 	// Always include localhost and 'server' (for Docker) for convenience
 	cert.DNSNames = append(cert.DNSNames, "localhost", "server")
 	cert.IPAddresses = append(cert.IPAddresses, net.IPv4(127, 0, 0, 1))
+
+	// Auto-include the machine's outbound LAN IP so remote clients work without extra flags
+	if lanIP := getOutboundIP(); lanIP != "127.0.0.1" {
+		cert.IPAddresses = append(cert.IPAddresses, net.ParseIP(lanIP))
+		log.Printf("Including LAN IP in cert SANs: %s", lanIP)
+	}
 
 	certPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
@@ -100,6 +106,16 @@ func main() {
 	_ = os.WriteFile("internal/certs/ca.key", caPrivKeyPEM, 0644)
 	_ = os.WriteFile("internal/certs/server.crt", certPEM, 0644)
 	_ = os.WriteFile("internal/certs/server.key", certPrivKeyPEM, 0644)
-	
+
 	log.Printf("Certificates generated successfully for %s (including 'server' and 'localhost')\n", hostName)
+}
+
+// getOutboundIP returns the machine's preferred outbound IP.
+func getOutboundIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "127.0.0.1"
+	}
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }

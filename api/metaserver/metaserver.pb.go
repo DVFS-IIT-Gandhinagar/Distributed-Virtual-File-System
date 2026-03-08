@@ -173,7 +173,7 @@ type NavigateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	FileServer    string                 `protobuf:"bytes,3,opt,name=file_server,json=fileServer,proto3" json:"file_server,omitempty"` // address of the file server to connect to
+	Address       string                 `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"` // address of the file server to connect to
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -222,9 +222,9 @@ func (x *NavigateResponse) GetError() string {
 	return ""
 }
 
-func (x *NavigateResponse) GetFileServer() string {
+func (x *NavigateResponse) GetAddress() string {
 	if x != nil {
-		return x.FileServer
+		return x.Address
 	}
 	return ""
 }
@@ -242,12 +242,11 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"%\n" +
 	"\x0fNavigateRequest\x12\x12\n" +
-	"\x04user\x18\x02 \x01(\tR\x04user\"c\n" +
+	"\x04user\x18\x02 \x01(\tR\x04user\"\\\n" +
 	"\x10NavigateResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
-	"\vfile_server\x18\x03 \x01(\tR\n" +
-	"fileServer2\xb8\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x18\n" +
+	"\aaddress\x18\x03 \x01(\tR\aaddress2\xb8\x01\n" +
 	"\n" +
 	"MetaServer\x12c\n" +
 	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponse\x12E\n" +

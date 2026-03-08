@@ -21,7 +21,7 @@ message NavigateRequest {
 message NavigateResponse {
   bool success = 1;
   string error = 2;
-  string file_server = 3; // address of the file server to connect to
+  string address = 3; // address of the file server to connect to
 }
 
 // MetaServer service
