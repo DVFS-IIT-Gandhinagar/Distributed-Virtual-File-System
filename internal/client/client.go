@@ -94,7 +94,11 @@ func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
 	return *c.currentFID, nil
 }
 
-// ListFiles lists files in user's root directory
+func (c *Client) ChangeCurrentFID(fid *domain.FID) {
+	c.currentFID = fid
+}
+
+// ListFiles lists files in user's current directory
 func (c *Client) ListFiles() ([]*FileInfo, error) {
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
 		Fid:  c.currentFID.ToProto(),

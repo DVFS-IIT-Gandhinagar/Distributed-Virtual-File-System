@@ -15,18 +15,18 @@ func generateUniqueCacheID() string {
 
 // CNode represents a cached file or directory in the client, and are made to mirror the structure of the remote file system as it gets accessed. They are stored in a tree structure, with the root node representing the root directory of the remote file system. Each CNode has a name, type (file or directory), a map of children nodes (for directories), and a reference to its parent node. The client uses CNodes to cache metadata about files and directories, allowing for faster access and reduced network calls when navigating the file system or performing operations on files and directories.
 type CNode struct {
-	Name     string
-	Type     domain.InodeType // 0 for file, 1 for directory
-	fid	  	 *domain.FID       // FID of the file/directory represented by this node
-	children map[string]*CNode // child names -> child nodes (for directories)
-	contentCached bool // indicates if file content is cached (for files)
-	contentUID string // unique identifier for cached content (for files)
-	parent   *CNode
+	Name          string
+	Type          domain.InodeType  // 0 for file, 1 for directory
+	fid           *domain.FID       // FID of the file/directory represented by this node
+	children      map[string]*CNode // child names -> child nodes (for directories)
+	contentCached bool              // indicates if file content is cached (for files)
+	contentUID    string            // unique identifier for cached content (for files)
+	parent        *CNode
 }
 
 type CacheHandler struct {
-	root *CNode
-	curr *CNode
+	root   *CNode
+	curr   *CNode
 	client *Client
 }
 
@@ -60,14 +60,14 @@ func NewCacheHandler(c *Client, rootFID *domain.FID) *CacheHandler {
 	}
 
 	return &CacheHandler{
-		root: root,
-		curr: root,
+		root:   root,
+		curr:   root,
 		client: c,
 	}
 }
 
 func (c *CacheHandler) VisualizeCache(indent string) {
-	node := c.curr                          // will always be the current directory node
+	node := c.curr // will always be the current directory node
 	fmt.Println("Cache Structure:")
 	fmt.Printf("%s- %s (%s)\n", indent, node.Name, func() string {
 		if node.Type == domain.InodeTypeDirectory {
@@ -111,7 +111,7 @@ func (c *CacheHandler) ReadFile(s string) ([]byte, error) {
 		return data, nil
 	}
 	// cache miss, read file from server and update cache
-	fileNode.contentUID = generateUniqueCacheID() // generate a UUID for the cached file
+	fileNode.contentUID = generateUniqueCacheID()                                        // generate a UUID for the cached file
 	err := c.client.downloadFileInternalAs(c.curr.fid, s, CacheDir, fileNode.contentUID) // download file content to a local cache file
 	if err != nil {
 		return nil, err
@@ -127,7 +127,19 @@ func (c *CacheHandler) ReadFile(s string) ([]byte, error) {
 }
 
 func (c *CacheHandler) CreateDirectory(s string) (*FileInfo, error) {
-	panic("unimplemented")
+	info, err := c.client.CreateDirectory(s)
+	if err != nil {
+		return nil, err
+	}
+	// update cache to reflect new directory creation
+	c.curr.children[s] = &CNode{
+		Name:     s,
+		Type:     domain.InodeTypeDirectory,
+		fid:      info.FID,
+		children: make(map[string]*CNode),
+		parent:   c.curr,
+	}
+	return info, nil
 }
 
 func (c *CacheHandler) CreateFile(s string) (*FileInfo, error) {
@@ -137,48 +149,87 @@ func (c *CacheHandler) CreateFile(s string) (*FileInfo, error) {
 	}
 	// update cache to reflect new file creation
 	c.curr.children[s] = &CNode{
-		Name:     s,
-		Type:     domain.InodeTypeFile,
-		fid:      info.FID,
-		parent:   c.curr,
+		Name:   s,
+		Type:   domain.InodeTypeFile,
+		fid:    info.FID,
+		parent: c.curr,
 	}
 	return info, nil
 }
 
 func (c *CacheHandler) Download(s string) error {
-	panic("unimplemented")
+	return c.client.Download(s)
 }
 
 func (c *CacheHandler) Upload(s string) error {
-	panic("unimplemented")
+	return c.client.Upload(s)
 }
 
 func (c *CacheHandler) ChangeDirectory(s string) error {
-	if s == "/" {
-		c.curr = c.root
-		return nil
+	switch s {
+		case "/":
+			c.curr = c.root
+		case "..":
+			c.curr = c.curr.parent
+		default:
+			// check if directory exists in cache of current directory
+			dirNode, exists := c.curr.children[s]
+			if exists && dirNode.Type == domain.InodeTypeDirectory {
+				c.curr = dirNode
+				c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
+				c.populateCurrentDirCache() // populate cache of new current directory
+				return nil
+			} else {
+				// directory not found in cache
+				return fmt.Errorf("directory '%s' not found in current directory", s)
+			}
 	}
-
-	if s == ".." {
-		c.curr = c.curr.parent
-		return nil
-	}
-	
-	// check if directory exists in cache of current directory
-	dirNode, exists := c.curr.children[s]
-	if exists && dirNode.Type == domain.InodeTypeDirectory {
-		c.curr = dirNode
-	}
-	// TODO directory not found in cache, check with server and update cache if it exists
+	c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
 	return nil
 }
 
-func (c *CacheHandler) Path() (string, error) {
-	panic("unimplemented")
+func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
+	// read from cache of current directory
+	files := make([]*FileInfo, 0)
+	for _, child := range c.curr.children {
+		files = append(files, &FileInfo{
+			Name: child.Name,
+			Type: child.Type,
+			Size: 0, // size is not cached, so returning 0 for now
+			FID:  child.fid,
+		})
+	}
+	return files, nil
 }
 
-func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
-	panic("unimplemented")
+func (c *CacheHandler) Path() (string, error) {
+	// construct path by traversing up the cache tree from current node to root
+	path := ""
+	node := c.curr
+	for node != c.root {
+		path = "/" + node.Name + path
+		node = node.parent
+	}
+	return "/" + path, nil
+}
+
+// get files/dir in the current dir from server and populate the cache
+func (c *CacheHandler) populateCurrentDirCache() error {
+	files, err := c.client.ListFiles()
+	if err != nil {
+		log.Printf("Error fetching %s directory contents: %v", c.curr.Name, err)
+		return err
+	}
+	for _, file := range files {
+		c.curr.children[file.Name] = &CNode{
+			Name:     file.Name,
+			Type:     file.Type,
+			fid:      file.FID,
+			children: make(map[string]*CNode),
+			parent:   c.curr,
+		}
+	}
+	return nil
 }
 
 func (c *CacheHandler) ClearCache() {
