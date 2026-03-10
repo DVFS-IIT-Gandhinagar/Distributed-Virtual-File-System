@@ -101,24 +101,25 @@ func (c *CacheHandler) GetFileInfo() (*FileInfo, error) {
 // check for cache hit, if not then download file from server and update cache
 func (c *CacheHandler) ReadFile(s string) ([]byte, error) {
 	// check if file exists in cache of current directory
-	if node, exists := c.curr.children[s]; exists && node.Type == domain.InodeTypeFile && node.contentCached {
+	fileNode, exists := c.curr.children[s]
+	if exists && fileNode.Type == domain.InodeTypeFile && fileNode.contentCached {
 		// cache hit, read file from cached file
-		data, err := os.ReadFile(CacheDir + "/" + node.contentUID)
+		data, err := os.ReadFile(CacheDir + "/" + fileNode.contentUID)
 		if err != nil {
 			return nil, fmt.Errorf("error reading cached file: %v", err)
 		}
 		return data, nil
 	}
 	// cache miss, read file from server and update cache
-	c.curr.children[s].contentUID = generateUniqueCacheID() // generate a UUID for the cached file
-	err := c.client.downloadFileInternalAs(c.curr.fid, s, CacheDir, c.curr.children[s].contentUID) // download file content to a local cache file
+	fileNode.contentUID = generateUniqueCacheID() // generate a UUID for the cached file
+	err := c.client.downloadFileInternalAs(c.curr.fid, s, CacheDir, fileNode.contentUID) // download file content to a local cache file
 	if err != nil {
 		return nil, err
 	}
 	// update cache node to indicate content is cached and store unique identifier for cached content
-	c.curr.children[s].contentCached = true
+	fileNode.contentCached = true
 	// read file content from local cache file and return
-	data, err := os.ReadFile(CacheDir + "/" + c.curr.children[s].contentUID)
+	data, err := os.ReadFile(CacheDir + "/" + fileNode.contentUID)
 	if err != nil {
 		return nil, fmt.Errorf("error reading cached file: %v", err)
 	}
@@ -130,7 +131,18 @@ func (c *CacheHandler) CreateDirectory(s string) (*FileInfo, error) {
 }
 
 func (c *CacheHandler) CreateFile(s string) (*FileInfo, error) {
-	panic("unimplemented")
+	info, err := c.client.CreateFile(s)
+	if err != nil {
+		return nil, err
+	}
+	// update cache to reflect new file creation
+	c.curr.children[s] = &CNode{
+		Name:     s,
+		Type:     domain.InodeTypeFile,
+		fid:      info.FID,
+		parent:   c.curr,
+	}
+	return info, nil
 }
 
 func (c *CacheHandler) Download(s string) error {
@@ -142,7 +154,23 @@ func (c *CacheHandler) Upload(s string) error {
 }
 
 func (c *CacheHandler) ChangeDirectory(s string) error {
-	panic("unimplemented")
+	if s == "/" {
+		c.curr = c.root
+		return nil
+	}
+
+	if s == ".." {
+		c.curr = c.curr.parent
+		return nil
+	}
+	
+	// check if directory exists in cache of current directory
+	dirNode, exists := c.curr.children[s]
+	if exists && dirNode.Type == domain.InodeTypeDirectory {
+		c.curr = dirNode
+	}
+	// TODO directory not found in cache, check with server and update cache if it exists
+	return nil
 }
 
 func (c *CacheHandler) Path() (string, error) {
