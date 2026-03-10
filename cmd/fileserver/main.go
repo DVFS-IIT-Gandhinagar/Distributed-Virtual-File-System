@@ -21,12 +21,13 @@ func main() {
 	rootDir := flag.String("data", "./fileserver_data", "Data directory")
 	// metaserver is the meta server's host:port; leave empty to skip registration.
 	msAddr := flag.String("meta_addr", "", "Meta server address (e.g. 127.0.0.1:50052)")
+	useTLS := flag.Bool("tls", false, "Enable TLS (default: true)")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
 	// Create file server
-	server, err := fileserver.NewFileServer(*serverID, *rootDir)
+	server, err := fileserver.NewFileServer(*serverID, *rootDir, *useTLS)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
@@ -35,14 +36,19 @@ func main() {
 	handler := fileserver.NewGRPCHandler(server)
 
 	// TLS configuration
-	tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
-	if err != nil {
-		log.Fatalf("Failed to load key pair: %v", err)
+	var opts []grpc.ServerOption
+	if *useTLS {
+		log.Println("TLS enabled")
+		tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
+		if err != nil {
+			log.Fatalf("Failed to load key pair: %v", err)
+		}
+		creds := credentials.NewServerTLSFromCert(&tlsCert)
+		opts = append(opts, grpc.Creds(creds))
 	}
-	creds := credentials.NewServerTLSFromCert(&tlsCert)
 
 	// Start gRPC server
-	grpcServer := grpc.NewServer(grpc.Creds(creds))
+	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterFileServerServer(grpcServer, handler)
 
 	listener, err := net.Listen("tcp", listenAddr)

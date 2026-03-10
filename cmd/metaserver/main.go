@@ -17,6 +17,7 @@ import (
 func main() {
 	// Server configuration
 	port := flag.Int("port", 50051, "Port to listen on")
+	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -31,14 +32,19 @@ func main() {
 	handler := metaserver.NewGRPCHandler(server)
 
 	// TLS configuration
-	tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
-	if err != nil {
-		log.Fatalf("Failed to load key pair: %v", err)
+	var opts []grpc.ServerOption
+	if *useTLS {
+		log.Println("TLS enabled")
+		tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
+		if err != nil {
+			log.Fatalf("Failed to load key pair: %v", err)
+		}
+		creds := credentials.NewServerTLSFromCert(&tlsCert)
+		opts = append(opts, grpc.Creds(creds))
 	}
-	creds := credentials.NewServerTLSFromCert(&tlsCert)
 
 	// Start gRPC server
-	grpcServer := grpc.NewServer(grpc.Creds(creds))
+	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterMetaServerServer(grpcServer, handler)
 
 	listener, err := net.Listen("tcp", listenAddr)

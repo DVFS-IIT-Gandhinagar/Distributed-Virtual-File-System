@@ -14,10 +14,11 @@ func main() {
 	ip_addr := flag.String("ip_addr", "127.0.0.1", "enter ip_addr")
 	port := flag.String("port", "50051", "enter port")
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
+	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
 	flag.Parse()
 
 	// Create and connect client
-	c := client.NewClient(*username)
+	c := client.NewClient(*username, *useTLS)
 
 	serverAddress := fmt.Sprintf("%s:%s", *ip_addr, *port)
 

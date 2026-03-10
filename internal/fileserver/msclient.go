@@ -22,18 +22,24 @@ func (fs *FileServer) RegisterWithMetaServer(msAddr, selfAddr string) error {
 	}
 
 	// Build the same CA-backed TLS config the client uses when talking to FS.
-	cp := x509.NewCertPool()
-	if !cp.AppendCertsFromPEM(certs.CACert) {
-		return fmt.Errorf("failed to append CA certificate")
+	var opts []grpc.DialOption
+	if fs.useTLS {
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certs.CACert) {
+			return fmt.Errorf("failed to append CA certificate")
+		}
+
+		host, _, err := net.SplitHostPort(msAddr)
+		if err != nil {
+			host = msAddr
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
 	}
 
-	host, _, err := net.SplitHostPort(msAddr)
-	if err != nil {
-		host = msAddr
-	}
-	creds := credentials.NewClientTLSFromCert(cp, host)
-
-	conn, err := grpc.NewClient(msAddr, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(msAddr, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}

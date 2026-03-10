@@ -22,35 +22,43 @@ type Client struct {
 	rootFID    *domain.FID
 	currentFID *domain.FID
 	serverConn pb.FileServerClient
+	useTLS     bool
 }
 
 const chunkSize = 1024 * 1024 * 4 // 4MB
 const DownloadDir = "./Download"
 
 // NewClient creates a new VFS client
-func NewClient(username string) *Client {
+func NewClient(username string, useTLS bool) *Client {
 	return &Client{
 		username: username,
+		useTLS:   useTLS,
 	}
 }
 
 // Connect connects to a file server and gets user root
 func (c *Client) Connect(serverAddress string) error {
 	// TLS configuration
-	cp := x509.NewCertPool()
-	if !cp.AppendCertsFromPEM(certs.CACert) {
-		return fmt.Errorf("failed to append CA certificate")
-	}
+	var opts []grpc.DialOption
+	if c.useTLS {
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certs.CACert) {
+			return fmt.Errorf("failed to append CA certificate")
+		}
 
-	// Extract host for TLS verification
-	host, _, err := net.SplitHostPort(serverAddress)
-	if err != nil {
-		host = serverAddress // Fallback if no port specified
+		// Extract host for TLS verification
+		host, _, err := net.SplitHostPort(serverAddress)
+		if err != nil {
+			host = serverAddress // Fallback if no port specified
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
 	}
-	creds := credentials.NewClientTLSFromCert(cp, host)
 
 	// Connect to server
-	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(serverAddress, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}

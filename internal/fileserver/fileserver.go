@@ -20,16 +20,18 @@ type FileServer struct {
 	users       map[string]*domain.FID
 	nextInodeID uint64
 	mu          sync.RWMutex
+	useTLS      bool
 }
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
-func NewFileServer(serverID, rootDir string) (*FileServer, error) {
+func NewFileServer(serverID, rootDir string, useTLS bool) (*FileServer, error) {
 	fs := &FileServer{
 		serverID:    serverID,
 		rootDir:     rootDir,
 		inodes:      make(map[string]*domain.Inode),
 		users:       make(map[string]*domain.FID),
 		nextInodeID: 0,
+		useTLS:      useTLS,
 	}
 
 	// Check if rootDir already exists
@@ -371,7 +373,7 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, username string, recursive boo
 		return fmt.Errorf("file not found: %s", fid.String())
 	}
 
-	log.Printf("DeleteFile: target inode: name=%s, type=%s, children=%d", 
+	log.Printf("DeleteFile: target inode: name=%s, type=%s, children=%d",
 		inode.Name, inode.Type.String(), len(inode.Children))
 
 	// Prevent deletion of root directory
@@ -427,9 +429,9 @@ func (fs *FileServer) validateDeletePermissions(inode *domain.Inode, username st
 
 	// For directories with children
 	if inode.Type == domain.InodeTypeDirectory && len(inode.Children) > 0 {
-		log.Printf("validateDeletePermissions: directory '%s' has %d children, recursive=%v", 
+		log.Printf("validateDeletePermissions: directory '%s' has %d children, recursive=%v",
 			inode.Name, len(inode.Children), recursive)
-		
+
 		if !recursive {
 			return fmt.Errorf("directory '%s' not empty: use recursive deletion (-r flag)", inode.Name)
 		}
