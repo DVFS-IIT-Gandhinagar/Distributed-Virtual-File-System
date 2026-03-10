@@ -21,7 +21,7 @@ func main() {
 	rootDir := flag.String("data", "./fileserver_data", "Data directory")
 	// metaserver is the meta server's host:port; leave empty to skip registration.
 	msAddr := flag.String("meta_addr", "", "Meta server address (e.g. 127.0.0.1:50052)")
-	ownAddr := flag.String("own_addr", "", "Own address to advertise to meta server (e.g. 127.0.0.1:50051)")
+	ownIp := flag.String("own_ip", "", "Own IP to advertise to meta server (e.g. 127.0.0.1:50051)")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: true)")
 	flag.Parse()
 
@@ -58,7 +58,7 @@ func main() {
 	}
 
 	// Register with meta server if address was provided.
-	selfAddr := fmt.Sprintf("%s:%d", *ownAddr, *port)
+	selfAddr := fmt.Sprintf("%s:%d", *ownIp, *port)
 	if err := server.RegisterWithMetaServer(*msAddr, selfAddr); err != nil {
 		log.Printf("Warning: failed to register with meta server: %v", err)
 	} else if *msAddr != "" {
