@@ -10,8 +10,8 @@
 - [x] New CLI using Cobra - @jsmaskeen
 - [x] Upload/Download of folders - @jsmaskeen
 - [x] Implement MDS backbone - @Umang-Shikarvar
-- [ ] Implement crash recovery for MDS
-- [ ] Implement heartbeat
+- [ ] Implement crash recovery for MDS - @ShardulJunagade
+- [ ] Implement heartbeat - @ShardulJunagade
 - [ ] Implement storage quotas
 - [ ] Implement authentication of users
 - [ ] Handle fid -> inode map in better way
