@@ -109,7 +109,11 @@ func (c *CacheHandler) ReadFile(s string) ([]byte, error) {
 			return nil, fmt.Errorf("error reading cached file: %v", err)
 		}
 		return data, nil
+	} else if !exists || fileNode.Type != domain.InodeTypeFile {
+		// file not found in cache
+		return nil, fmt.Errorf("file '%s' not found in current directory", s)
 	}
+	
 	// cache miss, read file from server and update cache
 	fileNode.contentUID = generateUniqueCacheID()                                        // generate a UUID for the cached file
 	err := c.client.downloadFileInternalAs(c.curr.fid, s, CacheDir, fileNode.contentUID) // download file content to a local cache file
@@ -177,7 +181,7 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 			if exists && dirNode.Type == domain.InodeTypeDirectory {
 				c.curr = dirNode
 				c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
-				c.populateCurrentDirCache() // populate cache of new current directory
+				c.populateCurrentDirCache() // populate cache of new current directory - refreshes cache each time you cd into dir
 				return nil
 			} else {
 				// directory not found in cache
@@ -207,7 +211,7 @@ func (c *CacheHandler) Path() (string, error) {
 	path := ""
 	node := c.curr
 	for node != c.root {
-		path = "/" + node.Name + path
+		path = node.Name + "/" + path
 		node = node.parent
 	}
 	return "/" + path, nil
