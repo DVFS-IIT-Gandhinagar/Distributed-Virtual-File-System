@@ -182,7 +182,7 @@ func (h *CobraHandler) setupCommands() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			recursive, _ := cmd.Flags().GetBool("recursive")
 			fmt.Printf("[DEBUG] Deleting '%s' with recursive=%v\n", args[0], recursive)
-			err := h.client.DeleteFile(args[0], recursive)
+			err := h.cacheHandler.DeleteFile(args[0], recursive)
 			if err == nil {
 				if recursive {
 					fmt.Printf("Successfully deleted '%s' and all its contents\n", args[0])

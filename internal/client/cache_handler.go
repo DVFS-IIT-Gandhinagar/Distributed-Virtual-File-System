@@ -113,7 +113,7 @@ func (c *CacheHandler) ReadFile(s string) ([]byte, error) {
 		// file not found in cache
 		return nil, fmt.Errorf("file '%s' not found in current directory", s)
 	}
-	
+
 	// cache miss, read file from server and update cache
 	fileNode.contentUID = generateUniqueCacheID()                                        // generate a UUID for the cached file
 	err := c.client.downloadFileInternalAs(c.curr.fid, s, CacheDir, fileNode.contentUID) // download file content to a local cache file
@@ -171,22 +171,22 @@ func (c *CacheHandler) Upload(s string) error {
 
 func (c *CacheHandler) ChangeDirectory(s string) error {
 	switch s {
-		case "/":
-			c.curr = c.root
-		case "..":
-			c.curr = c.curr.parent
-		default:
-			// check if directory exists in cache of current directory
-			dirNode, exists := c.curr.children[s]
-			if exists && dirNode.Type == domain.InodeTypeDirectory {
-				c.curr = dirNode
-				c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
-				c.populateCurrentDirCache() // populate cache of new current directory - refreshes cache each time you cd into dir
-				return nil
-			} else {
-				// directory not found in cache
-				return fmt.Errorf("directory '%s' not found in current directory", s)
-			}
+	case "/":
+		c.curr = c.root
+	case "..":
+		c.curr = c.curr.parent
+	default:
+		// check if directory exists in cache of current directory
+		dirNode, exists := c.curr.children[s]
+		if exists && dirNode.Type == domain.InodeTypeDirectory {
+			c.curr = dirNode
+			c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
+			c.populateCurrentDirCache()           // populate cache of new current directory - refreshes cache each time you cd into dir
+			return nil
+		} else {
+			// directory not found in cache
+			return fmt.Errorf("directory '%s' not found in current directory", s)
+		}
 	}
 	c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
 	return nil
@@ -234,6 +234,35 @@ func (c *CacheHandler) populateCurrentDirCache() error {
 		}
 	}
 	return nil
+}
+
+// delete file/dir from server and update cache accordingly. If recursive is true, delete all contents of the directory as well
+func (c *CacheHandler) DeleteFile(s string, recursive bool) error {
+	err := c.client.DeleteFile(s, recursive) // delete file/dir from server
+	if err != nil {
+		return err
+	}
+	// update cache to reflect deletion, recursively delete all children nodes if it's a directory
+	if recursive && c.curr.children[s].Type == domain.InodeTypeDirectory {
+		recursiveDelete(c.curr.children[s])
+	}
+	delete(c.curr.children, s) // delete file/dir node from cache of current directory
+	return nil
+}
+
+func recursiveDelete(node *CNode) {
+	for _, child := range node.children {
+		delete(node.children, child.Name)
+		if child.Type == domain.InodeTypeFile && child.contentCached {
+			// if it's a file and content is cached, remove the cached file from local cache directory
+			err := os.Remove(CacheDir + "/" + child.contentUID)
+			if err != nil {
+				log.Printf("Error removing cached file %s: %v", child.contentUID, err)
+			}
+		} else if child.Type == domain.InodeTypeDirectory {
+			recursiveDelete(child)
+		}
+	}
 }
 
 func (c *CacheHandler) ClearCache() {
