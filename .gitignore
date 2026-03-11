@@ -10,6 +10,7 @@ dist/
 # Test binary and coverage
 *.test
 *.out
+.cache/
 
 # Dependency directories
 vendor/

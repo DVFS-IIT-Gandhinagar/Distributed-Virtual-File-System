@@ -36,14 +36,14 @@ func NewClient(username string, useTLS bool) *Client {
 	}
 }
 
-// Connect connects to a file server and gets user root
-func (c *Client) Connect(serverAddress string) error {
+// Connect connects to a file server and gets user root and files/dir in the root
+func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	// TLS configuration
 	var opts []grpc.DialOption
 	if c.useTLS {
 		cp := x509.NewCertPool()
 		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return fmt.Errorf("failed to append CA certificate")
+			return nil, fmt.Errorf("failed to append CA certificate")
 		}
 
 		// Extract host for TLS verification
@@ -60,7 +60,7 @@ func (c *Client) Connect(serverAddress string) error {
 	// Connect to server
 	conn, err := grpc.NewClient(serverAddress, opts...)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
 
 	c.serverConn = pb.NewFileServerClient(conn)
@@ -70,16 +70,16 @@ func (c *Client) Connect(serverAddress string) error {
 		Username: c.username,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to register: %w", err)
+		return nil, fmt.Errorf("failed to register: %w", err)
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("registration failed: %s", resp.Error)
+		return nil, fmt.Errorf("registration failed: %s", resp.Error)
 	}
 
 	c.rootFID = domain.FIDFromProto(resp.UserRootFid)
 	c.currentFID = c.rootFID
-	return nil
+	return c.currentFID, nil
 }
 
 // Returns current user path
@@ -100,25 +100,29 @@ func (c *Client) Path() (string, error) {
 }
 
 // CreateDirectory changes the current directory
-func (c *Client) ChangeDirectory(relative_path string) error {
+func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
 	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
 		Fid:     c.currentFID.ToProto(),
 		RootFid: c.rootFID.ToProto(),
 		Path:    relative_path,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to change directory: %w", err)
+		return domain.FID{}, fmt.Errorf("failed to change directory: %w", err)
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("server error: %s", resp.Error)
+		return domain.FID{}, fmt.Errorf("server error: %s", resp.Error)
 	}
 
 	c.currentFID = domain.FIDFromProto(resp.NewFid)
-	return nil
+	return *c.currentFID, nil
 }
 
-// ListFiles lists files in user's root directory
+func (c *Client) ChangeCurrentFID(fid *domain.FID) {
+	c.currentFID = fid
+}
+
+// ListFiles lists files in user's current directory
 func (c *Client) ListFiles() ([]*FileInfo, error) {
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
 		Fid:  c.currentFID.ToProto(),
@@ -383,7 +387,7 @@ func (c *Client) Download(path string) error {
 
 func (c *Client) downloadRecursive(parentFID *domain.FID, entry *pb.DirEntry, localParentDir string) error {
 	if domain.InodeTypeFromProto(entry.Type) == domain.InodeTypeFile {
-		return c.downloadFileInternal(parentFID, entry.Name, localParentDir)
+		return c.downloadFileInternalAs(parentFID, entry.Name, localParentDir, entry.Name)
 	}
 
 	// It's a directory
@@ -414,8 +418,8 @@ func (c *Client) downloadRecursive(parentFID *domain.FID, entry *pb.DirEntry, lo
 	return nil
 }
 
-// downloadFileInternal downloads a single file from a specific parent directory
-func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localDir string) error {
+// downloadFileInternal downloads a single file with `name` from a specific parent directory to the localDir and saves it with the name `saveAs`
+func (c *Client) downloadFileInternalAs(parentFID *domain.FID, name, localDir, saveAs string) error {
 	req := &pb.DownloadFileRequest{
 		Name:      name,
 		User:      c.username,
@@ -427,7 +431,7 @@ func (c *Client) downloadFileInternal(parentFID *domain.FID, name string, localD
 		return err
 	}
 
-	osPath := filepath.Join(localDir, name)
+	osPath := filepath.Join(localDir, saveAs)
 	// ensure directory exists
 	if err := os.MkdirAll(localDir, 0755); err != nil {
 		return err
@@ -525,45 +529,6 @@ func (c *Client) WriteFile(name string, data []byte) error {
 	if !resp.Success {
 		return fmt.Errorf("server error: %s", resp.Error)
 	}
-	return nil
-}
-
-// DeleteFile deletes a file or directory by name in the current directory
-// If recursive is true, non-empty directories will be deleted with all contents
-func (c *Client) DeleteFile(name string, recursive bool) error {
-	// First, we need to get the FID of the file to delete
-	// We'll list the directory and find the matching file
-	files, err := c.ListFiles()
-	if err != nil {
-		return fmt.Errorf("failed to list directory: %w", err)
-	}
-
-	var targetFID *domain.FID
-	for _, file := range files {
-		if file.Name == name {
-			targetFID = file.FID
-			break
-		}
-	}
-
-	if targetFID == nil {
-		return fmt.Errorf("file or directory '%s' not found", name)
-	}
-
-	// Call delete on the server
-	resp, err := c.serverConn.DeleteFile(context.Background(), &pb.DeleteFileRequest{
-		Fid:       targetFID.ToProto(),
-		User:      c.username,
-		Recursive: recursive,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to delete file: %w", err)
-	}
-
-	if !resp.Success {
-		return fmt.Errorf("server error: %s", resp.Error)
-	}
-
 	return nil
 }
 
