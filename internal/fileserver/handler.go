@@ -178,6 +178,7 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 			Fid:  child.FID.ToProto(),
 			Name: child.Name,
 			Type: child.Type.ToProto(),
+			Size: child.Size,
 		}
 	}
 

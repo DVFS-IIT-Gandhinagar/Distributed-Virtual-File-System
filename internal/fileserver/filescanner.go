@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
 
@@ -36,6 +37,21 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 			atomic.AddUint64(nextInodeID, 1)
 			(*users)[username] = userRootFID
 			
+			// calculate size of the user root 
+			size := uint64(0)
+			err := filepath.Walk(userDir, func(_ string, info os.FileInfo, err error) error {
+				if err != nil {
+					return fmt.Errorf("failed to walk user directory: %w", err)
+				}
+				if !info.IsDir() {
+					size += uint64(info.Size())
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("failed to calculate size of user directory: %w", err)
+			}
+
 			// Create root inode
 			userRootInode := &domain.Inode{
 				FID:      userRootFID,
@@ -44,6 +60,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 				OSPath:   userDir,
 				Owner:    username,
 				Children: make([]*domain.FID, 0),
+				Size: size,
 			}
 
 			(*inodes)[userRootFID.String()] = userRootInode
@@ -58,7 +75,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 	return nil
 }
 
-// scanUserDirectory scans a user's directory and creates inodes for first-level files and directories
+// scanUserDirectory scans a user's directory and creates inodes for all files and directories using BFS
 func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domain.Inode, nextInodeID *uint64, inodes *map[string]*domain.Inode) error {
 
 	type bfsItem struct {

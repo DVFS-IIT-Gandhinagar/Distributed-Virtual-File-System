@@ -142,7 +142,7 @@ func (c *Client) ListFiles() ([]*FileInfo, error) {
 			FID:  domain.FIDFromProto(child.Fid),
 			Name: child.Name,
 			Type: domain.InodeTypeFromProto(child.Type),
-			Size: 0, // Size not available in DirEntry, would need separate GetAttr call
+			Size: child.Size,
 		}
 	}
 

@@ -18,6 +18,7 @@ type CNode struct {
 	Name          string
 	Type          domain.InodeType  // 0 for file, 1 for directory
 	fid           *domain.FID       // FID of the file/directory represented by this node
+	Size		  uint64             // size of the file (for files)
 	children      map[string]*CNode // child names -> child nodes (for directories)
 	contentCached bool              // indicates if file content is cached (for files)
 	contentUID    string            // unique identifier for cached content (for files)
@@ -54,6 +55,7 @@ func NewCacheHandler(c *Client, rootFID *domain.FID) *CacheHandler {
 			Name:     file.Name,
 			Type:     file.Type,
 			fid:      file.FID,
+			Size:     file.Size,
 			children: make(map[string]*CNode),
 			parent:   root,
 		}
@@ -140,6 +142,7 @@ func (c *CacheHandler) CreateDirectory(s string) (*FileInfo, error) {
 		Name:     s,
 		Type:     domain.InodeTypeDirectory,
 		fid:      info.FID,
+		Size:     info.Size,
 		children: make(map[string]*CNode),
 		parent:   c.curr,
 	}
@@ -156,6 +159,7 @@ func (c *CacheHandler) CreateFile(s string) (*FileInfo, error) {
 		Name:   s,
 		Type:   domain.InodeTypeFile,
 		fid:    info.FID,
+		Size:   info.Size,
 		parent: c.curr,
 	}
 	return info, nil
@@ -199,7 +203,7 @@ func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
 		files = append(files, &FileInfo{
 			Name: child.Name,
 			Type: child.Type,
-			Size: 0, // size is not cached, so returning 0 for now
+			Size: child.Size,
 			FID:  child.fid,
 		})
 	}
@@ -229,6 +233,7 @@ func (c *CacheHandler) populateCurrentDirCache() error {
 			Name:     file.Name,
 			Type:     file.Type,
 			fid:      file.FID,
+			Size:     file.Size,
 			children: make(map[string]*CNode),
 			parent:   c.curr,
 		}

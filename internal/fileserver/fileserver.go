@@ -267,6 +267,7 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, f
 		OSPath: osPath,
 		Owner:  username,
 		Parent: parent,
+		Size: 0,
 	}
 
 	if fileType == domain.InodeTypeDirectory {
