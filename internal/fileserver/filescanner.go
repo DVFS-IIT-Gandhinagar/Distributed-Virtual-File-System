@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -22,56 +23,56 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 		return fmt.Errorf("failed to read root directory: %w", err)
 	}
 
-	// user volumes are at first level
+	var userWaitGroup sync.WaitGroup
+
+	// user volumes are at first level, process each user directory in parallel using goroutines
 	for _, entry := range entries {
 		if entry.IsDir() {
-			username := entry.Name()
-			userDir := filepath.Join(scanner.rootDir, username)
-
-			// Create root inode for this user (always inode ID 0)
-			userRootFID := &domain.FID{
-				FileServerID:     scanner.serverID,
-				InodeID:          *nextInodeID,
-				GenerationNumber: 1,
-			}
-			atomic.AddUint64(nextInodeID, 1)
-			(*users)[username] = userRootFID
+			userWaitGroup.Add(1)
 			
-			// calculate size of the user root 
-			size := uint64(0)
-			err := filepath.Walk(userDir, func(_ string, info os.FileInfo, err error) error {
+			go func() error {
+				defer userWaitGroup.Done()
+
+				username := entry.Name()
+				userDir := filepath.Join(scanner.rootDir, username)
+
+				// Create root inode for this user (always inode ID 0)
+				userRootFID := &domain.FID{
+					FileServerID:     scanner.serverID,
+					InodeID:          *nextInodeID,
+					GenerationNumber: 1,
+				}
+				atomic.AddUint64(nextInodeID, 1)
+				(*users)[username] = userRootFID
+
+				// Create root inode
+				userRootInode := &domain.Inode{
+					FID:      userRootFID,
+					Type:     domain.InodeTypeDirectory,
+					Name:     username,
+					OSPath:   userDir,
+					Owner:    username,
+					Children: make([]*domain.FID, 0),
+				}
+
+				(*inodes)[userRootFID.String()] = userRootInode
+
+				// Scan user's files and directories (first level only)
+				if err := scanner.scanUserDirectory(userDir, userRootInode, nextInodeID, inodes); err != nil {
+					return fmt.Errorf("failed to scan user directory %s: %w", username, err)
+				}
+				userDirSize, err := scanner.calculateDirectorySizes(userRootInode, inodes) // calculate and store sizes of all directories under this user
 				if err != nil {
-					return fmt.Errorf("failed to walk user directory: %w", err)
+					return fmt.Errorf("failed to calculate directory sizes for user %s: %w", username, err)
 				}
-				if !info.IsDir() {
-					size += uint64(info.Size())
-				}
+				
+				fmt.Printf("Scanned user directory: %s, total size: %d bytes\n", username, userDirSize)
 				return nil
-			})
-			if err != nil {
-				return fmt.Errorf("failed to calculate size of user directory: %w", err)
-			}
-
-			// Create root inode
-			userRootInode := &domain.Inode{
-				FID:      userRootFID,
-				Type:     domain.InodeTypeDirectory,
-				Name:     username,
-				OSPath:   userDir,
-				Owner:    username,
-				Children: make([]*domain.FID, 0),
-				Size: size,
-			}
-
-			(*inodes)[userRootFID.String()] = userRootInode
-
-			// Scan user's files and directories (first level only)
-			if err := scanner.scanUserDirectory(userDir, userRootInode, nextInodeID, inodes); err != nil {
-				return fmt.Errorf("failed to scan user directory %s: %w", username, err)
-			}
+			}()
 		}
 	}
-
+	userWaitGroup.Wait() // wait for all user scanning goroutines to finish before returning
+	
 	return nil
 }
 
@@ -148,4 +149,32 @@ func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domai
 	}
 
 	return nil
+}
+
+// calculate total size of user directories by summing sizes of all files and directories under it
+func (scanner *FileScanner) calculateDirectorySizes(rootInode *domain.Inode, inodes *map[string]*domain.Inode) (uint64, error) {
+	var	calculateSize func(inode *domain.Inode) (uint64, error)  // recursive function to calculate size of a directory by summing sizes of its children
+
+	calculateSize = func(inode *domain.Inode) (uint64, error) {
+		if inode.Type == domain.InodeTypeFile {
+			return inode.Size, nil
+		}
+		var totalSize uint64 = 0
+		for _, childFID := range inode.Children {
+			childInode, exists := (*inodes)[childFID.String()]
+			if !exists {
+				return 0, fmt.Errorf("child inode not found for FID: %s", childFID.String())
+			}
+			childSize, err := calculateSize(childInode)
+			if err != nil {
+				return 0, err
+			}
+			totalSize += childSize
+		}
+		inode.Size = totalSize // update size of this directory inode
+		return totalSize, nil
+	}
+
+	totalUserDirSize, err := calculateSize(rootInode)
+	return totalUserDirSize, err
 }
