@@ -65,7 +65,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 				if err != nil {
 					return fmt.Errorf("failed to calculate directory sizes for user %s: %w", username, err)
 				}
-				
+
 				fmt.Printf("Scanned user directory: %s, total size: %d bytes\n", username, userDirSize)
 				return nil
 			}()
@@ -151,7 +151,7 @@ func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domai
 	return nil
 }
 
-// calculate total size of user directories by summing sizes of all files and directories under it
+// calculate total size of each user directory inside rootInode by summing sizes of all files and directories under it
 func (scanner *FileScanner) calculateDirectorySizes(rootInode *domain.Inode, inodes *map[string]*domain.Inode) (uint64, error) {
 	var	calculateSize func(inode *domain.Inode) (uint64, error)  // recursive function to calculate size of a directory by summing sizes of its children
 
