@@ -17,7 +17,7 @@ import (
 func main() {
 	// Server configuration
 	serverID := flag.String("id", "fs1", "Server ID")
-	port := flag.Int("port", 50051, "Port to listen on")
+	port := flag.Int("port", 50052, "Port to listen on")
 	rootDir := flag.String("data", "./fileserver_data", "Data directory")
 	// metaserver is the meta server's host:port; leave empty to skip registration.
 	msAddr := flag.String("meta_addr", "", "Meta server address (e.g. 127.0.0.1:50052)")
