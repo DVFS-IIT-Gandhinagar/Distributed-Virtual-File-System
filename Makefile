@@ -57,10 +57,10 @@ exec-server:
 # Run meta server
 run-metaserver: build
 	@echo "Starting meta server..."
-	@./$(METASERVER_BINARY) -id=ms1 -port=50052 -data=./metaserver_data
+	@./$(METASERVER_BINARY) -port=50052
 
 exec-metaserver:
-	@./$(METASERVER_BINARY) -id=ms1 -port=50052 -data=./metaserver_data
+	@./$(METASERVER_BINARY) -port=50052
 
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice

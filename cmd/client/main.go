@@ -24,7 +24,11 @@ func main() {
 
 	// If metaserver flag is set, navigate to the appropriate file server based on the username
 	if *metaserver {
-		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port, *username)
+		addr := *metaAddr
+		if addr == "" {
+			addr = fmt.Sprintf("%s:%s", *ip_addr, "50052")
+		}
+		fileserver, err := c.NavigateToFileServer(addr, *username)
 		if err != nil {
 			log.Fatalf("Failed to navigate to file server: %v", err)
 		}

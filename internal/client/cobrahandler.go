@@ -196,6 +196,48 @@ func (h *CobraHandler) setupCommands() {
 	rmCmd.Flags().BoolP("recursive", "r", false, "Delete directories recursively")
 	h.rootCmd.AddCommand(rmCmd)
 
+	// trash (soft delete)
+	trashCmd := &cobra.Command{
+		Use:   "trash <name>",
+		Short: "Move a file or directory to trash",
+		Long:  "Soft delete: moves a file or directory into the user's .trash directory. Use -r for non-empty directories.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			recursive, _ := cmd.Flags().GetBool("recursive")
+			trashedName, err := h.cacheHandler.TrashFile(args[0], recursive)
+			if err == nil {
+				if trashedName != args[0] {
+					fmt.Printf("Moved '%s' to trash as '%s'\n", args[0], trashedName)
+				} else {
+					fmt.Printf("Moved '%s' to trash\n", args[0])
+				}
+			}
+			return err
+		},
+	}
+	trashCmd.Flags().BoolP("recursive", "r", false, "Trash directories recursively")
+	h.rootCmd.AddCommand(trashCmd)
+
+	// restore
+	restoreCmd := &cobra.Command{
+		Use:   "restore <name>",
+		Short: "Restore a file or directory from trash",
+		Long:  "Restores an item from .trash back to its original location (best-effort; requires server-side metadata).",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			restoredName, err := h.cacheHandler.RestoreFile(args[0])
+			if err == nil {
+				if restoredName != args[0] {
+					fmt.Printf("Restored '%s' as '%s'\n", args[0], restoredName)
+				} else {
+					fmt.Printf("Restored '%s'\n", args[0])
+				}
+			}
+			return err
+		},
+	}
+	h.rootCmd.AddCommand(restoreCmd)
+
 	// info
 	h.rootCmd.AddCommand(&cobra.Command{
 		Use:   "info",
@@ -342,6 +384,8 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 		"download": true,
 		"rm":       true,
 		"delete":   true,
+		"trash":    true,
+		"restore":  true,
 	}
 
 	if needsRemoteFile[commandName] {

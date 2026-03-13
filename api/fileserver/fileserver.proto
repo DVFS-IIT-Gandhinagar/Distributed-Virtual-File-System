@@ -101,6 +101,31 @@ message DeleteFileResponse {
   string error = 2;
 }
 
+// Move a file/directory to the user's trash (soft delete)
+message TrashFileRequest {
+  FID fid = 1;
+  string user = 2;
+  bool recursive = 3; // if true, allows trashing non-empty directories
+}
+
+message TrashFileResponse {
+  bool success = 1;
+  string error = 2;
+  string trashed_name = 3; // final name inside trash (may differ on collision)
+}
+
+// Restore a file/directory from trash back to its original location
+message RestoreFileRequest {
+  FID fid = 1;
+  string user = 2;
+}
+
+message RestoreFileResponse {
+  bool success = 1;
+  string error = 2;
+  string restored_name = 3; // final restored name (may differ on collision)
+}
+
 message GetAttrRequest {
   FID fid = 1;
   string user = 2;
@@ -215,6 +240,8 @@ service FileServer {
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   rpc CloseFile(CloseFileRequest) returns (CloseFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc TrashFile(TrashFileRequest) returns (TrashFileResponse);
+  rpc RestoreFile(RestoreFileRequest) returns (RestoreFileResponse);
   rpc GetAttr(GetAttrRequest) returns (GetAttrResponse);
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
