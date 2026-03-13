@@ -124,8 +124,17 @@ func (c *Client) ChangeCurrentFID(fid *domain.FID) {
 
 // ListFiles lists files in user's current directory
 func (c *Client) ListFiles() ([]*FileInfo, error) {
+	return c.ListFilesAt(c.currentFID)
+}
+
+// ListFilesAt lists files/directories for the provided directory FID.
+// It does not change the client's current directory.
+func (c *Client) ListFilesAt(dirFID *domain.FID) ([]*FileInfo, error) {
+	if dirFID == nil {
+		return nil, fmt.Errorf("invalid directory fid")
+	}
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
-		Fid:  c.currentFID.ToProto(),
+		Fid:  dirFID.ToProto(),
 		User: c.username,
 	})
 	if err != nil {
@@ -551,6 +560,91 @@ func (c *Client) DeleteFile(name string, recursive bool) error {
 	}
 
 	return nil
+}
+
+// TrashFile moves a file or directory (by name in current directory) to the user's trash.
+// If recursive is true, non-empty directories can be trashed.
+func (c *Client) TrashFile(name string, recursive bool) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("name is required")
+	}
+
+	files, err := c.ListFiles()
+	if err != nil {
+		return "", fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	var targetFID *domain.FID
+	for _, file := range files {
+		if file.Name == name {
+			targetFID = file.FID
+			break
+		}
+	}
+	if targetFID == nil {
+		return "", fmt.Errorf("file or directory '%s' not found", name)
+	}
+
+	resp, err := c.serverConn.TrashFile(context.Background(), &pb.TrashFileRequest{
+		Fid:       targetFID.ToProto(),
+		User:      c.username,
+		Recursive: recursive,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to trash: %w", err)
+	}
+	if !resp.Success {
+		return "", fmt.Errorf("server error: %s", resp.Error)
+	}
+	return resp.TrashedName, nil
+}
+
+// RestoreFile restores a trashed file/directory (by name in .trash) back to its original location.
+func (c *Client) RestoreFile(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("name is required")
+	}
+
+	cdResp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
+		Fid:     c.rootFID.ToProto(),
+		RootFid: c.rootFID.ToProto(),
+		Path:    ".trash",
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve trash directory: %w", err)
+	}
+	if !cdResp.Success {
+		return "", fmt.Errorf("failed to resolve trash directory: %s", cdResp.Error)
+	}
+	trashFID := domain.FIDFromProto(cdResp.NewFid)
+
+	entries, err := c.ListFilesAt(trashFID)
+	if err != nil {
+		return "", fmt.Errorf("failed to list trash directory: %w", err)
+	}
+
+	var targetFID *domain.FID
+	for _, entry := range entries {
+		if entry.Name == name {
+			targetFID = entry.FID
+			break
+		}
+	}
+	if targetFID == nil {
+		return "", fmt.Errorf("'%s' not found in trash", name)
+	}
+
+	resp, err := c.serverConn.RestoreFile(context.Background(), &pb.RestoreFileRequest{
+		Fid:  targetFID.ToProto(),
+		User: c.username,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to restore: %w", err)
+	}
+	if !resp.Success {
+		return "", fmt.Errorf("server error: %s", resp.Error)
+	}
+	return resp.RestoredName, nil
 }
 
 // WriteFile writes given data to a file

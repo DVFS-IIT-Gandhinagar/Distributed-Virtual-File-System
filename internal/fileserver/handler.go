@@ -431,3 +431,45 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 		Success: true,
 	}, nil
 }
+
+// TrashFile moves a file or directory into the user's trash (soft delete)
+func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (*pb.TrashFileResponse, error) {
+	log.Printf("TrashFile: FID=%v, user=%s", req.Fid, req.User)
+
+	if req.Fid == nil {
+		return &pb.TrashFileResponse{Success: false, Error: "FID is required"}, nil
+	}
+	if req.User == "" {
+		return &pb.TrashFileResponse{Success: false, Error: "user is required"}, nil
+	}
+
+	fid := domain.FIDFromProto(req.Fid)
+	trashedName, err := h.fileServer.TrashFile(fid, req.User, req.Recursive)
+	if err != nil {
+		log.Printf("TrashFile: error - %v", err)
+		return &pb.TrashFileResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	return &pb.TrashFileResponse{Success: true, TrashedName: trashedName}, nil
+}
+
+// RestoreFile restores a file or directory from trash back to its original location
+func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileRequest) (*pb.RestoreFileResponse, error) {
+	log.Printf("RestoreFile: FID=%v, user=%s", req.Fid, req.User)
+
+	if req.Fid == nil {
+		return &pb.RestoreFileResponse{Success: false, Error: "FID is required"}, nil
+	}
+	if req.User == "" {
+		return &pb.RestoreFileResponse{Success: false, Error: "user is required"}, nil
+	}
+
+	fid := domain.FIDFromProto(req.Fid)
+	restoredName, err := h.fileServer.RestoreFile(fid, req.User)
+	if err != nil {
+		log.Printf("RestoreFile: error - %v", err)
+		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	return &pb.RestoreFileResponse{Success: true, RestoredName: restoredName}, nil
+}
