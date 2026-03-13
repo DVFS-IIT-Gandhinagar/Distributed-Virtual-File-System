@@ -11,6 +11,7 @@
 - [x] Upload/Download of folders - @jsmaskeen
 - [x] Implement MDS backbone - @Umang-Shikarvar
 - [x] Delete File function - @ShardulJunagade
+- [x] Implement trash and restore for recycle bin - @ShardulJunagade
 - [x] Client Side Caching - @Reckadon
 - [x] TLS handshake @jsmaskeen
 - [ ] Implement crash recovery for MDS - @ShardulJunagade
