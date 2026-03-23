@@ -177,23 +177,25 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 	switch s {
 	case "/":
 		c.curr = c.root
+		c.client.ChangeCurrentFID(c.curr.fid)
+		return c.populateCurrentDirCache()
 	case "..":
 		c.curr = c.curr.parent
+		c.client.ChangeCurrentFID(c.curr.fid)
+		return c.populateCurrentDirCache()
 	default:
 		// check if directory exists in cache of current directory
 		dirNode, exists := c.curr.children[s]
 		if exists && dirNode.Type == domain.InodeTypeDirectory {
 			c.curr = dirNode
 			c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
-			c.populateCurrentDirCache()           // populate cache of new current directory - refreshes cache each time you cd into dir
+			_ = c.populateCurrentDirCache()       // refresh cache each time you cd into dir
 			return nil
 		} else {
 			// directory not found in cache
 			return fmt.Errorf("directory '%s' not found in current directory", s)
 		}
 	}
-	c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
-	return nil
 }
 
 func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
@@ -223,13 +225,31 @@ func (c *CacheHandler) Path() (string, error) {
 
 // get files/dir in the current dir from server and populate the cache
 func (c *CacheHandler) populateCurrentDirCache() error {
-	files, err := c.client.ListFiles()
+	files, err := c.client.ListFilesAt(c.curr.fid)
 	if err != nil {
 		log.Printf("Error fetching %s directory contents: %v", c.curr.Name, err)
 		return err
 	}
+
+	// Replace children map from authoritative server listing.
+	// Preserve already-known subtrees when the name matches.
+	oldChildren := c.curr.children
+	newChildren := make(map[string]*CNode, len(files))
 	for _, file := range files {
-		c.curr.children[file.Name] = &CNode{
+		if existing, ok := oldChildren[file.Name]; ok {
+			existing.Name = file.Name
+			existing.Type = file.Type
+			existing.fid = file.FID
+			existing.Size = file.Size
+			existing.parent = c.curr
+			if existing.children == nil {
+				existing.children = make(map[string]*CNode)
+			}
+			newChildren[file.Name] = existing
+			continue
+		}
+
+		newChildren[file.Name] = &CNode{
 			Name:     file.Name,
 			Type:     file.Type,
 			fid:      file.FID,
@@ -238,6 +258,7 @@ func (c *CacheHandler) populateCurrentDirCache() error {
 			parent:   c.curr,
 		}
 	}
+	c.curr.children = newChildren
 	return nil
 }
 
@@ -247,11 +268,78 @@ func (c *CacheHandler) DeleteFile(s string, recursive bool) error {
 	if err != nil {
 		return err
 	}
-	// update cache to reflect deletion, recursively delete all children nodes if it's a directory
-	if recursive && c.curr.children[s].Type == domain.InodeTypeDirectory {
-		recursiveDelete(c.curr.children[s])
+	// Update cache to reflect deletion.
+	// Cache can be stale; guard against missing entry to avoid panics.
+	if node, ok := c.curr.children[s]; ok {
+		if recursive && node.Type == domain.InodeTypeDirectory {
+			recursiveDelete(node)
+		}
+		delete(c.curr.children, s) // delete file/dir node from cache of current directory
 	}
-	delete(c.curr.children, s) // delete file/dir node from cache of current directory
+	return nil
+}
+
+// TrashFile moves a file/dir to server-side trash and updates the current cache view.
+func (c *CacheHandler) TrashFile(name string, recursive bool) (string, error) {
+	trashedName, err := c.client.TrashFile(name, recursive)
+	if err != nil {
+		return "", err
+	}
+	// Remove from current directory cache (it no longer lives here).
+	if _, ok := c.curr.children[name]; ok {
+		delete(c.curr.children, name)
+	}
+	return trashedName, nil
+}
+
+// RestoreFile restores an item from server-side trash and updates cache if currently viewing trash.
+func (c *CacheHandler) RestoreFile(name string) (string, error) {
+	restoredName, err := c.client.RestoreFile(name)
+	if err != nil {
+		return "", err
+	}
+	// If we're currently in trash, remove it from this cache view.
+	if c.curr != nil && c.curr.Name == ".trash" {
+		delete(c.curr.children, name)
+	}
+	// Refresh root so the restored entry is immediately visible via `ls`/`cd`.
+	_ = c.populateNodeCache(c.root)
+	return restoredName, nil
+}
+
+func (c *CacheHandler) populateNodeCache(node *CNode) error {
+	if node == nil {
+		return nil
+	}
+	files, err := c.client.ListFilesAt(node.fid)
+	if err != nil {
+		return err
+	}
+	oldChildren := node.children
+	newChildren := make(map[string]*CNode, len(files))
+	for _, file := range files {
+		if existing, ok := oldChildren[file.Name]; ok {
+			existing.Name = file.Name
+			existing.Type = file.Type
+			existing.fid = file.FID
+			existing.Size = file.Size
+			existing.parent = node
+			if existing.children == nil {
+				existing.children = make(map[string]*CNode)
+			}
+			newChildren[file.Name] = existing
+			continue
+		}
+		newChildren[file.Name] = &CNode{
+			Name:     file.Name,
+			Type:     file.Type,
+			fid:      file.FID,
+			Size:     file.Size,
+			children: make(map[string]*CNode),
+			parent:   node,
+		}
+	}
+	node.children = newChildren
 	return nil
 }
 
