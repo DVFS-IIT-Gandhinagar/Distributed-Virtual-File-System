@@ -17,10 +17,9 @@
 - [ ] Implement crash recovery for MDS - @ShardulJunagade
 - [ ] Implement heartbeat - @ShardulJunagade
 - [ ] Implement storage quotas - @Reckadon
-- [ ] Implement authentication of users
-- [ ] Handle fid -> inode map in better way
-- [ ] Compression in Upload/Download
-- [ ] test tradeoff between ping and callbacks
+- [ ] Implement authentication of users - @Reckadon
+- [ ] sharing phase-1 - @Umang-Shikarvar
 - [ ] chunked upload/download + read_at @jsmaskeen
-- [ ] CI @jsmaskeen
-- [ ] unittests @jsmaskeen
+- [ ] CI - @jsmaskeen
+- [ ] unittests - @jsmaskeen
+- [ ] Compression in Upload/Download - @jsmaskeen
