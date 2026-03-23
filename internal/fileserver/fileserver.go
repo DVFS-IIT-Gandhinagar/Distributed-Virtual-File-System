@@ -149,12 +149,17 @@ func (fs *FileServer) getOrCreateTrashDirLocked(username string) (*domain.Inode,
 	}
 	atomic.AddUint64(&fs.nextInodeID, 1)
 
+	ACL := domain.ACL{
+		Owner:  username,
+		Shared: []string{},
+	}
+
 	trashInode := &domain.Inode{
 		FID:      trashFID,
 		Type:     domain.InodeTypeDirectory,
 		Name:     trashDirName,
 		OSPath:   trashPath,
-		Owner:    username,
+		ACL:      ACL,
 		Children: make([]*domain.FID, 0),
 		Parent:   rootInode,
 	}
@@ -310,7 +315,7 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, username string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("file not found: %s", fid.String())
 	}
-	if inode.Owner != username {
+	if inode.ACL.Owner != username {
 		return "", fmt.Errorf("permission denied: user '%s' does not own '%s'", username, inode.Name)
 	}
 
