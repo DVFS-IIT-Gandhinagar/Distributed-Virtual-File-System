@@ -78,13 +78,18 @@ func (fs *FileServer) GetUserRoot(username string) (*domain.FID, error) {
 		GenerationNumber: 1,
 	}
 
+	ACL := domain.ACL{
+		Owner:  username,
+		Shared: []string{},
+	}
+
 	// Create root inode
 	rootInode := &domain.Inode{
 		FID:      rootFID,
 		Type:     domain.InodeTypeDirectory,
 		Name:     username,
 		OSPath:   userDir,
-		Owner:    username,
+		ACL:      ACL,
 		Children: make([]*domain.FID, 0),
 	}
 
@@ -259,13 +264,18 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, username string, f
 		}
 	}
 
+	ACL := domain.ACL{
+	Owner:  username,
+	Shared: []string{},
+	}
+
 	// Create inode
 	newInode := &domain.Inode{
 		FID:    newFID,
 		Type:   fileType,
 		Name:   name,
 		OSPath: osPath,
-		Owner:  username,
+		ACL:    ACL,
 		Parent: parent,
 		Size: 0,
 	}
@@ -424,7 +434,7 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, username string, recursive boo
 // validateDeletePermissions validates that user can delete the inode and all its children
 func (fs *FileServer) validateDeletePermissions(inode *domain.Inode, username string, recursive bool) error {
 	// Check ownership of the target
-	if inode.Owner != username {
+	if inode.ACL.Owner != username {
 		return fmt.Errorf("permission denied: user '%s' does not own '%s'", username, inode.Name)
 	}
 

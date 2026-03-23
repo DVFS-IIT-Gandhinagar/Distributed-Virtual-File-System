@@ -24,6 +24,7 @@ go.work
 *.swp
 *.swo
 *~
+.kiro
 
 # OS files
 .DS_Store

@@ -44,6 +44,11 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 				}
 				atomic.AddUint64(nextInodeID, 1)
 				(*users)[username] = userRootFID
+				
+				ACL := domain.ACL{
+					Owner:  username,
+					Shared: []string{},
+				}
 
 				// Create root inode
 				userRootInode := &domain.Inode{
@@ -51,7 +56,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 					Type:     domain.InodeTypeDirectory,
 					Name:     username,
 					OSPath:   userDir,
-					Owner:    username,
+					ACL:    ACL,
 					Children: make([]*domain.FID, 0),
 				}
 
@@ -118,7 +123,7 @@ func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domai
 				Type:   inodeType,
 				Name:   entry.Name(),
 				OSPath: itemPath,
-				Owner:  parentInode.Owner, // Same as parent (user)
+				ACL:  parentInode.ACL, // Same as parent (user)
 				Parent: parentInode,
 			}
 
