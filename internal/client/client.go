@@ -85,6 +85,24 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	return c.currentFID, nil
 }
 
+// Share another user the root dir only if current user is owner
+func (c *Client) Share(share_with string) (error) {
+	resp, err := c.serverConn.Share(context.Background(), &pb.ShareRequest{
+		Username: c.username,
+		RootUser: c.root_user,
+		ShareWith: share_with,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to share: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	return nil
+}
+
 // Returns current user path
 func (c *Client) Path() (string, error) {
 	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{

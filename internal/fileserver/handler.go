@@ -133,6 +133,30 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 	}, nil
 }
 
+// Share another user the root dir only if current user is owner
+func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.ShareResponse, error) {
+	if req.Username == "" || req.RootUser == "" || req.ShareWith == "" {
+		log.Printf("Share: error - username, user_root and share with username are required")
+		return &pb.ShareResponse{
+			Success: false,
+			Error:   "username, user_root and share with username are required",
+		}, nil
+	}
+
+	err := h.fileServer.Share(req.Username, req.RootUser, req.ShareWith)
+	if err != nil {
+		log.Printf("Path: error sharing - %v", err)
+		return &pb.ShareResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &pb.ShareResponse{
+		Success: true,
+	}, nil
+}
+
 // Returns current path
 func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathResponse, error) {
 	if req.Fid == nil {

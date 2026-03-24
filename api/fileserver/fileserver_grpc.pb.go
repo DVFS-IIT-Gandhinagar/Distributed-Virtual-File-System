@@ -35,6 +35,7 @@ const (
 	FileServer_ChangeDir_FullMethodName      = "/fileserver.FileServer/ChangeDir"
 	FileServer_UploadFile_FullMethodName     = "/fileserver.FileServer/UploadFile"
 	FileServer_DownloadFile_FullMethodName   = "/fileserver.FileServer/DownloadFile"
+	FileServer_Share_FullMethodName          = "/fileserver.FileServer/Share"
 )
 
 // FileServerClient is the client API for FileServer service.
@@ -59,6 +60,7 @@ type FileServerClient interface {
 	ChangeDir(ctx context.Context, in *ChangeDirRequest, opts ...grpc.CallOption) (*ChangeDirResponse, error)
 	UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse], error)
 	DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadFileResponse], error)
+	Share(ctx context.Context, in *ShareRequest, opts ...grpc.CallOption) (*ShareResponse, error)
 }
 
 type fileServerClient struct {
@@ -241,6 +243,16 @@ func (c *fileServerClient) DownloadFile(ctx context.Context, in *DownloadFileReq
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type FileServer_DownloadFileClient = grpc.ServerStreamingClient[DownloadFileResponse]
 
+func (c *fileServerClient) Share(ctx context.Context, in *ShareRequest, opts ...grpc.CallOption) (*ShareResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ShareResponse)
+	err := c.cc.Invoke(ctx, FileServer_Share_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FileServerServer is the server API for FileServer service.
 // All implementations must embed UnimplementedFileServerServer
 // for forward compatibility.
@@ -263,6 +275,7 @@ type FileServerServer interface {
 	ChangeDir(context.Context, *ChangeDirRequest) (*ChangeDirResponse, error)
 	UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error
 	DownloadFile(*DownloadFileRequest, grpc.ServerStreamingServer[DownloadFileResponse]) error
+	Share(context.Context, *ShareRequest) (*ShareResponse, error)
 	mustEmbedUnimplementedFileServerServer()
 }
 
@@ -320,6 +333,9 @@ func (UnimplementedFileServerServer) UploadFile(grpc.ClientStreamingServer[Uploa
 }
 func (UnimplementedFileServerServer) DownloadFile(*DownloadFileRequest, grpc.ServerStreamingServer[DownloadFileResponse]) error {
 	return status.Error(codes.Unimplemented, "method DownloadFile not implemented")
+}
+func (UnimplementedFileServerServer) Share(context.Context, *ShareRequest) (*ShareResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Share not implemented")
 }
 func (UnimplementedFileServerServer) mustEmbedUnimplementedFileServerServer() {}
 func (UnimplementedFileServerServer) testEmbeddedByValue()                    {}
@@ -612,6 +628,24 @@ func _FileServer_DownloadFile_Handler(srv interface{}, stream grpc.ServerStream)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type FileServer_DownloadFileServer = grpc.ServerStreamingServer[DownloadFileResponse]
 
+func _FileServer_Share_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShareRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServerServer).Share(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileServer_Share_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServerServer).Share(ctx, req.(*ShareRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FileServer_ServiceDesc is the grpc.ServiceDesc for FileServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -674,6 +708,10 @@ var FileServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ChangeDir",
 			Handler:    _FileServer_ChangeDir_Handler,
+		},
+		{
+			MethodName: "Share",
+			Handler:    _FileServer_Share_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

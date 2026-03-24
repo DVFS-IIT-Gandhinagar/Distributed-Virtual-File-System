@@ -60,6 +60,22 @@ func (h *CobraHandler) setupCommands() {
 		},
 	})
 
+	// share
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "share <username>",
+		Short: "Share your root directory with another user",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			username := args[0]
+			fmt.Printf("Sharing root directory with '%s'...\n", username)
+			err := h.cacheHandler.Share(username)
+			if err == nil {
+				fmt.Printf("Root directory shared successfully with '%s'\n", username)
+			}
+			return err
+		},
+	})
+
 	// pwd
 	h.rootCmd.AddCommand(&cobra.Command{
 		Use:   "pwd",

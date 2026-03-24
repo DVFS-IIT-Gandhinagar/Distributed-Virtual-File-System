@@ -2029,6 +2029,118 @@ func (x *DownloadFileResponse) GetChunk() []byte {
 	return nil
 }
 
+type ShareRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`                    // username for access control
+	RootUser      string                 `protobuf:"bytes,2,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`    // username of root which client is using
+	ShareWith     string                 `protobuf:"bytes,3,opt,name=share_with,json=shareWith,proto3" json:"share_with,omitempty"` // username of the user to share with
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShareRequest) Reset() {
+	*x = ShareRequest{}
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShareRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShareRequest) ProtoMessage() {}
+
+func (x *ShareRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShareRequest.ProtoReflect.Descriptor instead.
+func (*ShareRequest) Descriptor() ([]byte, []int) {
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ShareRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *ShareRequest) GetRootUser() string {
+	if x != nil {
+		return x.RootUser
+	}
+	return ""
+}
+
+func (x *ShareRequest) GetShareWith() string {
+	if x != nil {
+		return x.ShareWith
+	}
+	return ""
+}
+
+type ShareResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShareResponse) Reset() {
+	*x = ShareResponse{}
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShareResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShareResponse) ProtoMessage() {}
+
+func (x *ShareResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShareResponse.ProtoReflect.Descriptor instead.
+func (*ShareResponse) Descriptor() ([]byte, []int) {
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ShareResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ShareResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type RegisterClientRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ClientId        string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
@@ -2041,7 +2153,7 @@ type RegisterClientRequest struct {
 
 func (x *RegisterClientRequest) Reset() {
 	*x = RegisterClientRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[33]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2053,7 +2165,7 @@ func (x *RegisterClientRequest) String() string {
 func (*RegisterClientRequest) ProtoMessage() {}
 
 func (x *RegisterClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[33]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2066,7 +2178,7 @@ func (x *RegisterClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterClientRequest.ProtoReflect.Descriptor instead.
 func (*RegisterClientRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{33}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *RegisterClientRequest) GetClientId() string {
@@ -2108,7 +2220,7 @@ type RegisterClientResponse struct {
 
 func (x *RegisterClientResponse) Reset() {
 	*x = RegisterClientResponse{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[34]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2120,7 +2232,7 @@ func (x *RegisterClientResponse) String() string {
 func (*RegisterClientResponse) ProtoMessage() {}
 
 func (x *RegisterClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[34]
+	mi := &file_api_fileserver_fileserver_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2133,7 +2245,7 @@ func (x *RegisterClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterClientResponse.ProtoReflect.Descriptor instead.
 func (*RegisterClientResponse) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{34}
+	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RegisterClientResponse) GetSuccess() bool {
@@ -2294,7 +2406,15 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x04R\x06offset\x12\x14\n" +
-	"\x05chunk\x18\x04 \x01(\fR\x05chunk\"\x98\x01\n" +
+	"\x05chunk\x18\x04 \x01(\fR\x05chunk\"f\n" +
+	"\fShareRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1b\n" +
+	"\troot_user\x18\x02 \x01(\tR\brootUser\x12\x1d\n" +
+	"\n" +
+	"share_with\x18\x03 \x01(\tR\tshareWith\"?\n" +
+	"\rShareResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x98\x01\n" +
 	"\x15RegisterClientRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12)\n" +
 	"\x10callback_address\x18\x02 \x01(\tR\x0fcallbackAddress\x12\x1a\n" +
@@ -2306,7 +2426,7 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\ruser_root_fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\vuserRootFid*$\n" +
 	"\tInodeType\x12\b\n" +
 	"\x04FILE\x10\x00\x12\r\n" +
-	"\tDIRECTORY\x10\x012\xad\t\n" +
+	"\tDIRECTORY\x10\x012\xeb\t\n" +
 	"\n" +
 	"FileServer\x12W\n" +
 	"\x0eRegisterClient\x12!.fileserver.RegisterClientRequest\x1a\".fileserver.RegisterClientResponse\x12K\n" +
@@ -2327,7 +2447,8 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\tChangeDir\x12\x1c.fileserver.ChangeDirRequest\x1a\x1d.fileserver.ChangeDirResponse\x12M\n" +
 	"\n" +
 	"UploadFile\x12\x1d.fileserver.UploadFileRequest\x1a\x1e.fileserver.UploadFileResponse(\x01\x12S\n" +
-	"\fDownloadFile\x12\x1f.fileserver.DownloadFileRequest\x1a .fileserver.DownloadFileResponse0\x01B/Z-github.com/umangshikarvar/dvfs/api/fileserverb\x06proto3"
+	"\fDownloadFile\x12\x1f.fileserver.DownloadFileRequest\x1a .fileserver.DownloadFileResponse0\x01\x12<\n" +
+	"\x05Share\x12\x18.fileserver.ShareRequest\x1a\x19.fileserver.ShareResponseB/Z-github.com/umangshikarvar/dvfs/api/fileserverb\x06proto3"
 
 var (
 	file_api_fileserver_fileserver_proto_rawDescOnce sync.Once
@@ -2342,7 +2463,7 @@ func file_api_fileserver_fileserver_proto_rawDescGZIP() []byte {
 }
 
 var file_api_fileserver_fileserver_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_fileserver_fileserver_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_api_fileserver_fileserver_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(InodeType)(0),                 // 0: fileserver.InodeType
 	(*FID)(nil),                    // 1: fileserver.FID
@@ -2378,8 +2499,10 @@ var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(*UploadFileResponse)(nil),     // 31: fileserver.UploadFileResponse
 	(*DownloadFileRequest)(nil),    // 32: fileserver.DownloadFileRequest
 	(*DownloadFileResponse)(nil),   // 33: fileserver.DownloadFileResponse
-	(*RegisterClientRequest)(nil),  // 34: fileserver.RegisterClientRequest
-	(*RegisterClientResponse)(nil), // 35: fileserver.RegisterClientResponse
+	(*ShareRequest)(nil),           // 34: fileserver.ShareRequest
+	(*ShareResponse)(nil),          // 35: fileserver.ShareResponse
+	(*RegisterClientRequest)(nil),  // 36: fileserver.RegisterClientRequest
+	(*RegisterClientResponse)(nil), // 37: fileserver.RegisterClientResponse
 }
 var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	1,  // 0: fileserver.CreateFileRequest.fid:type_name -> fileserver.FID
@@ -2407,7 +2530,7 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	1,  // 22: fileserver.UploadFileRequest.parentFid:type_name -> fileserver.FID
 	1,  // 23: fileserver.DownloadFileRequest.parentFid:type_name -> fileserver.FID
 	1,  // 24: fileserver.RegisterClientResponse.user_root_fid:type_name -> fileserver.FID
-	34, // 25: fileserver.FileServer.RegisterClient:input_type -> fileserver.RegisterClientRequest
+	36, // 25: fileserver.FileServer.RegisterClient:input_type -> fileserver.RegisterClientRequest
 	3,  // 26: fileserver.FileServer.CreateFile:input_type -> fileserver.CreateFileRequest
 	5,  // 27: fileserver.FileServer.OpenFile:input_type -> fileserver.OpenFileRequest
 	7,  // 28: fileserver.FileServer.ReadFile:input_type -> fileserver.ReadFileRequest
@@ -2423,24 +2546,26 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	23, // 38: fileserver.FileServer.ChangeDir:input_type -> fileserver.ChangeDirRequest
 	30, // 39: fileserver.FileServer.UploadFile:input_type -> fileserver.UploadFileRequest
 	32, // 40: fileserver.FileServer.DownloadFile:input_type -> fileserver.DownloadFileRequest
-	35, // 41: fileserver.FileServer.RegisterClient:output_type -> fileserver.RegisterClientResponse
-	4,  // 42: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
-	6,  // 43: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse
-	8,  // 44: fileserver.FileServer.ReadFile:output_type -> fileserver.ReadFileResponse
-	10, // 45: fileserver.FileServer.WriteFile:output_type -> fileserver.WriteFileResponse
-	12, // 46: fileserver.FileServer.CloseFile:output_type -> fileserver.CloseFileResponse
-	14, // 47: fileserver.FileServer.DeleteFile:output_type -> fileserver.DeleteFileResponse
-	16, // 48: fileserver.FileServer.TrashFile:output_type -> fileserver.TrashFileResponse
-	18, // 49: fileserver.FileServer.RestoreFile:output_type -> fileserver.RestoreFileResponse
-	20, // 50: fileserver.FileServer.GetAttr:output_type -> fileserver.GetAttrResponse
-	27, // 51: fileserver.FileServer.ListDir:output_type -> fileserver.ListDirResponse
-	29, // 52: fileserver.FileServer.Lookup:output_type -> fileserver.LookupResponse
-	22, // 53: fileserver.FileServer.Path:output_type -> fileserver.PathResponse
-	24, // 54: fileserver.FileServer.ChangeDir:output_type -> fileserver.ChangeDirResponse
-	31, // 55: fileserver.FileServer.UploadFile:output_type -> fileserver.UploadFileResponse
-	33, // 56: fileserver.FileServer.DownloadFile:output_type -> fileserver.DownloadFileResponse
-	41, // [41:57] is the sub-list for method output_type
-	25, // [25:41] is the sub-list for method input_type
+	34, // 41: fileserver.FileServer.Share:input_type -> fileserver.ShareRequest
+	37, // 42: fileserver.FileServer.RegisterClient:output_type -> fileserver.RegisterClientResponse
+	4,  // 43: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
+	6,  // 44: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse
+	8,  // 45: fileserver.FileServer.ReadFile:output_type -> fileserver.ReadFileResponse
+	10, // 46: fileserver.FileServer.WriteFile:output_type -> fileserver.WriteFileResponse
+	12, // 47: fileserver.FileServer.CloseFile:output_type -> fileserver.CloseFileResponse
+	14, // 48: fileserver.FileServer.DeleteFile:output_type -> fileserver.DeleteFileResponse
+	16, // 49: fileserver.FileServer.TrashFile:output_type -> fileserver.TrashFileResponse
+	18, // 50: fileserver.FileServer.RestoreFile:output_type -> fileserver.RestoreFileResponse
+	20, // 51: fileserver.FileServer.GetAttr:output_type -> fileserver.GetAttrResponse
+	27, // 52: fileserver.FileServer.ListDir:output_type -> fileserver.ListDirResponse
+	29, // 53: fileserver.FileServer.Lookup:output_type -> fileserver.LookupResponse
+	22, // 54: fileserver.FileServer.Path:output_type -> fileserver.PathResponse
+	24, // 55: fileserver.FileServer.ChangeDir:output_type -> fileserver.ChangeDirResponse
+	31, // 56: fileserver.FileServer.UploadFile:output_type -> fileserver.UploadFileResponse
+	33, // 57: fileserver.FileServer.DownloadFile:output_type -> fileserver.DownloadFileResponse
+	35, // 58: fileserver.FileServer.Share:output_type -> fileserver.ShareResponse
+	42, // [42:59] is the sub-list for method output_type
+	25, // [25:42] is the sub-list for method input_type
 	25, // [25:25] is the sub-list for extension type_name
 	25, // [25:25] is the sub-list for extension extendee
 	0,  // [0:25] is the sub-list for field type_name
@@ -2457,7 +2582,7 @@ func file_api_fileserver_fileserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_fileserver_fileserver_proto_rawDesc), len(file_api_fileserver_fileserver_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   35,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

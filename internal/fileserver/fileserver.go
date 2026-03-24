@@ -22,7 +22,6 @@ type FileServer struct {
 	mu          sync.RWMutex
 	useTLS      bool
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
-	shared		map[string][]string   // stores the user_roots shared with the user
 }
 
 type trashEntry struct {
@@ -414,7 +413,7 @@ func (fs *FileServer) GetChildInodeByName(parentInode *domain.Inode, name string
 }
 
 // Share another user the root dir only if current user is owner
-func (fs *FileServer) Share(username string, root_user string, shareusername string) (error) {
+func (fs *FileServer) Share(username string, root_user string, share_with string) (error) {
 	rootInodeFID, err := fs.GetUserRoot(root_user)
 	if err != nil {
 		return err
@@ -430,15 +429,14 @@ func (fs *FileServer) Share(username string, root_user string, shareusername str
 		return fmt.Errorf("Only owner can share")
 	}
 
-	// if not already share append shareusername in shared ACL
+	// if not already share append share_with in shared ACL
 	for _, u := range rootInode.ACL.Shared {
-		if u == shareusername {
+		if u == share_with {
 			return nil
 		}
 	}
 
-	rootInode.ACL.Shared = append(rootInode.ACL.Shared, shareusername)
-	fs.shared[shareusername] = append(fs.shared[shareusername], root_user)
+	rootInode.ACL.Shared = append(rootInode.ACL.Shared, share_with)
 	return nil
 }
 
