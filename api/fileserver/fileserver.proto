@@ -222,6 +222,17 @@ message ShareResponse {
   string error = 2;
 }
 
+message UnshareRequest {
+  string username = 1; // username for access control
+  string root_user = 2; // username of root which client is using
+  string share_with = 3; // username of the user to share with
+}
+
+message UnshareResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 message RegisterClientRequest {
   string client_id = 1;
   string callback_address = 2; // host:port for callbacks
@@ -254,6 +265,7 @@ service FileServer {
   rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse);
   rpc Share(ShareRequest) returns (ShareResponse);
+  rpc Unshare(UnshareRequest) returns (UnshareResponse);
 }
 
 // To build these run: make proto

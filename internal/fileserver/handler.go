@@ -42,14 +42,9 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 
 	if req.Username != req.RootUser {
 		// check if RootUser is present on this fs
-		isPresent := false
-		for u := range h.fileServer.users{
-			if u == req.RootUser {
-				log.Printf("RegisterClient: user root %s is present on this fs", req.RootUser)
-				isPresent = true
-				break
-			}
-		}
+		h.fileServer.mu.RLock()
+		_, isPresent := h.fileServer.users[req.RootUser]
+		h.fileServer.mu.RUnlock()
 		if !isPresent{
 			log.Printf("RegisterClient: error - user root %s is not present on this fs", req.RootUser)
 			return &pb.RegisterClientResponse{
@@ -75,6 +70,9 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			Error:   err.Error(),
 		}, nil
 	}
+
+	h.fileServer.mu.RLock()
+	defer h.fileServer.mu.RUnlock()
 
 	// registration should succeed only if user is owner or root is shared with them
 	if rootInode.ACL.Owner != req.Username {
@@ -145,7 +143,7 @@ func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.Shar
 
 	err := h.fileServer.Share(req.Username, req.RootUser, req.ShareWith)
 	if err != nil {
-		log.Printf("Path: error sharing - %v", err)
+		log.Printf("Share: error sharing - %v", err)
 		return &pb.ShareResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -153,6 +151,30 @@ func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.Shar
 	}
 
 	return &pb.ShareResponse{
+		Success: true,
+	}, nil
+}
+
+// Unshare another user the root dir only if current user is owner
+func (h *GRPCHandler) Unshare(ctx context.Context, req *pb.UnshareRequest) (*pb.UnshareResponse, error) {
+	if req.Username == "" || req.RootUser == "" || req.ShareWith == "" {
+		log.Printf("Unshare: error - username, user_root and share with username are required")
+		return &pb.UnshareResponse{
+			Success: false,
+			Error:   "username, user_root and share with username are required",
+		}, nil
+	}
+
+	err := h.fileServer.Unshare(req.Username, req.RootUser, req.ShareWith)
+	if err != nil {
+		log.Printf("Unshare: error sharing - %v", err)
+		return &pb.UnshareResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &pb.UnshareResponse{
 		Success: true,
 	}, nil
 }

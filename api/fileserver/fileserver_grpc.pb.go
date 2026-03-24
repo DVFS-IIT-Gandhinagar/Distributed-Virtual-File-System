@@ -36,6 +36,7 @@ const (
 	FileServer_UploadFile_FullMethodName     = "/fileserver.FileServer/UploadFile"
 	FileServer_DownloadFile_FullMethodName   = "/fileserver.FileServer/DownloadFile"
 	FileServer_Share_FullMethodName          = "/fileserver.FileServer/Share"
+	FileServer_Unshare_FullMethodName        = "/fileserver.FileServer/Unshare"
 )
 
 // FileServerClient is the client API for FileServer service.
@@ -61,6 +62,7 @@ type FileServerClient interface {
 	UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse], error)
 	DownloadFile(ctx context.Context, in *DownloadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadFileResponse], error)
 	Share(ctx context.Context, in *ShareRequest, opts ...grpc.CallOption) (*ShareResponse, error)
+	Unshare(ctx context.Context, in *UnshareRequest, opts ...grpc.CallOption) (*UnshareResponse, error)
 }
 
 type fileServerClient struct {
@@ -253,6 +255,16 @@ func (c *fileServerClient) Share(ctx context.Context, in *ShareRequest, opts ...
 	return out, nil
 }
 
+func (c *fileServerClient) Unshare(ctx context.Context, in *UnshareRequest, opts ...grpc.CallOption) (*UnshareResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnshareResponse)
+	err := c.cc.Invoke(ctx, FileServer_Unshare_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FileServerServer is the server API for FileServer service.
 // All implementations must embed UnimplementedFileServerServer
 // for forward compatibility.
@@ -276,6 +288,7 @@ type FileServerServer interface {
 	UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error
 	DownloadFile(*DownloadFileRequest, grpc.ServerStreamingServer[DownloadFileResponse]) error
 	Share(context.Context, *ShareRequest) (*ShareResponse, error)
+	Unshare(context.Context, *UnshareRequest) (*UnshareResponse, error)
 	mustEmbedUnimplementedFileServerServer()
 }
 
@@ -336,6 +349,9 @@ func (UnimplementedFileServerServer) DownloadFile(*DownloadFileRequest, grpc.Ser
 }
 func (UnimplementedFileServerServer) Share(context.Context, *ShareRequest) (*ShareResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Share not implemented")
+}
+func (UnimplementedFileServerServer) Unshare(context.Context, *UnshareRequest) (*UnshareResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Unshare not implemented")
 }
 func (UnimplementedFileServerServer) mustEmbedUnimplementedFileServerServer() {}
 func (UnimplementedFileServerServer) testEmbeddedByValue()                    {}
@@ -646,6 +662,24 @@ func _FileServer_Share_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FileServer_Unshare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnshareRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServerServer).Unshare(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileServer_Unshare_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServerServer).Unshare(ctx, req.(*UnshareRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FileServer_ServiceDesc is the grpc.ServiceDesc for FileServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -712,6 +746,10 @@ var FileServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Share",
 			Handler:    _FileServer_Share_Handler,
+		},
+		{
+			MethodName: "Unshare",
+			Handler:    _FileServer_Unshare_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

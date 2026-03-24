@@ -424,9 +424,16 @@ func (fs *FileServer) Share(username string, root_user string, share_with string
 		return err
 	}
 
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
 	// Sharing is allowed only if current user is the owner
 	if rootInode.ACL.Owner != username {
 		return fmt.Errorf("Only owner can share")
+	}
+
+	if share_with == root_user {
+		return fmt.Errorf("Cannot share with self")
 	}
 
 	// if not already share append share_with in shared ACL
@@ -440,10 +447,54 @@ func (fs *FileServer) Share(username string, root_user string, share_with string
 	return nil
 }
 
-// Return path as pwd
-func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
+// Unshare removes a user from the shared list of the root dir
+func (fs *FileServer) Unshare(username string, root_user string, unshare_with string) (error) {
+
+	rootInodeFID, err := fs.GetUserRoot(root_user)
+	if err != nil {
+		return err
+	}
+
+	rootInode, err := fs.GetInode(rootInodeFID)
+	if err != nil {
+		return err
+	}
+
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+
+	// Sharing is allowed only if current user is the owner
+	if rootInode.ACL.Owner != username {
+		return fmt.Errorf("Only owner can unshare")
+	}
+
+	if unshare_with == root_user {
+		return fmt.Errorf("Cannot unshare with self")
+	}
+
+	// remove unshare_with from shared list
+	newShared := []string{}
+
+	// if user is present in shared ACL, remove it
+	found := false
+	for _, u := range rootInode.ACL.Shared {
+		if u == unshare_with {
+			found = true
+			continue
+		}
+		newShared = append(newShared, u)
+	}
+
+	if !found {
+		return fmt.Errorf("user not in shared list")
+	}
+
+	rootInode.ACL.Shared = newShared
+	return nil
+}
+
+// Return path as pwd
+func (fs *FileServer) Path(dirFID *domain.FID) (string, error) {
 
 	dirInode, err := fs.GetInode(dirFID)
 	if err != nil {

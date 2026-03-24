@@ -169,6 +169,10 @@ func (c *CacheHandler) Share(s string) error {
 	return c.client.Share(s)
 }
 
+func (c *CacheHandler) Unshare(s string) error {
+	return c.client.Unshare(s)
+}
+
 func (c *CacheHandler) Download(s string) error {
 	return c.client.Download(s)
 }
