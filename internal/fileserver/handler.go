@@ -30,26 +30,72 @@ func NewGRPCHandler(fileServer *FileServer) *GRPCHandler {
 
 // RegisterClient handles client registration and returns user root FID
 func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClientRequest) (*pb.RegisterClientResponse, error) {
-	log.Printf("RegisterClient: username=%s", req.Username)
+	log.Printf("RegisterClient: username=%s requesting for user root=%s", req.Username, req.RootUser)
 
-	if req.Username == "" {
-		log.Printf("RegisterClient: error - username is required")
+	if req.Username == "" || req.RootUser == "" {
+		log.Printf("RegisterClient: error - username and request user root are required")
 		return &pb.RegisterClientResponse{
 			Success: false,
-			Error:   "username is required",
+			Error:   "username and request user root are required",
 		}, nil
 	}
 
-	rootFID, err := h.fileServer.GetUserRoot(req.Username)
+	if req.Username != req.RootUser {
+		// check if RootUser is present on this fs
+		isPresent := false
+		for u := range h.fileServer.users{
+			if u == req.RootUser {
+				log.Printf("RegisterClient: user root %s is present on this fs", req.RootUser)
+				isPresent = true
+				break
+			}
+		}
+		if !isPresent{
+			log.Printf("RegisterClient: error - user root %s is not present on this fs", req.RootUser)
+			return &pb.RegisterClientResponse{
+				Success: false,
+				Error:   fmt.Sprintf("user root %s is not present on this fs", req.RootUser),
+			}, nil
+		}
+	}
+	rootFID, err := h.fileServer.GetUserRoot(req.RootUser)
 	if err != nil {
-		log.Printf("RegisterClient: error getting user root - %v", err)
+		log.Printf("RegisterClient: error getting requested root - %v", err)
 		return &pb.RegisterClientResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
-	log.Printf("RegisterClient: success for user %s", req.Username)
+	rootInode, err := h.fileServer.GetInode(rootFID)
+	if err != nil {
+		log.Printf("RegisterClient: error getting root inode - %v", err)
+		return &pb.RegisterClientResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	// registration should succeed only if user is owner or root is shared with them
+	if rootInode.ACL.Owner != req.Username {
+		// check if root is shared with this user
+		isShared := false
+		for _, u := range rootInode.ACL.Shared {
+			if u == req.Username {
+				isShared = true
+				break
+			}
+		}
+		if !isShared {
+			log.Printf("RegisterClient: error - user %s is not allowed to access root %s", req.Username, req.RootUser)
+			return &pb.RegisterClientResponse{
+				Success: false,
+				Error:   fmt.Sprintf("user %s is not allowed to access root %s", req.Username, req.RootUser),
+			}, nil
+		}
+	}
+
+	log.Printf("RegisterClient: success for user %s for the user root %s", req.Username, req.RootUser)
 	return &pb.RegisterClientResponse{
 		Success:     true,
 		UserRootFid: rootFID.ToProto(),
@@ -108,7 +154,7 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 	}
 
 	log.Printf("Path: success - found path: %v", path)
-	path, err = filepath.Rel(req.User, path)
+	path, err = filepath.Rel(req.RootUser, path)
 	if err != nil {
 		log.Printf("Path: error - error in path computation")
 	}
@@ -191,9 +237,9 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 
 // CreateFile creates a new file or directory
 func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
-	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.User, req.Type)
+	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.RootUser, req.Type)
 
-	if req.Name == "" || req.User == "" {
+	if req.Name == "" || req.RootUser == "" {
 		log.Printf("CreateFile: error - name and user are required")
 		return &pb.CreateFileResponse{
 			Success: false,
@@ -213,7 +259,7 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	parentFID := domain.FIDFromProto(req.Fid)
 
 	fileType := domain.InodeTypeFromProto(req.Type)
-	newFID, err := h.fileServer.CreateFile(parentFID, req.Name, req.User, fileType)
+	newFID, err := h.fileServer.CreateFile(parentFID, req.Name, req.RootUser, fileType)
 	if err != nil {
 		log.Printf("CreateFile: error creating file - %v", err)
 		return &pb.CreateFileResponse{
@@ -392,7 +438,7 @@ func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (
 
 // DeleteFile deletes a file or directory
 func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest) (*pb.DeleteFileResponse, error) {
-	log.Printf("DeleteFile: FID=%v, user=%s", req.Fid, req.User)
+	log.Printf("DeleteFile: FID=%v, user=%s", req.Fid, req.RootUser)
 
 	// Validate request
 	if req.Fid == nil {
@@ -403,7 +449,7 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 		}, nil
 	}
 
-	if req.User == "" {
+	if req.RootUser == "" {
 		log.Printf("DeleteFile: error - user is required")
 		return &pb.DeleteFileResponse{
 			Success: false,
@@ -417,7 +463,7 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 	recursive := req.Recursive
 
 	// Attempt deletion
-	err := h.fileServer.DeleteFile(fid, req.User, recursive)
+	err := h.fileServer.DeleteFile(fid, req.RootUser, recursive)
 	if err != nil {
 		log.Printf("DeleteFile: error deleting file - %v", err)
 		return &pb.DeleteFileResponse{
@@ -434,17 +480,17 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 
 // TrashFile moves a file or directory into the user's trash (soft delete)
 func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (*pb.TrashFileResponse, error) {
-	log.Printf("TrashFile: FID=%v, user=%s", req.Fid, req.User)
+	log.Printf("TrashFile: FID=%v, user=%s", req.Fid, req.RootUser)
 
 	if req.Fid == nil {
 		return &pb.TrashFileResponse{Success: false, Error: "FID is required"}, nil
 	}
-	if req.User == "" {
+	if req.RootUser == "" {
 		return &pb.TrashFileResponse{Success: false, Error: "user is required"}, nil
 	}
 
 	fid := domain.FIDFromProto(req.Fid)
-	trashedName, err := h.fileServer.TrashFile(fid, req.User, req.Recursive)
+	trashedName, err := h.fileServer.TrashFile(fid, req.RootUser, req.Recursive)
 	if err != nil {
 		log.Printf("TrashFile: error - %v", err)
 		return &pb.TrashFileResponse{Success: false, Error: err.Error()}, nil
@@ -455,17 +501,17 @@ func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (
 
 // RestoreFile restores a file or directory from trash back to its original location
 func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileRequest) (*pb.RestoreFileResponse, error) {
-	log.Printf("RestoreFile: FID=%v, user=%s", req.Fid, req.User)
+	log.Printf("RestoreFile: FID=%v, user=%s", req.Fid, req.RootUser)
 
 	if req.Fid == nil {
 		return &pb.RestoreFileResponse{Success: false, Error: "FID is required"}, nil
 	}
-	if req.User == "" {
+	if req.RootUser == "" {
 		return &pb.RestoreFileResponse{Success: false, Error: "user is required"}, nil
 	}
 
 	fid := domain.FIDFromProto(req.Fid)
-	restoredName, err := h.fileServer.RestoreFile(fid, req.User)
+	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser)
 	if err != nil {
 		log.Printf("RestoreFile: error - %v", err)
 		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
