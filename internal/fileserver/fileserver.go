@@ -613,9 +613,26 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 	}
 	defer f.Close()
 
+	// track size changes to update inode size after write
+	var newSize uint64
+	if offset+uint64(len(data)) > inode.Size {
+		newSize = offset + uint64(len(data))
+	} else {
+		newSize = inode.Size
+	}
+
 	_, err = f.WriteAt(data, int64(offset))
 	if err != nil {
 		return fmt.Errorf("write failed: %w", err)
+	}
+
+	sizeDiff := int64(newSize) - int64(inode.Size)
+	if sizeDiff != 0 {
+		node := inode
+		for node != nil {
+			node.Size += uint64(sizeDiff)
+			node = node.Parent
+		}
 	}
 
 	return nil

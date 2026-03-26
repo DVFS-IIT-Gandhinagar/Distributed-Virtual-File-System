@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -40,9 +41,8 @@ func NewCacheHandler(c *Client, rootFID *domain.FID) *CacheHandler {
 		fid:      rootFID,
 		Type:     domain.InodeTypeDirectory,
 		children: make(map[string]*CNode),
-		parent:   nil, // root's parent is itself,
+		parent:   nil, // root's parent is nil,
 	}
-	root.parent = root
 
 	// get user root and files/dir in the root from server and populate the cache
 	files, err := c.ListFiles()
@@ -95,7 +95,7 @@ func (c *CacheHandler) visualizeCacheHelper(node *CNode, indent string) {
 	}
 }
 
-// no caching mechanism for file info yet, so directly call client method to get file info from server
+
 func (c *CacheHandler) GetFileInfo() (*FileInfo, error) {
 	return c.client.GetFileInfo()
 }
@@ -170,7 +170,37 @@ func (c *CacheHandler) Download(s string) error {
 }
 
 func (c *CacheHandler) Upload(s string) error {
-	return c.client.Upload(s)
+	// create a new file node in the cache for the uploaded file, with contentCached set to true since we're uploading from local file (which is now the source of truth for the file content)
+	// extract file name from path 
+	fileName := filepath.Base(s)
+	// exctract file size from local file info
+	fi, err := os.Stat(s)
+	if err != nil {
+		return fmt.Errorf("error getting local file info: %v", err)
+	}
+	fileSize := uint64(fi.Size())
+
+	c.curr.children[fileName] = &CNode{
+		Name:          fileName,
+		Type:          domain.InodeTypeFile,
+		fid:           nil, // FID will be updated after successful upload when we get the file info from server
+		Size:          fileSize,
+		parent:        c.curr,
+	}
+	fid, err := c.client.Upload(s)
+	if err != nil {
+		return err
+	}
+	// after successful upload, set the FID and size of the file node in cache to reflect the new file on server
+	c.curr.children[fileName].fid = fid
+	// update parents sizes up the cache tree to reflect the new file size
+	sizeDiff := int64(fileSize)
+	node := c.curr
+	for node != nil {
+		node.Size += uint64(sizeDiff)
+		node = node.parent
+	}
+	return nil
 }
 
 func (c *CacheHandler) ChangeDirectory(s string) error {
@@ -181,6 +211,9 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 		return c.populateCurrentDirCache()
 	case "..":
 		c.curr = c.curr.parent
+		if c.curr == nil { // if parent is nil, we're at root, so stay at root
+			c.curr = c.root
+		}
 		c.client.ChangeCurrentFID(c.curr.fid)
 		return c.populateCurrentDirCache()
 	default:

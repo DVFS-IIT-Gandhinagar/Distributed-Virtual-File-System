@@ -158,7 +158,7 @@ func (c *Client) ListFilesAt(dirFID *domain.FID) ([]*FileInfo, error) {
 	return files, nil
 }
 
-// GetFileInfo gets information about user's root directory
+// GetFileInfo gets information about user's current directory
 func (c *Client) GetFileInfo() (*FileInfo, error) {
 	resp, err := c.serverConn.GetAttr(context.Background(), &pb.GetAttrRequest{
 		Fid:  c.currentFID.ToProto(),
@@ -204,11 +204,11 @@ func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	}, nil
 }
 
-// Upload uploads a file or a directory recursively
-func (c *Client) Upload(localPath string) error {
+// Upload uploads a file or a directory recursively, returning the FID
+func (c *Client) Upload(localPath string) (*domain.FID, error) {
 	info, err := os.Stat(localPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if !info.IsDir() {
@@ -219,7 +219,7 @@ func (c *Client) Upload(localPath string) error {
 	return c.uploadRecursive(localPath, c.currentFID)
 }
 
-func (c *Client) uploadRecursive(localPath string, parentFID *domain.FID) error {
+func (c *Client) uploadRecursive(localPath string, parentFID *domain.FID) (*domain.FID, error) {
 	baseName := filepath.Base(localPath)
 
 	// 1. Create directory on server
@@ -230,10 +230,10 @@ func (c *Client) uploadRecursive(localPath string, parentFID *domain.FID) error 
 		Type: pb.InodeType_DIRECTORY,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", baseName, err)
+		return nil, fmt.Errorf("failed to create directory %s: %w", baseName, err)
 	}
 	if !resp.Success {
-		return fmt.Errorf("server error creating directory %s: %s", baseName, resp.Error)
+		return nil, fmt.Errorf("server error creating directory %s: %s", baseName, resp.Error)
 	}
 
 	dirFID := domain.FIDFromProto(resp.Fid)
@@ -241,30 +241,30 @@ func (c *Client) uploadRecursive(localPath string, parentFID *domain.FID) error 
 	// 2. Read local directory contents
 	entries, err := os.ReadDir(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to read local directory %s: %w", localPath, err)
+		return nil, fmt.Errorf("failed to read local directory %s: %w", localPath, err)
 	}
 
 	for _, entry := range entries {
 		fullPath := filepath.Join(localPath, entry.Name())
 		if entry.IsDir() {
-			if err := c.uploadRecursive(fullPath, dirFID); err != nil {
-				return err
+			if _, err := c.uploadRecursive(fullPath, dirFID); err != nil {
+				return nil, err
 			}
 		} else {
-			if err := c.uploadFileInternal(fullPath, dirFID); err != nil {
-				return err
+			if _, err := c.uploadFileInternal(fullPath, dirFID); err != nil {
+				return nil, err
 			}
 		}
 	}
 
-	return nil
+	return dirFID, nil
 }
 
-// uploadFileInternal uploads a single file to a specific parent directory
-func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
+// uploadFileInternal uploads a single file to a specific parent directory and returns the new file's FID. The file will be saved with the same name as the local file.
+func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) (*domain.FID, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
 
@@ -278,16 +278,16 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
 	})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("server error %s", resp.Error)
+		return nil, fmt.Errorf("server error %s", resp.Error)
 	}
 
 	stream, err := c.serverConn.UploadFile(context.Background())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	buf := make([]byte, chunkSize)
@@ -305,7 +305,7 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
 			}
 
 			if err := stream.Send(req); err != nil {
-				return err
+				return nil, err
 			}
 			offset += uint64(n)
 		}
@@ -314,24 +314,20 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) error {
 			break
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	res, err := stream.CloseAndRecv()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if !res.Success {
-		return fmt.Errorf("upload failed: %s", res.Error)
+		return nil, fmt.Errorf("upload failed: %s", res.Error)
 	}
 
-	return nil
-}
-
-func (c *Client) UploadFile(path string) error {
-	return c.Upload(path)
+	return domain.FIDFromProto(resp.Fid), nil
 }
 
 // GetFIDForPath returns the FID of a path relative to current or root directory
