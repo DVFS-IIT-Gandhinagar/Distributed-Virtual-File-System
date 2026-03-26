@@ -15,7 +15,7 @@ import (
 // NavigateToFileServer dials the meta server over TLS and navigates the client to the appropriate file server.
 // selfAddr is the host:port that the meta server should store as this FS's address.
 // If msAddr is empty this is a no-op.
-func (client *Client) NavigateToFileServer(msAddr, user string) (string, error) {
+func (client *Client) NavigateToFileServer(msAddr, username string, root_user string) (string, error) {
 	if msAddr == "" {
 		return "", nil
 	}
@@ -46,7 +46,8 @@ func (client *Client) NavigateToFileServer(msAddr, user string) (string, error) 
 
 	mc := mspb.NewMetaServerClient(conn)
 	resp, err := mc.Navigate(context.Background(), &mspb.NavigateRequest{
-		User: user,
+		Username: username,
+		RootUser: root_user,
 	})
 	if err != nil {
 		return "", fmt.Errorf("Navigate RPC failed: %w", err)

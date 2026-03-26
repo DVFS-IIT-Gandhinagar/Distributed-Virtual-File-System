@@ -127,7 +127,8 @@ func (x *RegisterFileServerResponse) GetError() string {
 
 type NavigateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          string                 `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	RootUser      string                 `protobuf:"bytes,2,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -162,9 +163,16 @@ func (*NavigateRequest) Descriptor() ([]byte, []int) {
 	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *NavigateRequest) GetUser() string {
+func (x *NavigateRequest) GetUsername() string {
 	if x != nil {
-		return x.User
+		return x.Username
+	}
+	return ""
+}
+
+func (x *NavigateRequest) GetRootUser() string {
+	if x != nil {
+		return x.RootUser
 	}
 	return ""
 }
@@ -229,6 +237,110 @@ func (x *NavigateResponse) GetAddress() string {
 	return ""
 }
 
+type GetRootsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRootsRequest) Reset() {
+	*x = GetRootsRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRootsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRootsRequest) ProtoMessage() {}
+
+func (x *GetRootsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRootsRequest.ProtoReflect.Descriptor instead.
+func (*GetRootsRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetRootsRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+type GetRootsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Roots         []string               `protobuf:"bytes,3,rep,name=roots,proto3" json:"roots,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRootsResponse) Reset() {
+	*x = GetRootsResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRootsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRootsResponse) ProtoMessage() {}
+
+func (x *GetRootsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRootsResponse.ProtoReflect.Descriptor instead.
+func (*GetRootsResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetRootsResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *GetRootsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *GetRootsResponse) GetRoots() []string {
+	if x != nil {
+		return x.Roots
+	}
+	return nil
+}
+
 var File_api_metaserver_metaserver_proto protoreflect.FileDescriptor
 
 const file_api_metaserver_metaserver_proto_rawDesc = "" +
@@ -240,17 +352,25 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\x05users\x18\x02 \x03(\tR\x05users\"L\n" +
 	"\x1aRegisterFileServerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"%\n" +
-	"\x0fNavigateRequest\x12\x12\n" +
-	"\x04user\x18\x02 \x01(\tR\x04user\"\\\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"J\n" +
+	"\x0fNavigateRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1b\n" +
+	"\troot_user\x18\x02 \x01(\tR\brootUser\"\\\n" +
 	"\x10NavigateResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12\x18\n" +
-	"\aaddress\x18\x03 \x01(\tR\aaddress2\xb8\x01\n" +
+	"\aaddress\x18\x03 \x01(\tR\aaddress\"-\n" +
+	"\x0fGetRootsRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\"X\n" +
+	"\x10GetRootsResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x14\n" +
+	"\x05roots\x18\x03 \x03(\tR\x05roots2\xff\x01\n" +
 	"\n" +
 	"MetaServer\x12c\n" +
 	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponse\x12E\n" +
-	"\bNavigate\x12\x1b.metaserver.NavigateRequest\x1a\x1c.metaserver.NavigateResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"
+	"\bNavigate\x12\x1b.metaserver.NavigateRequest\x1a\x1c.metaserver.NavigateResponse\x12E\n" +
+	"\bGetRoots\x12\x1b.metaserver.GetRootsRequest\x1a\x1c.metaserver.GetRootsResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"
 
 var (
 	file_api_metaserver_metaserver_proto_rawDescOnce sync.Once
@@ -264,20 +384,24 @@ func file_api_metaserver_metaserver_proto_rawDescGZIP() []byte {
 	return file_api_metaserver_metaserver_proto_rawDescData
 }
 
-var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*RegisterFileServerRequest)(nil),  // 0: metaserver.RegisterFileServerRequest
 	(*RegisterFileServerResponse)(nil), // 1: metaserver.RegisterFileServerResponse
 	(*NavigateRequest)(nil),            // 2: metaserver.NavigateRequest
 	(*NavigateResponse)(nil),           // 3: metaserver.NavigateResponse
+	(*GetRootsRequest)(nil),            // 4: metaserver.GetRootsRequest
+	(*GetRootsResponse)(nil),           // 5: metaserver.GetRootsResponse
 }
 var file_api_metaserver_metaserver_proto_depIdxs = []int32{
 	0, // 0: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
 	2, // 1: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
-	1, // 2: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
-	3, // 3: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: metaserver.MetaServer.GetRoots:input_type -> metaserver.GetRootsRequest
+	1, // 3: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
+	3, // 4: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
+	5, // 5: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -294,7 +418,7 @@ func file_api_metaserver_metaserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_metaserver_metaserver_proto_rawDesc), len(file_api_metaserver_metaserver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

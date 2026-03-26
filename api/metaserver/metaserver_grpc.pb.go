@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	MetaServer_RegisterFileServer_FullMethodName = "/metaserver.MetaServer/RegisterFileServer"
 	MetaServer_Navigate_FullMethodName           = "/metaserver.MetaServer/Navigate"
+	MetaServer_GetRoots_FullMethodName           = "/metaserver.MetaServer/GetRoots"
 )
 
 // MetaServerClient is the client API for MetaServer service.
@@ -31,6 +32,7 @@ const (
 type MetaServerClient interface {
 	RegisterFileServer(ctx context.Context, in *RegisterFileServerRequest, opts ...grpc.CallOption) (*RegisterFileServerResponse, error)
 	Navigate(ctx context.Context, in *NavigateRequest, opts ...grpc.CallOption) (*NavigateResponse, error)
+	GetRoots(ctx context.Context, in *GetRootsRequest, opts ...grpc.CallOption) (*GetRootsResponse, error)
 }
 
 type metaServerClient struct {
@@ -61,6 +63,16 @@ func (c *metaServerClient) Navigate(ctx context.Context, in *NavigateRequest, op
 	return out, nil
 }
 
+func (c *metaServerClient) GetRoots(ctx context.Context, in *GetRootsRequest, opts ...grpc.CallOption) (*GetRootsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRootsResponse)
+	err := c.cc.Invoke(ctx, MetaServer_GetRoots_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MetaServerServer is the server API for MetaServer service.
 // All implementations must embed UnimplementedMetaServerServer
 // for forward compatibility.
@@ -69,6 +81,7 @@ func (c *metaServerClient) Navigate(ctx context.Context, in *NavigateRequest, op
 type MetaServerServer interface {
 	RegisterFileServer(context.Context, *RegisterFileServerRequest) (*RegisterFileServerResponse, error)
 	Navigate(context.Context, *NavigateRequest) (*NavigateResponse, error)
+	GetRoots(context.Context, *GetRootsRequest) (*GetRootsResponse, error)
 	mustEmbedUnimplementedMetaServerServer()
 }
 
@@ -84,6 +97,9 @@ func (UnimplementedMetaServerServer) RegisterFileServer(context.Context, *Regist
 }
 func (UnimplementedMetaServerServer) Navigate(context.Context, *NavigateRequest) (*NavigateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Navigate not implemented")
+}
+func (UnimplementedMetaServerServer) GetRoots(context.Context, *GetRootsRequest) (*GetRootsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRoots not implemented")
 }
 func (UnimplementedMetaServerServer) mustEmbedUnimplementedMetaServerServer() {}
 func (UnimplementedMetaServerServer) testEmbeddedByValue()                    {}
@@ -142,6 +158,24 @@ func _MetaServer_Navigate_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MetaServer_GetRoots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRootsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetaServerServer).GetRoots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetaServer_GetRoots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetaServerServer).GetRoots(ctx, req.(*GetRootsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MetaServer_ServiceDesc is the grpc.ServiceDesc for MetaServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -156,6 +190,10 @@ var MetaServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Navigate",
 			Handler:    _MetaServer_Navigate_Handler,
+		},
+		{
+			MethodName: "GetRoots",
+			Handler:    _MetaServer_GetRoots_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

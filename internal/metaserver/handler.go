@@ -63,12 +63,12 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 // Navigate client to the appropriate file server based on user
 func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*pb.NavigateResponse, error) {
-	log.Printf("[METASERVER] Navigate request for user: %s", req.User)
+	log.Printf("[METASERVER] Navigate request for user: %s", req.RootUser)
 	
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
-	user := req.User
+	user := req.RootUser
 	fs, exists := h.MetaServer.users[user]
 	if !exists {
 		log.Printf("[METASERVER] New user %s, assigning to least loaded FS", user)

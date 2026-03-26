@@ -20,8 +20,8 @@ func main() {
 	port := flag.Int("port", 50052, "Port to listen on")
 	rootDir := flag.String("data", "./fileserver_data", "Data directory")
 	// metaserver is the meta server's host:port; leave empty to skip registration.
-	msAddr := flag.String("meta_addr", "", "Meta server address (e.g. 127.0.0.1:50052)")
-	ownIp := flag.String("own_ip", "", "Own IP to advertise to meta server (e.g. 127.0.0.1:50051)")
+	msAddr := flag.String("meta_addr", "127.0.0.1:50051", "Meta server address (e.g. 127.0.0.1:50052)")
+	ownIp := flag.String("own_ip", "127.0.0.1", "Own IP to advertise to meta server (e.g. 127.0.0.1)")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: true)")
 	flag.Parse()
 

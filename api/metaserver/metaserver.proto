@@ -15,7 +15,8 @@ message RegisterFileServerResponse {
 }
 
 message NavigateRequest {
-  string user = 2;
+  string username = 1;
+  string root_user = 2;
 }
 
 message NavigateResponse {
@@ -24,8 +25,19 @@ message NavigateResponse {
   string address = 3; // address of the file server to connect to
 }
 
+message GetRootsRequest {
+  string username = 1;
+}
+
+message GetRootsResponse {
+  bool success = 1;
+  string error = 2;
+  repeated string roots = 3;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
   rpc Navigate(NavigateRequest) returns (NavigateResponse);
+  rpc GetRoots(GetRootsRequest) returns (GetRootsResponse);
 }

@@ -34,7 +34,7 @@ func main() {
 
 	// If metaserver flag is set, navigate to the appropriate file server based on the username
 	if *metaserver {
-		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port, *username)
+		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port, *username, *root_user)
 		if err != nil {
 			log.Fatalf("Failed to navigate to file server: %v", err)
 		}
