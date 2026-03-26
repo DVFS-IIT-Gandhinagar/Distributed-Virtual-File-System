@@ -14,9 +14,9 @@
 - [x] Implement trash and restore for recycle bin - @ShardulJunagade
 - [x] Client Side Caching - @Reckadon
 - [x] TLS handshake @jsmaskeen
+- [x] Implement storage quotas - @Reckadon
 - [ ] Implement crash recovery for MDS - @ShardulJunagade
 - [ ] Implement heartbeat - @ShardulJunagade
-- [ ] Implement storage quotas - @Reckadon
 - [ ] Implement authentication of users - @Reckadon
 - [ ] sharing phase-1 - @Umang-Shikarvar
 - [ ] chunked upload/download + read_at @jsmaskeen

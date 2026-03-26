@@ -293,6 +293,15 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 		}, nil
 	}
 
+	err := h.fileServer.checkStorageQuota(req.RootUser) // check if user has exceeded storage quota before allowing upload
+	if err != nil {
+		log.Println(err)
+		return &pb.CreateFileResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
 	if strings.Contains(req.Name, "/") || strings.Contains(req.Name, "\\") {
 		log.Printf("CreateFile: error - nested paths are not supported")
 		return &pb.CreateFileResponse{

@@ -178,7 +178,7 @@ func (c *CacheHandler) Download(s string) error {
 }
 
 func (c *CacheHandler) Upload(s string) error {
-	// create a new file node in the cache for the uploaded file, with contentCached set to true since we're uploading from local file (which is now the source of truth for the file content)
+	// create a new file node in the cache for the uploaded file
 	// extract file name from path 
 	fileName := filepath.Base(s)
 	// exctract file size from local file info
