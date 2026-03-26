@@ -12,11 +12,20 @@ func main() {
 	// Client configuration
 	username := flag.String("username", "romit", "enter username")
 	ip_addr := flag.String("ip_addr", "127.0.0.1", "enter ip_addr for mds/fs")
-	port := flag.String("port", "50051", "enter port for mds/fs")
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
+	port := flag.String("port", "", "enter port for mds/fs")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+
 	flag.Parse()
 
+	if *port == "" { 
+		if *metaserver { 
+			*port = "50051" 
+		} else {
+			*port = "50052" 
+		}
+	}
+	
 	// Create and connect client
 	c := client.NewClient(*username, *useTLS)
 
