@@ -27,9 +27,9 @@ enum InodeType {
 // === File Operations ===
 message CreateFileRequest {
   string name = 1;
-  string user = 2;
-  FID fid = 3;
-  InodeType type = 4;
+  FID fid = 2;
+  InodeType type = 3;
+  string root_user = 4;
 }
 
 message CreateFileResponse {
@@ -40,8 +40,7 @@ message CreateFileResponse {
 
 message OpenFileRequest {
   FID fid = 1;
-  string user = 2;
-  string client_id = 3; // for callbacks
+  string client_id = 2; // for callbacks
 }
 
 message OpenFileResponse {
@@ -56,7 +55,6 @@ message ReadFileRequest {
   string name = 2;
   uint64 offset = 3;
   uint64 length = 4;
-  string user = 5;
 }
 
 message ReadFileResponse {
@@ -70,7 +68,6 @@ message WriteFileRequest {
   string name = 2;
   uint64 offset = 3;
   bytes data = 4;
-  string user = 5;
 }
 
 message WriteFileResponse {
@@ -81,8 +78,7 @@ message WriteFileResponse {
 
 message CloseFileRequest {
   FID fid = 1;
-  string user = 2;
-  string client_id = 3;
+  string client_id = 2;
 }
 
 message CloseFileResponse {
@@ -92,8 +88,8 @@ message CloseFileResponse {
 
 message DeleteFileRequest {
   FID fid = 1;
-  string user = 2;
-  bool recursive = 3; // if true, allows deletion of non-empty directories
+  bool recursive = 2; // if true, allows deletion of non-empty directories
+  string root_user = 3;
 }
 
 message DeleteFileResponse {
@@ -104,8 +100,8 @@ message DeleteFileResponse {
 // Move a file/directory to the user's trash (soft delete)
 message TrashFileRequest {
   FID fid = 1;
-  string user = 2;
-  bool recursive = 3; // if true, allows trashing non-empty directories
+  bool recursive = 2; // if true, allows trashing non-empty directories
+  string root_user = 3;
 }
 
 message TrashFileResponse {
@@ -117,7 +113,7 @@ message TrashFileResponse {
 // Restore a file/directory from trash back to its original location
 message RestoreFileRequest {
   FID fid = 1;
-  string user = 2;
+  string root_user = 2;
 }
 
 message RestoreFileResponse {
@@ -128,7 +124,6 @@ message RestoreFileResponse {
 
 message GetAttrRequest {
   FID fid = 1;
-  string user = 2;
 }
 
 message GetAttrResponse {
@@ -142,7 +137,7 @@ message GetAttrResponse {
 
 message PathRequest {
   FID fid = 1;
-  string user = 2;
+  string root_user = 2;
 }
 
 message PathResponse {
@@ -165,7 +160,6 @@ message ChangeDirResponse {
 
 message ListDirRequest {
   FID fid = 1;
-  string user = 2;
 }
 
 message DirEntry {
@@ -184,7 +178,6 @@ message ListDirResponse {
 message LookupRequest {
   FID parent_fid = 1;
   string name = 2;
-  string user = 3;
 }
 
 message LookupResponse {
@@ -209,7 +202,6 @@ message UploadFileResponse {
 message DownloadFileRequest {
   FID parentFid = 1;
   string name = 2;
-  string user = 3;
 }
 
 message DownloadFileResponse {
@@ -219,10 +211,33 @@ message DownloadFileResponse {
   bytes chunk = 4;
 }
 
+message ShareRequest {
+  string username = 1; // username for access control
+  string root_user = 2; // username of root which client is using
+  string share_with = 3; // username of the user to share with
+}
+
+message ShareResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message UnshareRequest {
+  string username = 1; // username for access control
+  string root_user = 2; // username of root which client is using
+  string share_with = 3; // username of the user to share with
+}
+
+message UnshareResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 message RegisterClientRequest {
   string client_id = 1;
   string callback_address = 2; // host:port for callbacks
-  string username = 3; // user's name for creating user directory
+  string username = 3; // username for access control
+  string root_user = 4; // username of root which client is using
 }
 
 message RegisterClientResponse {
@@ -249,6 +264,8 @@ service FileServer {
   rpc ChangeDir(ChangeDirRequest) returns (ChangeDirResponse);
   rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse);
+  rpc Share(ShareRequest) returns (ShareResponse);
+  rpc Unshare(UnshareRequest) returns (UnshareResponse);
 }
 
 // To build these run: make proto

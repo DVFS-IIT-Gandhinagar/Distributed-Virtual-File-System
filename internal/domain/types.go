@@ -89,11 +89,32 @@ type Inode struct {
 	Type     InodeType
 	Name     string
 	OSPath   string
-	Owner    string
+	ACL      ACL
 	Children []*FID // for directories
 	Size     uint64 // for files
 	Parent	*Inode
 }
+
+// Access Control List
+type ACL struct {
+    Owner string   // user who owns this root
+	Shared []string
+    // Read  []string // users with read-only access
+    // Write []string // users with full access
+}
+
+// func (a *ACL) CanRead(user string) bool {
+//     if a.Owner == user { return true }
+//     for _, u := range a.Read  { if u == user { return true } }
+//     for _, u := range a.Write { if u == user { return true } } // write ⊃ read
+//     return false
+// }
+
+// func (a *ACL) CanWrite(user string) bool {
+//     if a.Owner == user { return true }
+//     for _, u := range a.Write { if u == user { return true } }
+//     return false
+// }
 
 // Represents a fileserver stores add and usercount
 type FileServerInfo struct {

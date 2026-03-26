@@ -11,6 +11,7 @@ import (
 func main() {
 	// Client configuration
 	username := flag.String("username", "romit", "enter username")
+	root_user := flag.String("root_user", "root", "enter root username for access control")
 	ip_addr := flag.String("ip_addr", "127.0.0.1", "enter ip_addr for mds/fs")
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
 	port := flag.String("port", "", "enter port for mds/fs")
@@ -27,7 +28,7 @@ func main() {
 	}
 	
 	// Create and connect client
-	c := client.NewClient(*username, *useTLS)
+	c := client.NewClient(*username, *root_user, *useTLS)
 
 	serverAddress := fmt.Sprintf("%s:%s", *ip_addr, *port)
 
