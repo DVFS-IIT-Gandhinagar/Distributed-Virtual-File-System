@@ -400,7 +400,12 @@ func recursiveDelete(node *CNode) {
 }
 
 func (c *CacheHandler) ClearCache() {
-	// remove all cached files in the cache directory
+	// Check if cache directory exists before attempting to read it
+	if _, err := os.Stat(CacheDir); os.IsNotExist(err) {
+		return // silently return if cache directory doesn't exist
+	}
+	
+	// Existing logic continues unchanged
 	files, err := os.ReadDir(CacheDir)
 	if err != nil {
 		log.Printf("Error reading cache directory: %v", err)
