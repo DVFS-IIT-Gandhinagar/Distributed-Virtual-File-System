@@ -992,14 +992,270 @@ Every user always has access to their own root (their username appears in the ro
 - None (feature uses existing infrastructure)
 
 **Modified Components**:
-- api/metaserver/metaserver.proto (added GetRoots, RootShare, RootUnshare RPCs; modified Navigate)
+- api/metaserver/metaserver.proto (added GetRoots, RootShare, RootUnshare RPCs; modified Navigate; added UserACL message for registration)
 - internal/metaserver/metaserver.go (added shared map to MetaServer struct)
-- internal/metaserver/handler.go (implemented GetRoots, RootShare, RootUnshare, updated Navigate)
-- internal/fileserver/fileserver.go (added msAddr field, updated Share/Unshare to call metaserver)
-- internal/fileserver/msclient.go (added RootShare, RootUnshare, RegisterWithMetaServer methods)
+- internal/metaserver/handler.go (implemented GetRoots, RootShare, RootUnshare, updated Navigate; added ACL processing in RegisterFileServer)
+- internal/fileserver/fileserver.go (added msAddr field, updated Share/Unshare to call metaserver and persist ACLs)
+- internal/fileserver/aclstore.go (NEW: ACL persistence layer with SaveACL/LoadACL methods)
+- internal/fileserver/filescanner.go (modified to load ACLs during startup)
+- internal/fileserver/msclient.go (added RootShare, RootUnshare, RegisterWithMetaServer methods; updated registration to send ACL data)
 - internal/client/client.go (added SetRootUser method)
 - internal/client/msclient.go (added GetRoots, NavigateToFileServer methods)
 - cmd/client/main.go (added root selection flow with GetRoots and user prompt)
+
+## ACL Persistence and Crash Recovery
+
+### Overview
+
+To ensure sharing relationships survive fileserver crashes, ACLs are persisted to disk and automatically recovered on restart. The fileserver is the authoritative source for ACL data, and it communicates the complete ACL state to the metaserver during registration.
+
+### ACL Persistence Mechanism
+
+**Storage Format**:
+- ACLs are stored as JSON files in each user's root directory
+- File location: `{rootDir}/{username}/.acl`
+- File format:
+  ```json
+  {
+    "owner": "romit",
+    "shared": ["umang", "jaskirat"]
+  }
+  ```
+
+**Atomic Writes**:
+- ACLs are written to a temporary file (`.acl.tmp`) first
+- Atomic rename to final location (`.acl`) prevents corruption
+- Either old or new ACL exists, never partial/corrupted data
+
+**When ACLs are Persisted**:
+1. After successful Share operation (adds user to shared list)
+2. After successful Unshare operation (removes user from shared list)
+3. Persistence failures are logged but don't block the operation (in-memory ACL is updated)
+
+### Crash Recovery Flow
+
+```mermaid
+sequenceDiagram
+    participant FileServer
+    participant Disk
+    participant MetaServer
+    
+    Note over FileServer: FileServer starts after crash
+    FileServer->>Disk: Scan filesystem
+    loop For each user directory
+        FileServer->>Disk: LoadACL(username)
+        Disk-->>FileServer: ACL{owner, shared[]}
+        FileServer->>FileServer: Create root inode with loaded ACL
+    end
+    
+    FileServer->>FileServer: Collect all users and ACLs
+    FileServer->>MetaServer: RegisterWithMetaServer(users, acls)
+    Note over MetaServer: Process ACL data
+    loop For each UserACL
+        MetaServer->>MetaServer: Add to shared map
+        Note over MetaServer: shared[user] += root_owner
+    end
+    MetaServer-->>FileServer: success
+    
+    Note over FileServer,MetaServer: System fully recovered
+```
+
+### Key Components
+
+**Component 1: ACL Store (internal/fileserver/aclstore.go)**
+
+```go
+// SaveACL persists the ACL to disk in the user's root directory
+func (fs *FileServer) SaveACL(username string, acl domain.ACL) error
+
+// LoadACL loads the ACL from disk for a user's root directory
+// Returns default ACL (owner only, no shared users) if file doesn't exist
+func (fs *FileServer) LoadACL(username string) (domain.ACL, error)
+```
+
+**Responsibilities**:
+- Serialize ACL to JSON format
+- Write ACL to `.acl` file using atomic write pattern
+- Read ACL from `.acl` file during startup
+- Handle missing/corrupted ACL files gracefully (return default ACL)
+
+**Component 2: FileScanner (Modified)**
+
+```go
+type FileScanner struct {
+    rootDir  string
+    serverID string
+    fs       *FileServer  // Reference to FileServer for ACL loading
+}
+```
+
+**Changes**:
+- Added FileServer reference to access LoadACL method
+- Modified loadExistingData to load ACL for each user during scan
+- Logs ACL information during startup
+- Uses default ACL if loading fails (graceful degradation)
+
+**Component 3: RegisterWithMetaServer (Modified)**
+
+```go
+func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
+    // Collect users and their ACLs
+    for username, rootFID := range fs.users {
+        rootInode := fs.inodes[rootFID.String()]
+        userACL := &mspb.UserACL{
+            Username: username,
+            Shared:   rootInode.ACL.Shared,
+        }
+        acls = append(acls, userACL)
+    }
+    
+    // Send registration with ACL data
+    client.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
+        Address: selfAddr,
+        Users:   users,
+        Acls:    acls,  // Include ACL information
+    })
+}
+```
+
+**Responsibilities**:
+- Collect ACL information for all users during registration
+- Send ACL data to metaserver in single RPC call
+- Metaserver uses this data to rebuild its `shared` map
+
+**Component 4: MetaServer Handler (Modified)**
+
+```go
+func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFileServerRequest) (*pb.RegisterFileServerResponse, error) {
+    // ... existing user registration logic ...
+    
+    // Process ACL data to rebuild shared map
+    for _, userACL := range req.Acls {
+        username := userACL.Username
+        
+        // For each user in the shared list, add this username to their available roots
+        for _, sharedWith := range userACL.Shared {
+            if h.MetaServer.shared[sharedWith] == nil {
+                h.MetaServer.shared[sharedWith] = []string{}
+            }
+            
+            // Add username to sharedWith's available roots
+            if !contains(h.MetaServer.shared[sharedWith], username) {
+                h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], username)
+            }
+        }
+    }
+}
+```
+
+**Responsibilities**:
+- Process ACL data from registration request
+- Rebuild `shared` map from ACL information
+- Ensure no duplicate entries in shared lists
+- Log ACL data received for debugging
+
+### Error Handling
+
+**Scenario 1: ACL File Missing**
+- **When**: First time user is created, or after migration
+- **Action**: Return default ACL (owner only, empty shared list)
+- **Impact**: No error, system continues normally
+
+**Scenario 2: ACL File Corrupted**
+- **When**: JSON parsing fails
+- **Action**: Log error, return default ACL
+- **Impact**: Sharing relationships lost for that user (requires re-sharing)
+
+**Scenario 3: Disk Write Failure (SaveACL)**
+- **When**: Disk full, permissions issue, etc.
+- **Action**: Log warning, continue with in-memory ACL
+- **Impact**: ACL not persisted, will be lost on crash (but current session works)
+
+**Scenario 4: Disk Read Failure (LoadACL)**
+- **When**: Permissions issue, file system error
+- **Action**: Log error, return default ACL
+- **Impact**: Sharing relationships lost for that user
+
+### Benefits of This Approach
+
+1. **Single RPC Call**: Instead of N+1 calls (1 registration + N share notifications), all ACL data is sent in one request
+2. **Atomic State Transfer**: Metaserver gets complete state in one operation
+3. **Simpler Implementation**: No separate recovery method needed
+4. **Better Performance**: Especially on restart with many users
+5. **Authoritative Source**: Fileserver remains authoritative for ACLs
+6. **Graceful Degradation**: Missing/corrupted ACL files don't prevent startup
+
+### Correctness Properties
+
+**Property 7: ACL Persistence Correctness**
+```
+∀ share operation S:
+  Let ACL_mem = in-memory ACL after S
+  Let ACL_disk = persisted ACL after S
+  Then ACL_mem = ACL_disk
+```
+
+After a successful Share operation, the persisted ACL matches the in-memory ACL.
+
+**Property 8: ACL Recovery Correctness**
+```
+∀ user U:
+  Let ACL_before = persisted ACL before restart
+  Let ACL_after = loaded ACL after restart
+  Then ACL_before = ACL_after
+```
+
+After fileserver restart, the loaded ACL matches the persisted ACL.
+
+**Property 9: Share Recovery Completeness**
+```
+∀ user U with ACL.Shared = [u1, u2, ..., un]:
+  After restart and RegisterWithMetaServer():
+    metaserver.shared[u1] contains U
+    metaserver.shared[u2] contains U
+    ...
+    metaserver.shared[un] contains U
+```
+
+After fileserver restart, all sharing relationships are restored in the metaserver.
+
+### Testing Strategy for Crash Recovery
+
+**Integration Test 1: Share and Restart**
+1. Start fileserver
+2. User romit shares root with umang
+3. Verify `.acl` file exists with correct content
+4. Stop fileserver
+5. Restart fileserver
+6. Verify romit's ACL includes umang (loaded from disk)
+7. Verify metaserver's shared map includes romit in umang's roots
+8. Verify umang can access romit's root
+
+**Integration Test 2: Multiple Shares and Restart**
+1. Start fileserver
+2. Romit shares with umang and jaskirat
+3. Jaskirat shares with umang
+4. Stop fileserver
+5. Restart fileserver
+6. Verify all ACLs are loaded correctly
+7. Verify metaserver's shared map is rebuilt
+8. Verify all users can access shared roots
+
+**Integration Test 3: Unshare and Restart**
+1. Start fileserver with existing shares
+2. Romit unshares with umang
+3. Verify `.acl` file is updated
+4. Stop fileserver
+5. Restart fileserver
+6. Verify umang is not in romit's ACL
+7. Verify umang cannot access romit's root
+
+**Integration Test 4: Corrupted ACL File**
+1. Create user directory with corrupted `.acl` file
+2. Start fileserver
+3. Verify fileserver logs error
+4. Verify default ACL is used
+5. Verify fileserver continues to operate
 
 ## Implementation Notes
 
@@ -1023,11 +1279,20 @@ Every user always has access to their own root (their username appears in the ro
 4. ✅ Update CLI (cmd/client/main.go) to display available roots and prompt user
 5. ✅ Integrate root selection flow with metaserver navigation
 
-**Phase 4: Testing & Validation** 🔄 IN PROGRESS
+**Phase 4: ACL Persistence & Crash Recovery** ✅ COMPLETED
+1. ✅ Implement ACL persistence to disk (SaveACL/LoadACL in aclstore.go)
+2. ✅ Modify FileScanner to load ACLs during startup
+3. ✅ Update Share/Unshare to persist ACLs after changes
+4. ✅ Modify RegisterWithMetaServer to send ACL data during registration
+5. ✅ Update MetaServer handler to rebuild shared map from ACL data
+6. ✅ Add logging for ACL operations (fileserver and metaserver)
+
+**Phase 5: Testing & Validation** 🔄 IN PROGRESS
 1. ⏳ Unit tests for all new functions
 2. ⏳ Integration tests for end-to-end flows
 3. ⏳ Property-based tests for correctness properties
 4. ⏳ Performance testing with multiple users and fileservers
+5. ⏳ Crash recovery testing (restart fileserver and verify ACLs restored)
 
 ## Migration Strategy
 
