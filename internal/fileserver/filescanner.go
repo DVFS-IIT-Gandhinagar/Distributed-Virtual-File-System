@@ -10,9 +10,10 @@ import (
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
 
-type FileScanner struct{
-	rootDir string
+type FileScanner struct {
+	rootDir  string
 	serverID string
+	fs       *FileServer // Reference to FileServer for ACL loading
 }
 
 // loadExistingData scans the root directory and creates inodes for existing files and directories
@@ -29,12 +30,34 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 	for _, entry := range entries {
 		if entry.IsDir() {
 			userWaitGroup.Add(1)
-			
+
 			go func() error {
 				defer userWaitGroup.Done()
 
 				username := entry.Name()
 				userDir := filepath.Join(scanner.rootDir, username)
+
+				// Load ACL from disk (or use default if not found)
+				var ACL domain.ACL
+				if scanner.fs != nil {
+					loadedACL, err := scanner.fs.LoadACL(username)
+					if err != nil {
+						fmt.Printf("Warning: failed to load ACL for user %s: %v, using default ACL\n", username, err)
+						ACL = domain.ACL{
+							Owner:  username,
+							Shared: []string{},
+						}
+					} else {
+						ACL = loadedACL
+						fmt.Printf("Loaded ACL for user %s: owner=%s, shared=%v\n", username, ACL.Owner, ACL.Shared)
+					}
+				} else {
+					// Fallback if fs is nil
+					ACL = domain.ACL{
+						Owner:  username,
+						Shared: []string{},
+					}
+				}
 
 				// Create root inode for this user (always inode ID 0)
 				userRootFID := &domain.FID{
@@ -44,11 +67,6 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 				}
 				atomic.AddUint64(nextInodeID, 1)
 				(*users)[username] = userRootFID
-				
-				ACL := domain.ACL{
-					Owner:  username,
-					Shared: []string{},
-				}
 
 				// Create root inode
 				userRootInode := &domain.Inode{
@@ -56,7 +74,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 					Type:     domain.InodeTypeDirectory,
 					Name:     username,
 					OSPath:   userDir,
-					ACL:    ACL,
+					ACL:      ACL,
 					Children: make([]*domain.FID, 0),
 				}
 
@@ -77,7 +95,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 		}
 	}
 	userWaitGroup.Wait() // wait for all user scanning goroutines to finish before returning
-	
+
 	return nil
 }
 
@@ -123,7 +141,7 @@ func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domai
 				Type:   inodeType,
 				Name:   entry.Name(),
 				OSPath: itemPath,
-				ACL:  parentInode.ACL, // Same as parent (user)
+				ACL:    parentInode.ACL, // Same as parent (user)
 				Parent: parentInode,
 			}
 
@@ -158,7 +176,7 @@ func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domai
 
 // calculate total size of each user directory inside rootInode by summing sizes of all files and directories under it
 func (scanner *FileScanner) calculateDirectorySizes(rootInode *domain.Inode, inodes *map[string]*domain.Inode) (uint64, error) {
-	var	calculateSize func(inode *domain.Inode) (uint64, error)  // recursive function to calculate size of a directory by summing sizes of its children
+	var calculateSize func(inode *domain.Inode) (uint64, error) // recursive function to calculate size of a directory by summing sizes of its children
 
 	calculateSize = func(inode *domain.Inode) (uint64, error) {
 		if inode.Type == domain.InodeTypeFile {

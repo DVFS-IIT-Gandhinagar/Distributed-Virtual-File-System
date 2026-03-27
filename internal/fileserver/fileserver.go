@@ -22,7 +22,7 @@ type FileServer struct {
 	mu          sync.RWMutex
 	useTLS      bool
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
-	msAddr		string
+	msAddr      string
 }
 
 type trashEntry struct {
@@ -43,27 +43,27 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileS
 		nextInodeID: 0,
 		useTLS:      useTLS,
 		trashMeta:   make(map[string]trashEntry),
-		msAddr: 	msAddr,
+		msAddr:      msAddr,
 	}
-	
+
 	// Check if rootDir already exists
 	if _, err := os.Stat(rootDir); err == nil {
 		// Root directory exists, scan and load existing data using FileScanner
-		fileScanner := &FileScanner{rootDir: rootDir, serverID: serverID}
-		
+		fileScanner := &FileScanner{rootDir: rootDir, serverID: serverID, fs: fs}
+
 		if err := fileScanner.loadExistingData(&fs.nextInodeID, &fs.inodes, &fs.users); err != nil {
 			return nil, fmt.Errorf("failed to load existing data: %w", err)
 		}
-		
+
 		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
-		
-		} else {
+
+	} else {
 		// Root directory doesn't exist, create it
 		if err := os.MkdirAll(rootDir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create root dir: %w", err)
 		}
 	}
-	
+
 	return fs, nil
 }
 
@@ -71,7 +71,7 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileS
 func (fs *FileServer) GetUserRoot(root_user string) (*domain.FID, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	
+
 	// If user already exists, ensure trash directory exists and return.
 	if rootFID := fs.users[root_user]; rootFID != nil {
 		if _, err := fs.getOrCreateTrashDirLocked(root_user); err != nil {
@@ -85,19 +85,19 @@ func (fs *FileServer) GetUserRoot(root_user string) (*domain.FID, error) {
 	if err := os.MkdirAll(userDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create user dir: %w", err)
 	}
-	
+
 	// Create root FID for user
 	rootFID := &domain.FID{
 		FileServerID:     fs.serverID,
 		InodeID:          fs.nextInodeID,
 		GenerationNumber: 1,
 	}
-	
+
 	ACL := domain.ACL{
 		Owner:  root_user,
 		Shared: []string{},
 	}
-	
+
 	// Create root inode
 	rootInode := &domain.Inode{
 		FID:      rootFID,
@@ -107,9 +107,9 @@ func (fs *FileServer) GetUserRoot(root_user string) (*domain.FID, error) {
 		ACL:      ACL,
 		Children: make([]*domain.FID, 0),
 	}
-	
+
 	rootInode.Parent = rootInode
-	
+
 	fs.inodes[rootFID.String()] = rootInode
 	fs.users[root_user] = rootFID
 
@@ -119,7 +119,7 @@ func (fs *FileServer) GetUserRoot(root_user string) (*domain.FID, error) {
 	if _, err := fs.getOrCreateTrashDirLocked(root_user); err != nil {
 		return nil, err
 	}
-	
+
 	return rootFID, nil
 }
 
@@ -132,14 +132,14 @@ func (fs *FileServer) getOrCreateTrashDirLocked(root_user string) (*domain.Inode
 	if !ok {
 		return nil, fmt.Errorf("internal error: root inode not found")
 	}
-	
+
 	if child, err := fs.GetChildInodeByName(rootInode, trashDirName); err == nil {
 		if child.Type != domain.InodeTypeDirectory {
 			return nil, fmt.Errorf("internal error: %s exists but is not a directory", trashDirName)
 		}
 		return child, nil
 	}
-	
+
 	trashPath := filepath.Join(rootInode.OSPath, trashDirName)
 	if err := os.MkdirAll(trashPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create trash directory: %w", err)
@@ -151,12 +151,12 @@ func (fs *FileServer) getOrCreateTrashDirLocked(root_user string) (*domain.Inode
 		GenerationNumber: 1,
 	}
 	atomic.AddUint64(&fs.nextInodeID, 1)
-	
+
 	ACL := domain.ACL{
 		Owner:  root_user,
 		Shared: []string{},
 	}
-	
+
 	trashInode := &domain.Inode{
 		FID:      trashFID,
 		Type:     domain.InodeTypeDirectory,
@@ -166,7 +166,7 @@ func (fs *FileServer) getOrCreateTrashDirLocked(root_user string) (*domain.Inode
 		Children: make([]*domain.FID, 0),
 		Parent:   rootInode,
 	}
-	
+
 	fs.inodes[trashFID.String()] = trashInode
 	rootInode.Children = append(rootInode.Children, trashFID)
 	return trashInode, nil
@@ -216,7 +216,7 @@ func (fs *FileServer) isUnderTrashLocked(inode *domain.Inode, root_user string) 
 	if err != nil {
 		return false
 	}
-	
+
 	for n := inode; n != nil; n = n.Parent {
 		if n.FID != nil && n.FID.String() == trashInode.FID.String() {
 			return true
@@ -248,16 +248,16 @@ func (fs *FileServer) updateSubtreePathsLocked(inode *domain.Inode, newOSPath st
 func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive bool) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	
+
 	if fid == nil {
 		return "", fmt.Errorf("invalid FID: cannot be nil")
 	}
-	
+
 	inode, err := fs.GetInode(fid)
 	if err != nil {
 		return "", fmt.Errorf("file not found: %s", fid.String())
 	}
-	
+
 	// Prevent trashing root and the trash directory itself.
 	if rootFID, exists := fs.users[root_user]; exists && rootFID.String() == fid.String() {
 		return "", fmt.Errorf("cannot trash user root directory")
@@ -265,11 +265,11 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 	if fs.isTrashDirForUser(inode, root_user) {
 		return "", fmt.Errorf("cannot trash the trash directory")
 	}
-	
+
 	if err := fs.validateDeletePermissions(inode, root_user, recursive); err != nil {
 		return "", err
 	}
-	
+
 	trashInode, err := fs.getOrCreateTrashDirLocked(root_user)
 	if err != nil {
 		return "", err
@@ -277,10 +277,10 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 	if inode.Parent != nil && inode.Parent.FID.String() == trashInode.FID.String() {
 		return "", fmt.Errorf("inode is already in trash")
 	}
-	
+
 	finalName := fs.uniqueNameInDirLocked(trashInode, inode.Name, inode.FID.InodeID)
 	newPath := filepath.Join(trashInode.OSPath, finalName)
-	
+
 	// OS move first; on failure, keep memory untouched.
 	if err := os.Rename(inode.OSPath, newPath); err != nil {
 		return "", fmt.Errorf("failed to move to trash: %w", err)
@@ -292,16 +292,16 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 		origParent = inode.Parent.FID.String()
 	}
 	fs.trashMeta[fid.String()] = trashEntry{originalParentFID: origParent, originalName: inode.Name}
-	
+
 	if err := fs.removeFromParent(inode); err != nil {
 		log.Printf("Warning: failed to unlink from parent during trash: %v", err)
 	}
-	
+
 	inode.Parent = trashInode
 	inode.Name = finalName
 	trashInode.Children = append(trashInode.Children, inode.FID)
 	fs.updateSubtreePathsLocked(inode, newPath)
-	
+
 	return finalName, nil
 }
 
@@ -309,7 +309,7 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	
+
 	if fid == nil {
 		return "", fmt.Errorf("invalid FID: cannot be nil")
 	}
@@ -321,7 +321,7 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, er
 	if inode.ACL.Owner != root_user {
 		return "", fmt.Errorf("permission denied: user '%s' does not own '%s'", root_user, inode.Name)
 	}
-	
+
 	trashInode, err := fs.getOrCreateTrashDirLocked(root_user)
 	if err != nil {
 		return "", err
@@ -329,7 +329,7 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, er
 	if inode.Parent == nil || inode.Parent.FID.String() != trashInode.FID.String() {
 		return "", fmt.Errorf("inode is not in trash")
 	}
-	
+
 	meta, ok := fs.trashMeta[fid.String()]
 	if !ok {
 		return "", fmt.Errorf("restore metadata not available (try restoring before restarting the server)")
@@ -356,23 +356,23 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, er
 	if targetParent.Type != domain.InodeTypeDirectory {
 		return "", fmt.Errorf("internal error: restore target is not a directory")
 	}
-	
+
 	finalName := fs.uniqueNameInDirLocked(targetParent, meta.originalName, inode.FID.InodeID)
 	newPath := filepath.Join(targetParent.OSPath, finalName)
-	
+
 	if err := os.Rename(inode.OSPath, newPath); err != nil {
 		return "", fmt.Errorf("failed to restore from trash: %w", err)
 	}
-	
+
 	if err := fs.removeFromParent(inode); err != nil {
 		log.Printf("Warning: failed to unlink from trash during restore: %v", err)
 	}
-	
+
 	inode.Parent = targetParent
 	inode.Name = finalName
 	targetParent.Children = append(targetParent.Children, inode.FID)
 	fs.updateSubtreePathsLocked(inode, newPath)
-	
+
 	delete(fs.trashMeta, fid.String())
 	return finalName, nil
 }
@@ -383,14 +383,14 @@ func (fs *FileServer) GetInode(fid *domain.FID) (*domain.Inode, error) {
 	if !exists {
 		return nil, fmt.Errorf("inode not found, %s", fid.String())
 	}
-	
+
 	// Update size for files
 	if inode.Type == domain.InodeTypeFile {
 		if info, err := os.Stat(inode.OSPath); err == nil {
 			inode.Size = uint64(info.Size())
 		}
 	}
-	
+
 	return inode, nil
 }
 
@@ -400,7 +400,7 @@ func (fs *FileServer) checkStorageQuota(username string) error {
 	if !exists {
 		return fmt.Errorf("user not found: %s", username)
 	}
-	rootInode, exists := fs.inodes[rootFID.String()] 
+	rootInode, exists := fs.inodes[rootFID.String()]
 	if !exists {
 		return fmt.Errorf("internal error: root inode not found for user %s", username)
 	}
@@ -464,6 +464,11 @@ func (fs *FileServer) Share(username string, root_user string, share_with string
 	}
 
 	rootInode.ACL.Shared = append(rootInode.ACL.Shared, share_with)
+	// Persist ACL to disk
+	if err := fs.SaveACL(root_user, rootInode.ACL); err != nil {
+		log.Printf("Warning: failed to persist ACL: %v", err)
+		// Continue anyway - in-memory ACL is updated
+	}
 	fs.RootShare(username, share_with)
 	return nil
 }
@@ -511,6 +516,11 @@ func (fs *FileServer) Unshare(username string, root_user string, unshare_with st
 	}
 
 	rootInode.ACL.Shared = newShared
+	// Persist ACL to disk
+	if err := fs.SaveACL(root_user, rootInode.ACL); err != nil {
+		log.Printf("Warning: failed to persist ACL: %v", err)
+		// Continue anyway - in-memory ACL is updated
+	}
 	fs.RootUnshare(username, unshare_with)
 	return nil
 }

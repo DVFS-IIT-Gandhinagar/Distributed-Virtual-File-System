@@ -4,9 +4,15 @@ package metaserver;
 
 option go_package = "github.com/umangshikarvar/dvfs/api/metaserver";
 
+message UserACL {
+  string username = 1;
+  repeated string shared = 2; // users who have access to this user's root
+}
+
 message RegisterFileServerRequest {
   string address = 1;
   repeated string users = 2;
+  repeated UserACL acls = 3; // ACL information for each user
 }
 
 message RegisterFileServerResponse {

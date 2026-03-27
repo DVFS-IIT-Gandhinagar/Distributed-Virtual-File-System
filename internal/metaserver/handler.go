@@ -8,6 +8,16 @@ import (
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
 
+// helper func
+func contains(slice []string, target string) bool {
+	for _, s := range slice {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
 // GRPCHandler implements the gRPC meta server interface
 type GRPCHandler struct {
 	pb.UnimplementedMetaServerServer
@@ -24,7 +34,7 @@ func NewGRPCHandler(metaServer *MetaServer) *GRPCHandler {
 // RegisterFileServer handles file server registration
 func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFileServerRequest) (*pb.RegisterFileServerResponse, error) {
 	log.Printf("[METASERVER] Registering FS %s with %d users: %v", req.Address, len(req.Users), req.Users)
-	
+
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
@@ -33,7 +43,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 	// Create new file server info
 	fsInfo := &domain.FileServerInfo{
-		Address:  req.Address,
+		Address:   req.Address,
 		UserCount: count,
 	}
 
@@ -45,9 +55,9 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 			log.Printf("[METASERVER] ERROR: User %s already exists in FS %s", u, h.MetaServer.fileservers[fs].Address)
 			return &pb.RegisterFileServerResponse{
 				Success: false,
-				Error: "User " + u + " already exists in file server: " + h.MetaServer.fileservers[fs].Address,
+				Error:   "User " + u + " already exists in file server: " + h.MetaServer.fileservers[fs].Address,
 			}, nil
-		} 
+		}
 	}
 
 	for _, u := range users {
@@ -55,6 +65,26 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		h.MetaServer.shared[u] = []string{}
 	}
 	h.MetaServer.nextFsID++
+
+	// Process ACL data to rebuild shared map
+	log.Printf("[METASERVER] Processing %d ACL entries from registration", len(req.Acls))
+	for _, userACL := range req.Acls {
+		username := userACL.Username
+		log.Printf("[METASERVER] ACL received: user=%s, shared_with=%v", username, userACL.Shared)
+
+		// For each user in the shared list, add this username to their available roots
+		for _, sharedWith := range userACL.Shared {
+			if h.MetaServer.shared[sharedWith] == nil {
+				h.MetaServer.shared[sharedWith] = []string{}
+			}
+
+			// Add username to sharedWith's available roots
+			if !contains(h.MetaServer.shared[sharedWith], username) {
+				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], username)
+				log.Printf("[METASERVER] Added root '%s' to user '%s' available roots", username, sharedWith)
+			}
+		}
+	}
 
 	log.Printf("[METASERVER] FS registered successfully: ID=%d, Address=%s, Users=%d", h.MetaServer.nextFsID-1, req.Address, count)
 	return &pb.RegisterFileServerResponse{
@@ -65,7 +95,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 // Navigate client to the appropriate file server based on user
 func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*pb.NavigateResponse, error) {
 	log.Printf("[METASERVER] Navigate request for user: %s", req.RootUser)
-	
+
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
@@ -73,11 +103,11 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 	root_user := req.RootUser
 	_, exists1 := h.MetaServer.users[user]
 	if !exists1 {
-			log.Printf("[METASERVER] Navigate failed: username '%s' does not exist",req.Username)
-			return &pb.NavigateResponse{
-				Success: false,
-				Error: "username '" + req.Username + "' does not exist",
-			}, nil
+		log.Printf("[METASERVER] Navigate failed: username '%s' does not exist", req.Username)
+		return &pb.NavigateResponse{
+			Success: false,
+			Error:   "username '" + req.Username + "' does not exist",
+		}, nil
 	}
 
 	fs, exists2 := h.MetaServer.users[root_user]
@@ -85,7 +115,7 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 		log.Printf("[METASERVER] Navigate failed: root user '%s' does not exist", req.RootUser)
 		return &pb.NavigateResponse{
 			Success: false,
-			Error: "root user '" + req.RootUser + "' does not exist",
+			Error:   "root user '" + req.RootUser + "' does not exist",
 		}, nil
 	}
 
@@ -104,7 +134,7 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 		log.Printf("[METASERVER] Navigate failed: user '%s' does not have access to root '%s'", user, root_user)
 		return &pb.NavigateResponse{
 			Success: false,
-			Error: "user '" + user + "' does not have access to root '" + root_user + "'",
+			Error:   "user '" + user + "' does not have access to root '" + root_user + "'",
 		}, nil
 	}
 
@@ -118,7 +148,7 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 // Navigate client to the appropriate file server based on user
 func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*pb.GetRootsResponse, error) {
 	log.Printf("[METASERVER] Get roots request for user: %s", req.Username)
-	
+
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
@@ -146,14 +176,14 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 
 	return &pb.GetRootsResponse{
 		Success: true,
-		Roots: root,
+		Roots:   root,
 	}, nil
 }
 
 // Share a root
 func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (*pb.RootShareResponse, error) {
 	log.Printf("[METASERVER] Root share request for user root: %s to share with: %s", req.RootUser, req.ShareWith)
-	
+
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
@@ -166,7 +196,7 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 
 		return &pb.RootShareResponse{
 			Success: false,
-			Error: "root user '%s' does not exist" + req.RootUser,
+			Error:   "root user '%s' does not exist" + req.RootUser,
 		}, nil
 	}
 
@@ -179,7 +209,7 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 
 		return &pb.RootShareResponse{
 			Success: false,
-			Error: "target user '%s' does not exist" + req.ShareWith,
+			Error:   "target user '%s' does not exist" + req.ShareWith,
 		}, nil
 	}
 
@@ -209,7 +239,7 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 // Unshare a root
 func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareRequest) (*pb.RootUnshareResponse, error) {
 	log.Printf("[METASERVER] Root unshare request for user root: %s to unshare with: %s", req.RootUser, req.UnshareWith)
-	
+
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
@@ -222,7 +252,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 
 		return &pb.RootUnshareResponse{
 			Success: false,
-			Error: "root user '%s' does not exist" + req.RootUser,
+			Error:   "root user '%s' does not exist" + req.RootUser,
 		}, nil
 	}
 
@@ -235,7 +265,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 
 		return &pb.RootUnshareResponse{
 			Success: false,
-			Error: "target user '%s' does not exist" + req.UnshareWith,
+			Error:   "target user '%s' does not exist" + req.UnshareWith,
 		}, nil
 	}
 
@@ -251,7 +281,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 
 	if index == -1 {
 		log.Printf(
-			"[METASERVER] Unshare skipped: root '%s' was not shared with '%s'",req.RootUser,req.UnshareWith)
+			"[METASERVER] Unshare skipped: root '%s' was not shared with '%s'", req.RootUser, req.UnshareWith)
 
 		return &pb.RootUnshareResponse{
 			Success: true,
@@ -264,7 +294,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 		sharedRoots[index+1:]...,
 	)
 
-	log.Printf("[METASERVER] Root '%s' successfully unshared from '%s'",req.RootUser,req.UnshareWith)
+	log.Printf("[METASERVER] Root '%s' successfully unshared from '%s'", req.RootUser, req.UnshareWith)
 	return &pb.RootUnshareResponse{
 		Success: true,
 	}, nil
