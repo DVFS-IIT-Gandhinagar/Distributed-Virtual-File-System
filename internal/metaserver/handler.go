@@ -141,7 +141,7 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 	}
 
 	roots := []string{}
-	roots = append(roots, req.Username)
+	roots = append(roots, "mydrive")
 	root := append(roots, h.MetaServer.shared[user]...)
 
 	return &pb.GetRootsResponse{

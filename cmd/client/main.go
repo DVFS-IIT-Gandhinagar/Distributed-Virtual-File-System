@@ -44,11 +44,13 @@ func main() {
 		for _, root := range roots {
 			fmt.Printf("%s\n", root)
 		}
-		fmt.Printf("\n")
 
 		user_root := *root_user
 		fmt.Print("Enter the root you want to access: ")
 		fmt.Scanln(&user_root)
+		if user_root == "mydrive" {
+			user_root = *username
+		}
 		c.SetRootUser(user_root)
 
 		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port)

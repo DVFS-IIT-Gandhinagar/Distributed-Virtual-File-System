@@ -15,10 +15,11 @@
 - [x] Client Side Caching - @Reckadon
 - [x] TLS handshake @jsmaskeen
 - [x] Implement storage quotas - @Reckadon
+- [x] sharing phase-1 - @Umang-Shikarvar
 - [ ] Implement crash recovery for MDS - @ShardulJunagade
 - [ ] Implement heartbeat - @ShardulJunagade
 - [ ] Implement authentication of users - @Reckadon
-- [ ] sharing phase-1 - @Umang-Shikarvar
+- [ ] sharing phase-2 - @Umang-Shikarvar
 - [ ] chunked upload/download + read_at @jsmaskeen
 - [ ] CI - @jsmaskeen
 - [ ] unittests - @jsmaskeen
