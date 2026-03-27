@@ -35,9 +35,31 @@ message GetRootsResponse {
   repeated string roots = 3;
 }
 
+message RootShareRequest {
+  string root_user = 1;
+  string share_with = 2;
+}
+
+message RootShareResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message RootUnshareRequest {
+  string root_user = 1;
+  string unshare_with = 2;
+}
+
+message RootUnshareResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
   rpc Navigate(NavigateRequest) returns (NavigateResponse);
   rpc GetRoots(GetRootsRequest) returns (GetRootsResponse);
+  rpc RootShare(RootShareRequest) returns (RootShareResponse);
+  rpc RootUnshare(RootUnshareRequest) returns (RootUnshareResponse);
 }

@@ -22,6 +22,8 @@ const (
 	MetaServer_RegisterFileServer_FullMethodName = "/metaserver.MetaServer/RegisterFileServer"
 	MetaServer_Navigate_FullMethodName           = "/metaserver.MetaServer/Navigate"
 	MetaServer_GetRoots_FullMethodName           = "/metaserver.MetaServer/GetRoots"
+	MetaServer_RootShare_FullMethodName          = "/metaserver.MetaServer/RootShare"
+	MetaServer_RootUnshare_FullMethodName        = "/metaserver.MetaServer/RootUnshare"
 )
 
 // MetaServerClient is the client API for MetaServer service.
@@ -33,6 +35,8 @@ type MetaServerClient interface {
 	RegisterFileServer(ctx context.Context, in *RegisterFileServerRequest, opts ...grpc.CallOption) (*RegisterFileServerResponse, error)
 	Navigate(ctx context.Context, in *NavigateRequest, opts ...grpc.CallOption) (*NavigateResponse, error)
 	GetRoots(ctx context.Context, in *GetRootsRequest, opts ...grpc.CallOption) (*GetRootsResponse, error)
+	RootShare(ctx context.Context, in *RootShareRequest, opts ...grpc.CallOption) (*RootShareResponse, error)
+	RootUnshare(ctx context.Context, in *RootUnshareRequest, opts ...grpc.CallOption) (*RootUnshareResponse, error)
 }
 
 type metaServerClient struct {
@@ -73,6 +77,26 @@ func (c *metaServerClient) GetRoots(ctx context.Context, in *GetRootsRequest, op
 	return out, nil
 }
 
+func (c *metaServerClient) RootShare(ctx context.Context, in *RootShareRequest, opts ...grpc.CallOption) (*RootShareResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RootShareResponse)
+	err := c.cc.Invoke(ctx, MetaServer_RootShare_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metaServerClient) RootUnshare(ctx context.Context, in *RootUnshareRequest, opts ...grpc.CallOption) (*RootUnshareResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RootUnshareResponse)
+	err := c.cc.Invoke(ctx, MetaServer_RootUnshare_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MetaServerServer is the server API for MetaServer service.
 // All implementations must embed UnimplementedMetaServerServer
 // for forward compatibility.
@@ -82,6 +106,8 @@ type MetaServerServer interface {
 	RegisterFileServer(context.Context, *RegisterFileServerRequest) (*RegisterFileServerResponse, error)
 	Navigate(context.Context, *NavigateRequest) (*NavigateResponse, error)
 	GetRoots(context.Context, *GetRootsRequest) (*GetRootsResponse, error)
+	RootShare(context.Context, *RootShareRequest) (*RootShareResponse, error)
+	RootUnshare(context.Context, *RootUnshareRequest) (*RootUnshareResponse, error)
 	mustEmbedUnimplementedMetaServerServer()
 }
 
@@ -100,6 +126,12 @@ func (UnimplementedMetaServerServer) Navigate(context.Context, *NavigateRequest)
 }
 func (UnimplementedMetaServerServer) GetRoots(context.Context, *GetRootsRequest) (*GetRootsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRoots not implemented")
+}
+func (UnimplementedMetaServerServer) RootShare(context.Context, *RootShareRequest) (*RootShareResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RootShare not implemented")
+}
+func (UnimplementedMetaServerServer) RootUnshare(context.Context, *RootUnshareRequest) (*RootUnshareResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RootUnshare not implemented")
 }
 func (UnimplementedMetaServerServer) mustEmbedUnimplementedMetaServerServer() {}
 func (UnimplementedMetaServerServer) testEmbeddedByValue()                    {}
@@ -176,6 +208,42 @@ func _MetaServer_GetRoots_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MetaServer_RootShare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RootShareRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetaServerServer).RootShare(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetaServer_RootShare_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetaServerServer).RootShare(ctx, req.(*RootShareRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetaServer_RootUnshare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RootUnshareRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetaServerServer).RootUnshare(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetaServer_RootUnshare_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetaServerServer).RootUnshare(ctx, req.(*RootUnshareRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MetaServer_ServiceDesc is the grpc.ServiceDesc for MetaServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -194,6 +262,14 @@ var MetaServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRoots",
 			Handler:    _MetaServer_GetRoots_Handler,
+		},
+		{
+			MethodName: "RootShare",
+			Handler:    _MetaServer_RootShare_Handler,
+		},
+		{
+			MethodName: "RootUnshare",
+			Handler:    _MetaServer_RootUnshare_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

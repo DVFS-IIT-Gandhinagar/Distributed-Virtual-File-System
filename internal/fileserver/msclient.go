@@ -16,8 +16,8 @@ import (
 // server along with all users it currently knows about.
 // selfAddr is the host:port that the meta server should store as this FS's address.
 // If msAddr is empty this is a no-op.
-func (fs *FileServer) RegisterWithMetaServer(msAddr, selfAddr string) error {
-	if msAddr == "" {
+func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
+	if fs.msAddr == "" {
 		return nil
 	}
 
@@ -29,9 +29,9 @@ func (fs *FileServer) RegisterWithMetaServer(msAddr, selfAddr string) error {
 			return fmt.Errorf("failed to append CA certificate")
 		}
 
-		host, _, err := net.SplitHostPort(msAddr)
+		host, _, err := net.SplitHostPort(fs.msAddr)
 		if err != nil {
-			host = msAddr
+			host = fs.msAddr
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
 		opts = append(opts, grpc.WithTransportCredentials(creds))
@@ -39,7 +39,7 @@ func (fs *FileServer) RegisterWithMetaServer(msAddr, selfAddr string) error {
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	conn, err := grpc.NewClient(msAddr, opts...)
+	conn, err := grpc.NewClient(fs.msAddr, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}
@@ -63,6 +63,94 @@ func (fs *FileServer) RegisterWithMetaServer(msAddr, selfAddr string) error {
 	}
 	if !resp.Success {
 		return fmt.Errorf("meta server rejected registration: %s", resp.Error)
+	}
+
+	return nil
+}
+
+func (fs *FileServer) RootShare(root_user, share_with string) error {
+	if fs.msAddr == "" {
+		return nil
+	}
+
+	// Build the same CA-backed TLS config the client uses when talking to FS.
+	var opts []grpc.DialOption
+	if fs.useTLS {
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certs.CACert) {
+			return fmt.Errorf("failed to append CA certificate")
+		}
+
+		host, _, err := net.SplitHostPort(fs.msAddr)
+		if err != nil {
+			host = fs.msAddr
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to connect to meta server: %w", err)
+	}
+	defer conn.Close()
+
+	client := mspb.NewMetaServerClient(conn)
+	resp, err := client.RootShare(context.Background(), &mspb.RootShareRequest{
+		RootUser: root_user,
+		ShareWith: share_with,  
+	})
+	if err != nil {
+		return fmt.Errorf("RootShare RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("meta server rejected sharing: %s", resp.Error)
+	}
+
+	return nil
+}
+
+func (fs *FileServer) RootUnshare(root_user, unshare_with string) error {
+	if fs.msAddr == "" {
+		return nil
+	}
+
+	// Build the same CA-backed TLS config the client uses when talking to FS.
+	var opts []grpc.DialOption
+	if fs.useTLS {
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certs.CACert) {
+			return fmt.Errorf("failed to append CA certificate")
+		}
+
+		host, _, err := net.SplitHostPort(fs.msAddr)
+		if err != nil {
+			host = fs.msAddr
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to connect to meta server: %w", err)
+	}
+	defer conn.Close()
+
+	client := mspb.NewMetaServerClient(conn)
+	resp, err := client.RootUnshare(context.Background(), &mspb.RootUnshareRequest{
+		RootUser: root_user,
+		UnshareWith: unshare_with,  
+	})
+	if err != nil {
+		return fmt.Errorf("RootShare RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("meta server rejected sharing: %s", resp.Error)
 	}
 
 	return nil

@@ -28,7 +28,7 @@ func main() {
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
 	// Create file server
-	server, err := fileserver.NewFileServer(*serverID, *rootDir, *useTLS)
+	server, err := fileserver.NewFileServer(*serverID, *rootDir, *useTLS, *msAddr)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
@@ -59,7 +59,7 @@ func main() {
 
 	// Register with meta server if address was provided.
 	selfAddr := fmt.Sprintf("%s:%d", *ownIp, *port)
-	if err := server.RegisterWithMetaServer(*msAddr, selfAddr); err != nil {
+	if err := server.RegisterWithMetaServer(selfAddr); err != nil {
 		log.Printf("Warning: failed to register with meta server: %v", err)
 	} else if *msAddr != "" {
 		log.Printf("Registered with meta server at %s", *msAddr)

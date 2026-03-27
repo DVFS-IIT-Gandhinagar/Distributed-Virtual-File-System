@@ -22,6 +22,7 @@ type FileServer struct {
 	mu          sync.RWMutex
 	useTLS      bool
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
+	msAddr		string
 }
 
 type trashEntry struct {
@@ -33,7 +34,7 @@ const trashDirName = ".trash"
 const storageQuota uint64 = 1 * 1024 // 1 MB per user, for demonstration
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
-func NewFileServer(serverID, rootDir string, useTLS bool) (*FileServer, error) {
+func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileServer, error) {
 	fs := &FileServer{
 		serverID:    serverID,
 		rootDir:     rootDir,
@@ -42,6 +43,7 @@ func NewFileServer(serverID, rootDir string, useTLS bool) (*FileServer, error) {
 		nextInodeID: 0,
 		useTLS:      useTLS,
 		trashMeta:   make(map[string]trashEntry),
+		msAddr: 	msAddr,
 	}
 	
 	// Check if rootDir already exists
@@ -462,6 +464,7 @@ func (fs *FileServer) Share(username string, root_user string, share_with string
 	}
 
 	rootInode.ACL.Shared = append(rootInode.ACL.Shared, share_with)
+	fs.RootShare(username, share_with)
 	return nil
 }
 
@@ -508,6 +511,7 @@ func (fs *FileServer) Unshare(username string, root_user string, unshare_with st
 	}
 
 	rootInode.ACL.Shared = newShared
+	fs.RootUnshare(username, unshare_with)
 	return nil
 }
 

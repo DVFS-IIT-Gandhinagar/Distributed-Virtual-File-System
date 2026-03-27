@@ -12,10 +12,54 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+// GetRoots gets the accessible roots to the user from the metaserver
+func (client *Client) GetRoots(msAddr string) ([]string, error) {
+	if msAddr == "" {
+		return []string{}, nil
+	}
+
+	// Build the same CA-backed TLS config the client uses when talking to FS.
+	var opts []grpc.DialOption
+	if client.useTLS {
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certs.CACert) {
+			return []string{}, fmt.Errorf("failed to append CA certificate")
+		}
+
+		host, _, err := net.SplitHostPort(msAddr)
+		if err != nil {
+			host = msAddr
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.NewClient(msAddr, opts...)
+	if err != nil {
+		return []string{}, fmt.Errorf("failed to connect to meta server: %w", err)
+	}
+	defer conn.Close()
+
+	mc := mspb.NewMetaServerClient(conn)
+	resp, err := mc.GetRoots(context.Background(), &mspb.GetRootsRequest{
+		Username: client.username,
+	})
+	if err != nil {
+		return []string{}, fmt.Errorf("Navigate RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return []string{}, fmt.Errorf("meta server rejected get roots: %s", resp.Error)
+	}
+
+	return resp.Roots, nil
+}
+
 // NavigateToFileServer dials the meta server over TLS and navigates the client to the appropriate file server.
 // selfAddr is the host:port that the meta server should store as this FS's address.
 // If msAddr is empty this is a no-op.
-func (client *Client) NavigateToFileServer(msAddr, username string, root_user string) (string, error) {
+func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 	if msAddr == "" {
 		return "", nil
 	}
@@ -46,8 +90,8 @@ func (client *Client) NavigateToFileServer(msAddr, username string, root_user st
 
 	mc := mspb.NewMetaServerClient(conn)
 	resp, err := mc.Navigate(context.Background(), &mspb.NavigateRequest{
-		Username: username,
-		RootUser: root_user,
+		Username: client.username,
+		RootUser: client.root_user,
 	})
 	if err != nil {
 		return "", fmt.Errorf("Navigate RPC failed: %w", err)

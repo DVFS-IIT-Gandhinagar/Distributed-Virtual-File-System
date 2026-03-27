@@ -341,6 +341,214 @@ func (x *GetRootsResponse) GetRoots() []string {
 	return nil
 }
 
+type RootShareRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RootUser      string                 `protobuf:"bytes,1,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
+	ShareWith     string                 `protobuf:"bytes,2,opt,name=share_with,json=shareWith,proto3" json:"share_with,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RootShareRequest) Reset() {
+	*x = RootShareRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RootShareRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RootShareRequest) ProtoMessage() {}
+
+func (x *RootShareRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RootShareRequest.ProtoReflect.Descriptor instead.
+func (*RootShareRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RootShareRequest) GetRootUser() string {
+	if x != nil {
+		return x.RootUser
+	}
+	return ""
+}
+
+func (x *RootShareRequest) GetShareWith() string {
+	if x != nil {
+		return x.ShareWith
+	}
+	return ""
+}
+
+type RootShareResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RootShareResponse) Reset() {
+	*x = RootShareResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RootShareResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RootShareResponse) ProtoMessage() {}
+
+func (x *RootShareResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RootShareResponse.ProtoReflect.Descriptor instead.
+func (*RootShareResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RootShareResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RootShareResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type RootUnshareRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RootUser      string                 `protobuf:"bytes,1,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
+	UnshareWith   string                 `protobuf:"bytes,2,opt,name=unshare_with,json=unshareWith,proto3" json:"unshare_with,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RootUnshareRequest) Reset() {
+	*x = RootUnshareRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RootUnshareRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RootUnshareRequest) ProtoMessage() {}
+
+func (x *RootUnshareRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RootUnshareRequest.ProtoReflect.Descriptor instead.
+func (*RootUnshareRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RootUnshareRequest) GetRootUser() string {
+	if x != nil {
+		return x.RootUser
+	}
+	return ""
+}
+
+func (x *RootUnshareRequest) GetUnshareWith() string {
+	if x != nil {
+		return x.UnshareWith
+	}
+	return ""
+}
+
+type RootUnshareResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RootUnshareResponse) Reset() {
+	*x = RootUnshareResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RootUnshareResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RootUnshareResponse) ProtoMessage() {}
+
+func (x *RootUnshareResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RootUnshareResponse.ProtoReflect.Descriptor instead.
+func (*RootUnshareResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RootUnshareResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RootUnshareResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_api_metaserver_metaserver_proto protoreflect.FileDescriptor
 
 const file_api_metaserver_metaserver_proto_rawDesc = "" +
@@ -365,12 +573,27 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\x10GetRootsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12\x14\n" +
-	"\x05roots\x18\x03 \x03(\tR\x05roots2\xff\x01\n" +
+	"\x05roots\x18\x03 \x03(\tR\x05roots\"N\n" +
+	"\x10RootShareRequest\x12\x1b\n" +
+	"\troot_user\x18\x01 \x01(\tR\brootUser\x12\x1d\n" +
+	"\n" +
+	"share_with\x18\x02 \x01(\tR\tshareWith\"C\n" +
+	"\x11RootShareResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"T\n" +
+	"\x12RootUnshareRequest\x12\x1b\n" +
+	"\troot_user\x18\x01 \x01(\tR\brootUser\x12!\n" +
+	"\funshare_with\x18\x02 \x01(\tR\vunshareWith\"E\n" +
+	"\x13RootUnshareResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error2\x99\x03\n" +
 	"\n" +
 	"MetaServer\x12c\n" +
 	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponse\x12E\n" +
 	"\bNavigate\x12\x1b.metaserver.NavigateRequest\x1a\x1c.metaserver.NavigateResponse\x12E\n" +
-	"\bGetRoots\x12\x1b.metaserver.GetRootsRequest\x1a\x1c.metaserver.GetRootsResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"
+	"\bGetRoots\x12\x1b.metaserver.GetRootsRequest\x1a\x1c.metaserver.GetRootsResponse\x12H\n" +
+	"\tRootShare\x12\x1c.metaserver.RootShareRequest\x1a\x1d.metaserver.RootShareResponse\x12N\n" +
+	"\vRootUnshare\x12\x1e.metaserver.RootUnshareRequest\x1a\x1f.metaserver.RootUnshareResponseB/Z-github.com/umangshikarvar/dvfs/api/metaserverb\x06proto3"
 
 var (
 	file_api_metaserver_metaserver_proto_rawDescOnce sync.Once
@@ -384,7 +607,7 @@ func file_api_metaserver_metaserver_proto_rawDescGZIP() []byte {
 	return file_api_metaserver_metaserver_proto_rawDescData
 }
 
-var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*RegisterFileServerRequest)(nil),  // 0: metaserver.RegisterFileServerRequest
 	(*RegisterFileServerResponse)(nil), // 1: metaserver.RegisterFileServerResponse
@@ -392,16 +615,24 @@ var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*NavigateResponse)(nil),           // 3: metaserver.NavigateResponse
 	(*GetRootsRequest)(nil),            // 4: metaserver.GetRootsRequest
 	(*GetRootsResponse)(nil),           // 5: metaserver.GetRootsResponse
+	(*RootShareRequest)(nil),           // 6: metaserver.RootShareRequest
+	(*RootShareResponse)(nil),          // 7: metaserver.RootShareResponse
+	(*RootUnshareRequest)(nil),         // 8: metaserver.RootUnshareRequest
+	(*RootUnshareResponse)(nil),        // 9: metaserver.RootUnshareResponse
 }
 var file_api_metaserver_metaserver_proto_depIdxs = []int32{
 	0, // 0: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
 	2, // 1: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
 	4, // 2: metaserver.MetaServer.GetRoots:input_type -> metaserver.GetRootsRequest
-	1, // 3: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
-	3, // 4: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
-	5, // 5: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
+	6, // 3: metaserver.MetaServer.RootShare:input_type -> metaserver.RootShareRequest
+	8, // 4: metaserver.MetaServer.RootUnshare:input_type -> metaserver.RootUnshareRequest
+	1, // 5: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
+	3, // 6: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
+	5, // 7: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
+	7, // 8: metaserver.MetaServer.RootShare:output_type -> metaserver.RootShareResponse
+	9, // 9: metaserver.MetaServer.RootUnshare:output_type -> metaserver.RootUnshareResponse
+	5, // [5:10] is the sub-list for method output_type
+	0, // [0:5] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -418,7 +649,7 @@ func file_api_metaserver_metaserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_metaserver_metaserver_proto_rawDesc), len(file_api_metaserver_metaserver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
