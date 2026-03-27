@@ -69,7 +69,60 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
-	user := req.RootUser
+	user := req.Username
+	root_user := req.RootUser
+	_, exists1 := h.MetaServer.users[user]
+	if !exists1 {
+			log.Printf("[METASERVER] Navigate failed: username '%s' does not exist",req.Username)
+			return &pb.NavigateResponse{
+				Success: false,
+				Error: "username '" + req.Username + "' does not exist",
+			}, nil
+	}
+
+	fs, exists2 := h.MetaServer.users[root_user]
+	if !exists2 {
+		log.Printf("[METASERVER] Navigate failed: root user '%s' does not exist", req.RootUser)
+		return &pb.NavigateResponse{
+			Success: false,
+			Error: "root user '" + req.RootUser + "' does not exist",
+		}, nil
+	}
+
+	allowed := false
+	if user == root_user {
+		allowed = true
+	} else {
+		for _, s := range h.MetaServer.shared[user] {
+			if s == root_user {
+				allowed = true
+				break
+			}
+		}
+	}
+	if !allowed {
+		log.Printf("[METASERVER] Navigate failed: user '%s' does not have access to root '%s'", user, root_user)
+		return &pb.NavigateResponse{
+			Success: false,
+			Error: "user '" + user + "' does not have access to root '" + root_user + "'",
+		}, nil
+	}
+
+	log.Printf("[METASERVER] Routing user %s to FS %s", user, h.MetaServer.fileservers[fs].Address)
+	return &pb.NavigateResponse{
+		Success: true,
+		Address: h.MetaServer.fileservers[fs].Address,
+	}, nil
+}
+
+// Navigate client to the appropriate file server based on user
+func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*pb.GetRootsResponse, error) {
+	log.Printf("[METASERVER] Get roots request for user: %s", req.Username)
+	
+	h.MetaServer.mu.Lock()
+	defer h.MetaServer.mu.Unlock()
+
+	user := req.Username
 	fs, exists := h.MetaServer.users[user]
 	if !exists {
 		log.Printf("[METASERVER] New user %s, assigning to least loaded FS", user)
@@ -87,10 +140,13 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 		log.Printf("[METASERVER] Assigned user %s to FS %s (users: %d)", user, h.MetaServer.fileservers[fs].Address, h.MetaServer.fileservers[fs].UserCount)
 	}
 
-	log.Printf("[METASERVER] Routing user %s to FS %s", user, h.MetaServer.fileservers[fs].Address)
-	return &pb.NavigateResponse{
+	roots := []string{}
+	roots = append(roots, req.Username)
+	root := append(roots, h.MetaServer.shared[user]...)
+
+	return &pb.GetRootsResponse{
 		Success: true,
-		Address: h.MetaServer.fileservers[fs].Address,
+		Roots: root,
 	}, nil
 }
 

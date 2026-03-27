@@ -62,7 +62,7 @@ func (h *CobraHandler) setupCommands() {
 
 	// share
 	h.rootCmd.AddCommand(&cobra.Command{
-		Use:   "share <username>",
+		Use:   "sharewith <username>",
 		Short: "Share your root directory with another user",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -78,7 +78,7 @@ func (h *CobraHandler) setupCommands() {
 
 	// unshare
 	h.rootCmd.AddCommand(&cobra.Command{
-		Use:   "unshare <username>",
+		Use:   "unsharewith <username>",
 		Short: "Share your root directory with another user",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

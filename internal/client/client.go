@@ -38,6 +38,11 @@ func NewClient(username string, root_user string, useTLS bool) *Client {
 	}
 }
 
+// Set user root
+func (c *Client) SetRootUser(root_user string) {
+	c.root_user = root_user
+}
+
 // Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	// TLS configuration

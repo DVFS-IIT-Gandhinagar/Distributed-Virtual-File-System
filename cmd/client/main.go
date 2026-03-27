@@ -34,6 +34,23 @@ func main() {
 
 	// If metaserver flag is set, navigate to the appropriate file server based on the username
 	if *metaserver {
+		roots, err := c.GetRoots(*ip_addr+":"+*port)
+		if err != nil {
+			log.Fatalf("Failed to get roots: %v", err)
+		}
+
+		fmt.Printf("Available roots:\n")
+
+		for _, root := range roots {
+			fmt.Printf("%s\n", root)
+		}
+		fmt.Printf("\n")
+
+		user_root := *root_user
+		fmt.Print("Enter the root you want to access: ")
+		fmt.Scanln(&user_root)
+		c.SetRootUser(user_root)
+
 		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port)
 		if err != nil {
 			log.Fatalf("Failed to navigate to file server: %v", err)
