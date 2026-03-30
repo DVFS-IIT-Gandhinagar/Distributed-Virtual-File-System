@@ -16,7 +16,7 @@
 - [x] TLS handshake @jsmaskeen
 - [x] Implement crash recovery for MDS - @ShardulJunagade
 - [x] Implement heartbeat - @ShardulJunagade
-- [ ] Implement storage quotas - @Reckadon
+- [x ] Implement storage quotas - @Reckadon
 - [ ] Implement authentication of users - @Reckadon
 - [ ] sharing phase-1 - @Umang-Shikarvar
 - [ ] chunked upload/download + read_at @jsmaskeen
