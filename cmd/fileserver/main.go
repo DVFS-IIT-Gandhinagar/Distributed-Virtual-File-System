@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/certs"
@@ -22,6 +23,8 @@ func main() {
 	// metaserver is the meta server's host:port; leave empty to skip registration.
 	msAddr := flag.String("meta_addr", "127.0.0.1:50051", "Meta server address (e.g. 127.0.0.1:50052)")
 	ownIp := flag.String("own_ip", "127.0.0.1", "Own IP to advertise to meta server (e.g. 127.0.0.1)")
+	msRetry := flag.Duration("meta_retry_interval", 3*time.Second, "Retry interval for metaserver registration")
+	msHeartbeat := flag.Duration("meta_heartbeat_interval", 5*time.Second, "Heartbeat interval for metaserver liveness")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: true)")
 	flag.Parse()
 
@@ -57,12 +60,12 @@ func main() {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	// Register with meta server if address was provided.
+	// Start background sync with metaserver if an address was provided.
 	selfAddr := fmt.Sprintf("%s:%d", *ownIp, *port)
-	if err := server.RegisterWithMetaServer(selfAddr); err != nil {
-		log.Printf("Warning: failed to register with meta server: %v", err)
-	} else if *msAddr != "" {
-		log.Printf("Registered with meta server at %s", *msAddr)
+	stopSync := server.StartMetaServerSync(*msAddr, selfAddr, *msRetry, *msHeartbeat)
+	defer stopSync()
+	if *msAddr != "" {
+		log.Printf("Started metaserver sync loop for %s", *msAddr)
 	}
 
 	log.Printf("File server starting on %s", listenAddr)
