@@ -14,8 +14,8 @@ import (
 
 type MetaServer struct {
 	fileservers map[uint64]*domain.FileServerInfo // fs_id -> fs
-	users       map[string]uint64 // username -> fs_id
-	shared 		map[string][]string // username -> accessible root
+	users       map[string]uint64                 // username -> fs_id
+	shared      map[string][]string               // username -> accessible root
 	nextFsID    uint64
 	stateFile   string
 
@@ -34,6 +34,7 @@ const (
 type persistedState struct {
 	FileServers map[uint64]*domain.FileServerInfo `json:"fileservers"`
 	Users       map[string]uint64                 `json:"users"`
+	Shared      map[string][]string               `json:"shared"`
 	NextFsID    uint64                            `json:"next_fs_id"`
 }
 
@@ -57,10 +58,9 @@ func NewMetaServer(stateFile string) (*MetaServer, error) {
 	if err := ms.loadState(); err != nil {
 		log.Printf("[METASERVER] Warning: failed to load state from %s: %v", ms.stateFile, err)
 	}
-	
+
 	return ms, nil
 }
-
 
 func (ms *MetaServer) SetHeartbeatConfig(timeout, checkInterval time.Duration) {
 	ms.mu.Lock()
@@ -154,6 +154,7 @@ func (ms *MetaServer) saveStateLocked() error {
 	state := persistedState{
 		FileServers: ms.fileservers,
 		Users:       ms.users,
+		Shared:      ms.shared,
 		NextFsID:    ms.nextFsID,
 	}
 
@@ -212,9 +213,13 @@ func (ms *MetaServer) loadState() error {
 	if state.Users == nil {
 		state.Users = make(map[string]uint64)
 	}
+	if state.Shared == nil {
+		state.Shared = make(map[string][]string)
+	}
 
 	ms.fileservers = state.FileServers
 	ms.users = state.Users
+	ms.shared = state.Shared
 	ms.nextFsID = state.NextFsID
 
 	now := time.Now().Unix()

@@ -48,24 +48,24 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	defer conn.Close()
 
 	// Collect known users and their ACLs under the read lock
-    fs.mu.RLock()
-    users := make([]string, 0, len(fs.users))
-    acls := make([]*mspb.UserACL, 0, len(fs.users))
-    
-    for username, rootFID := range fs.users {
-        users = append(users, username)
-        
-        // Get root inode to access ACL
-        rootInode := fs.inodes[rootFID.String()]
-        
-        // Create UserACL message
-        userACL := &mspb.UserACL{
-            Username: username,
-            Shared:   rootInode.ACL.Shared,
-        }
-        acls = append(acls, userACL)
-    }
-    fs.mu.RUnlock()
+	fs.mu.RLock()
+	users := make([]string, 0, len(fs.users))
+	acls := make([]*mspb.UserACL, 0, len(fs.users))
+
+	for username, rootFID := range fs.users {
+		users = append(users, username)
+
+		// Get root inode to access ACL
+		rootInode := fs.inodes[rootFID.String()]
+
+		// Create UserACL message
+		userACL := &mspb.UserACL{
+			Username: username,
+			Shared:   rootInode.ACL.Shared,
+		}
+		acls = append(acls, userACL)
+	}
+	fs.mu.RUnlock()
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
@@ -114,8 +114,8 @@ func (fs *FileServer) RootShare(root_user, share_with string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RootShare(context.Background(), &mspb.RootShareRequest{
-		RootUser: root_user,
-		ShareWith: share_with,  
+		RootUser:  root_user,
+		ShareWith: share_with,
 	})
 	if err != nil {
 		return fmt.Errorf("RootShare RPC failed: %w", err)
@@ -158,8 +158,8 @@ func (fs *FileServer) RootUnshare(root_user, unshare_with string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RootUnshare(context.Background(), &mspb.RootUnshareRequest{
-		RootUser: root_user,
-		UnshareWith: unshare_with,  
+		RootUser:    root_user,
+		UnshareWith: unshare_with,
 	})
 	if err != nil {
 		return fmt.Errorf("RootShare RPC failed: %w", err)
@@ -171,10 +171,9 @@ func (fs *FileServer) RootUnshare(root_user, unshare_with string) error {
 	return nil
 }
 
-
 // HeartbeatWithMetaServer sends a lightweight liveness signal to metaserver.
-func (fs *FileServer) HeartbeatWithMetaServer(msAddr, selfAddr string) error {
-	if msAddr == "" {
+func (fs *FileServer) HeartbeatWithMetaServer(selfAddr string) error {
+	if fs.msAddr == "" {
 		return nil
 	}
 
@@ -185,9 +184,9 @@ func (fs *FileServer) HeartbeatWithMetaServer(msAddr, selfAddr string) error {
 			return fmt.Errorf("failed to append CA certificate")
 		}
 
-		host, _, err := net.SplitHostPort(msAddr)
+		host, _, err := net.SplitHostPort(fs.msAddr)
 		if err != nil {
-			host = msAddr
+			host = fs.msAddr
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
 		opts = append(opts, grpc.WithTransportCredentials(creds))
@@ -195,7 +194,7 @@ func (fs *FileServer) HeartbeatWithMetaServer(msAddr, selfAddr string) error {
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	conn, err := grpc.NewClient(msAddr, opts...)
+	conn, err := grpc.NewClient(fs.msAddr, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}
@@ -234,7 +233,7 @@ func (fs *FileServer) StartMetaServerSync(msAddr, selfAddr string, retryInterval
 		lastHeartbeatAt := time.Time{}
 
 		attemptRegister := func(reason string) {
-			err := fs.RegisterWithMetaServer(msAddr, selfAddr)
+			err := fs.RegisterWithMetaServer(selfAddr)
 			if err != nil {
 				registered = false
 				log.Printf("[FILESERVER] MetaServer sync (%s) failed: %v", reason, err)
@@ -247,7 +246,7 @@ func (fs *FileServer) StartMetaServerSync(msAddr, selfAddr string, retryInterval
 		}
 
 		attemptHeartbeat := func(reason string) {
-			err := fs.HeartbeatWithMetaServer(msAddr, selfAddr)
+			err := fs.HeartbeatWithMetaServer(selfAddr)
 			if err != nil {
 				registered = false
 				log.Printf("[FILESERVER] MetaServer heartbeat (%s) failed: %v", reason, err)
