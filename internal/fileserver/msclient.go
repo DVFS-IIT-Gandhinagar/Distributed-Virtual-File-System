@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"log"
 	"net"
+	"time"
 
 	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
 	"github.com/umangshikarvar/dvfs/internal/certs"
@@ -66,4 +68,119 @@ func (fs *FileServer) RegisterWithMetaServer(msAddr, selfAddr string) error {
 	}
 
 	return nil
+}
+
+// HeartbeatWithMetaServer sends a lightweight liveness signal to metaserver.
+func (fs *FileServer) HeartbeatWithMetaServer(msAddr, selfAddr string) error {
+	if msAddr == "" {
+		return nil
+	}
+
+	var opts []grpc.DialOption
+	if fs.useTLS {
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(certs.CACert) {
+			return fmt.Errorf("failed to append CA certificate")
+		}
+
+		host, _, err := net.SplitHostPort(msAddr)
+		if err != nil {
+			host = msAddr
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.NewClient(msAddr, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to connect to meta server: %w", err)
+	}
+	defer conn.Close()
+
+	client := mspb.NewMetaServerClient(conn)
+	resp, err := client.Heartbeat(context.Background(), &mspb.HeartbeatRequest{Address: selfAddr})
+	if err != nil {
+		return fmt.Errorf("Heartbeat RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("meta server heartbeat rejected: %s", resp.Error)
+	}
+
+	return nil
+}
+
+// StartMetaServerSync keeps trying registration in the background so this file
+// server can automatically re-attach when the metaserver restarts.
+func (fs *FileServer) StartMetaServerSync(msAddr, selfAddr string, retryInterval, heartbeatInterval time.Duration) func() {
+	if msAddr == "" {
+		return func() {}
+	}
+
+	if retryInterval <= 0 {
+		retryInterval = 3 * time.Second
+	}
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = 5 * time.Second
+	}
+
+	stopCh := make(chan struct{})
+
+	go func() {
+		registered := false
+		lastHeartbeatAt := time.Time{}
+
+		attemptRegister := func(reason string) {
+			err := fs.RegisterWithMetaServer(msAddr, selfAddr)
+			if err != nil {
+				registered = false
+				log.Printf("[FILESERVER] MetaServer sync (%s) failed: %v", reason, err)
+				return
+			}
+
+			registered = true
+			lastHeartbeatAt = time.Now()
+			log.Printf("[FILESERVER] MetaServer sync (%s) succeeded", reason)
+		}
+
+		attemptHeartbeat := func(reason string) {
+			err := fs.HeartbeatWithMetaServer(msAddr, selfAddr)
+			if err != nil {
+				registered = false
+				log.Printf("[FILESERVER] MetaServer heartbeat (%s) failed: %v", reason, err)
+				return
+			}
+
+			lastHeartbeatAt = time.Now()
+			log.Printf("[FILESERVER] MetaServer heartbeat (%s) succeeded", reason)
+		}
+
+		attemptRegister("startup")
+		ticker := time.NewTicker(retryInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopCh:
+				return
+			case <-ticker.C:
+				if !registered {
+					attemptRegister("retry")
+					continue
+				}
+
+				if time.Since(lastHeartbeatAt) >= heartbeatInterval {
+					attemptHeartbeat("periodic")
+					if !registered {
+						continue
+					}
+				}
+			}
+		}
+	}()
+
+	return func() {
+		close(stopCh)
+	}
 }

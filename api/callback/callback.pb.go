@@ -7,12 +7,13 @@
 package callback
 
 import (
-	fileserver "github.com/umangshikarvar/dvfs/api/fileserver"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	fileserver "github.com/umangshikarvar/dvfs/api/fileserver"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (

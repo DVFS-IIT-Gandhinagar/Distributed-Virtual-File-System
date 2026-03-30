@@ -24,8 +24,18 @@ message NavigateResponse {
   string address = 3; // address of the file server to connect to
 }
 
+message HeartbeatRequest {
+  string address = 1;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
   rpc Navigate(NavigateRequest) returns (NavigateResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }
