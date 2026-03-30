@@ -100,6 +100,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 // Heartbeat updates liveness for an already-registered fileserver.
 func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	if req.Address == "" {
+		log.Printf("[METASERVER] WARN: heartbeat rejected due to empty file server address")
 		return &pb.HeartbeatResponse{Success: false, Error: "empty file server address"}, nil
 	}
 
@@ -108,16 +109,22 @@ func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (
 
 	fsID, exists := h.MetaServer.findFileServerByAddressLocked(req.Address)
 	if !exists {
+		log.Printf("[METASERVER] WARN: heartbeat from unknown file server address=%s", req.Address)
 		return &pb.HeartbeatResponse{Success: false, Error: "unknown file server"}, nil
 	}
 
 	fsInfo := h.MetaServer.fileservers[fsID]
 	if fsInfo == nil {
+		log.Printf("[METASERVER] WARN: heartbeat received for missing file server entry id=%d address=%s", fsID, req.Address)
 		return &pb.HeartbeatResponse{Success: false, Error: "file server entry missing"}, nil
 	}
 
+	prevStatus := fsInfo.Status
 	fsInfo.LastHeartbeatUnix = time.Now().Unix()
 	fsInfo.Status = domain.FileServerStatusHealthy
+	if prevStatus != domain.FileServerStatusHealthy {
+		log.Printf("[METASERVER] File server recovered: id=%d address=%s status=%s->%s", fsID, fsInfo.Address, prevStatus, domain.FileServerStatusHealthy)
+	}
 
 	if err := h.MetaServer.saveStateLocked(); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after heartbeat: %v", err)

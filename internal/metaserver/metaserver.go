@@ -250,7 +250,7 @@ func (ms *MetaServer) isHealthyLocked(fsInfo *domain.FileServerInfo, nowUnix int
 
 func (ms *MetaServer) markStaleFileServersLocked(nowUnix int64) bool {
 	changed := false
-	for _, info := range ms.fileservers {
+	for fsID, info := range ms.fileservers {
 		if info == nil {
 			continue
 		}
@@ -258,6 +258,11 @@ func (ms *MetaServer) markStaleFileServersLocked(nowUnix int64) bool {
 			continue
 		}
 		if info.Status != domain.FileServerStatusStale {
+			lastSeenAgo := int64(0)
+			if info.LastHeartbeatUnix > 0 {
+				lastSeenAgo = nowUnix - info.LastHeartbeatUnix
+			}
+			log.Printf("[METASERVER] File server marked stale: id=%d address=%s last_heartbeat_ago=%ds", fsID, info.Address, lastSeenAgo)
 			info.Status = domain.FileServerStatusStale
 			changed = true
 		}
