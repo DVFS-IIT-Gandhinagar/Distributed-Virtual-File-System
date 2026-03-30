@@ -92,12 +92,12 @@ type Inode struct {
 	ACL      ACL
 	Children []*FID // for directories
 	Size     uint64 // for files
-	Parent	*Inode
+	Parent	 *Inode
 }
 
 // Access Control List
 type ACL struct {
-    Owner string   // user who owns this root
+    Owner  string   // user who owns this root
 	Shared []string
     // Read  []string // users with read-only access
     // Write []string // users with full access
@@ -117,7 +117,14 @@ type ACL struct {
 // }
 
 // Represents a fileserver stores add and usercount
+const (
+	FileServerStatusHealthy = "healthy"
+	FileServerStatusStale   = "stale"
+)
+
 type FileServerInfo struct {
-	Address   string
-	UserCount int
+	Address           string `json:"address"`
+	UserCount         int    `json:"user_count"`
+	LastHeartbeatUnix int64  `json:"last_heartbeat_unix,omitempty"`
+	Status            string `json:"status,omitempty"`
 }

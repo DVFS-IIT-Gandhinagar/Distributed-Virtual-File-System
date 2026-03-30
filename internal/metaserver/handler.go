@@ -3,6 +3,7 @@ package metaserver
 import (
 	"context"
 	"log"
+	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/metaserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -34,6 +35,13 @@ func NewGRPCHandler(metaServer *MetaServer) *GRPCHandler {
 // RegisterFileServer handles file server registration
 func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFileServerRequest) (*pb.RegisterFileServerResponse, error) {
 	log.Printf("[METASERVER] Registering FS %s with %d users: %v", req.Address, len(req.Users), req.Users)
+
+	if req.Address == "" {
+		return &pb.RegisterFileServerResponse{
+			Success: false,
+			Error:   "empty file server address",
+		}, nil
+	}
 
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()

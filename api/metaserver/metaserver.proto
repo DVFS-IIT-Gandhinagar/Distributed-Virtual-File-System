@@ -61,10 +61,20 @@ message RootUnshareResponse {
   string error = 2;
 }
 
+message HeartbeatRequest {
+  string address = 1;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
   rpc Navigate(NavigateRequest) returns (NavigateResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
   rpc GetRoots(GetRootsRequest) returns (GetRootsResponse);
   rpc RootShare(RootShareRequest) returns (RootShareResponse);
   rpc RootUnshare(RootUnshareRequest) returns (RootUnshareResponse);
