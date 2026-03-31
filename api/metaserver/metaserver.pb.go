@@ -403,8 +403,10 @@ func (x *GetRootsResponse) GetRoots() []string {
 
 type RootShareRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootUser      string                 `protobuf:"bytes,1,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
-	ShareWith     string                 `protobuf:"bytes,2,opt,name=share_with,json=shareWith,proto3" json:"share_with,omitempty"`
+	RootPath      string                 `protobuf:"bytes,1,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"`
+	Owner         string                 `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
+	ShareWith     string                 `protobuf:"bytes,3,opt,name=share_with,json=shareWith,proto3" json:"share_with,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -439,9 +441,16 @@ func (*RootShareRequest) Descriptor() ([]byte, []int) {
 	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *RootShareRequest) GetRootUser() string {
+func (x *RootShareRequest) GetRootPath() string {
 	if x != nil {
-		return x.RootUser
+		return x.RootPath
+	}
+	return ""
+}
+
+func (x *RootShareRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
 	}
 	return ""
 }
@@ -449,6 +458,13 @@ func (x *RootShareRequest) GetRootUser() string {
 func (x *RootShareRequest) GetShareWith() string {
 	if x != nil {
 		return x.ShareWith
+	}
+	return ""
+}
+
+func (x *RootShareRequest) GetName() string {
+	if x != nil {
+		return x.Name
 	}
 	return ""
 }
@@ -507,8 +523,10 @@ func (x *RootShareResponse) GetError() string {
 
 type RootUnshareRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootUser      string                 `protobuf:"bytes,1,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
-	UnshareWith   string                 `protobuf:"bytes,2,opt,name=unshare_with,json=unshareWith,proto3" json:"unshare_with,omitempty"`
+	RootPath      string                 `protobuf:"bytes,1,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"`
+	Owner         string                 `protobuf:"bytes,2,opt,name=owner,proto3" json:"owner,omitempty"`
+	UnshareWith   string                 `protobuf:"bytes,3,opt,name=unshare_with,json=unshareWith,proto3" json:"unshare_with,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -543,9 +561,16 @@ func (*RootUnshareRequest) Descriptor() ([]byte, []int) {
 	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *RootUnshareRequest) GetRootUser() string {
+func (x *RootUnshareRequest) GetRootPath() string {
 	if x != nil {
-		return x.RootUser
+		return x.RootPath
+	}
+	return ""
+}
+
+func (x *RootUnshareRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
 	}
 	return ""
 }
@@ -553,6 +578,13 @@ func (x *RootUnshareRequest) GetRootUser() string {
 func (x *RootUnshareRequest) GetUnshareWith() string {
 	if x != nil {
 		return x.UnshareWith
+	}
+	return ""
+}
+
+func (x *RootUnshareRequest) GetName() string {
+	if x != nil {
+		return x.Name
 	}
 	return ""
 }
@@ -733,17 +765,21 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\x10GetRootsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12\x14\n" +
-	"\x05roots\x18\x03 \x03(\tR\x05roots\"N\n" +
+	"\x05roots\x18\x03 \x03(\tR\x05roots\"x\n" +
 	"\x10RootShareRequest\x12\x1b\n" +
-	"\troot_user\x18\x01 \x01(\tR\brootUser\x12\x1d\n" +
+	"\troot_path\x18\x01 \x01(\tR\brootPath\x12\x14\n" +
+	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x1d\n" +
 	"\n" +
-	"share_with\x18\x02 \x01(\tR\tshareWith\"C\n" +
+	"share_with\x18\x03 \x01(\tR\tshareWith\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"C\n" +
 	"\x11RootShareResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"T\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"~\n" +
 	"\x12RootUnshareRequest\x12\x1b\n" +
-	"\troot_user\x18\x01 \x01(\tR\brootUser\x12!\n" +
-	"\funshare_with\x18\x02 \x01(\tR\vunshareWith\"E\n" +
+	"\troot_path\x18\x01 \x01(\tR\brootPath\x12\x14\n" +
+	"\x05owner\x18\x02 \x01(\tR\x05owner\x12!\n" +
+	"\funshare_with\x18\x03 \x01(\tR\vunshareWith\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"E\n" +
 	"\x13RootUnshareResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\",\n" +

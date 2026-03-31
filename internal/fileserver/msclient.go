@@ -83,7 +83,7 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	return nil
 }
 
-func (fs *FileServer) RootShare(root_user, share_with string) error {
+func (fs *FileServer) RootShare(owner, name, path, share_with string) error {
 	if fs.msAddr == "" {
 		return nil
 	}
@@ -114,8 +114,10 @@ func (fs *FileServer) RootShare(root_user, share_with string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RootShare(context.Background(), &mspb.RootShareRequest{
-		RootUser:  root_user,
+		Owner: owner,
+		RootPath:  path,
 		ShareWith: share_with,
+		Name: 	name,
 	})
 	if err != nil {
 		return fmt.Errorf("RootShare RPC failed: %w", err)
@@ -127,7 +129,7 @@ func (fs *FileServer) RootShare(root_user, share_with string) error {
 	return nil
 }
 
-func (fs *FileServer) RootUnshare(root_user, unshare_with string) error {
+func (fs *FileServer) RootUnshare(owner, name, path, unshare_with string) error {
 	if fs.msAddr == "" {
 		return nil
 	}
@@ -158,8 +160,10 @@ func (fs *FileServer) RootUnshare(root_user, unshare_with string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RootUnshare(context.Background(), &mspb.RootUnshareRequest{
-		RootUser:    root_user,
+		Owner: owner,
+		RootPath:  path,
 		UnshareWith: unshare_with,
+		Name: 	name,
 	})
 	if err != nil {
 		return fmt.Errorf("RootShare RPC failed: %w", err)

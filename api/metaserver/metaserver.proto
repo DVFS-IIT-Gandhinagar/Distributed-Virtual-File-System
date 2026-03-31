@@ -42,8 +42,10 @@ message GetRootsResponse {
 }
 
 message RootShareRequest {
-  string root_user = 1;
-  string share_with = 2;
+  string root_path = 1;
+  string owner = 2;
+  string share_with = 3;
+  string name = 4;
 }
 
 message RootShareResponse {
@@ -52,8 +54,10 @@ message RootShareResponse {
 }
 
 message RootUnshareRequest {
-  string root_user = 1;
-  string unshare_with = 2;
+  string root_path = 1;
+  string owner = 2;
+  string unshare_with = 3;
+  string name = 4;
 }
 
 message RootUnshareResponse {

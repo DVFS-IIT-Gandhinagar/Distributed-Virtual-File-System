@@ -16,7 +16,6 @@ type SharedDirEntry struct {
   Owner       string  // Directory owner username
   Path        string  // Full path including username 
   DisplayName string  // Directory name to display 
-  FileServerID uint64 // Which fileserver hosts this directory
 }
 
 type MetaServer struct {

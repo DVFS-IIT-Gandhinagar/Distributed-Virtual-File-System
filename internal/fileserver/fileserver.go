@@ -529,8 +529,13 @@ func (fs *FileServer) Share(username string, share_with string, dirFID *domain.F
 		}
 	}
 
+	path, err := filepath.Rel(fs.rootDir, dirInode.OSPath)
+	if err != nil {
+		log.Printf("Warning: failed to compute relative path for inode '%s': %v", dirInode.Name, err)
+	}
+
 	// Notify metaserver once after all ACLs are updated
-	fs.RootShare(username, share_with)
+	fs.RootShare(username, dirInode.Name, path, share_with)
 
 	log.Printf("Share: successfully shared directory '%s' with user '%s' (updated %d inodes)",
 		dirInode.Name, share_with, len(subtreeInodes))
@@ -609,8 +614,13 @@ func (fs *FileServer) Unshare(username string, unshare_with string, dirFID *doma
 		}
 	}
 
+	path, err := filepath.Rel(fs.rootDir, dirInode.OSPath)
+	if err != nil {
+		log.Printf("Warning: failed to compute relative path for inode '%s': %v", dirInode.Name, err)
+	}
+
 	// Notify metaserver once after all ACLs are updated
-	fs.RootUnshare(username, unshare_with)
+	fs.RootUnshare(username, dirInode.Name, path, unshare_with)
 
 	log.Printf("Unshare: successfully unshared directory '%s' with user '%s' (updated %d inodes)",
 		dirInode.Name, unshare_with, len(subtreeInodes))

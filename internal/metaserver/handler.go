@@ -134,7 +134,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 				h.MetaServer.shared[sharedWith] = []SharedDirEntry{}
 			}
 			if !contains(h.MetaServer.shared[sharedWith], username) {
-				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{Owner: username})
+				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{Owner: username, DisplayName: username})
 			}
 		}
 	}
@@ -305,7 +305,7 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 	roots := []string{}
 	roots = append(roots, "mydrive")
 	for _, sharedRoot := range h.MetaServer.shared[user] {
-		roots = append(roots, sharedRoot.Owner)
+		roots = append(roots, sharedRoot.DisplayName)
 	}
 
 	return &pb.GetRootsResponse{
@@ -316,21 +316,21 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 
 // Share a root
 func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (*pb.RootShareResponse, error) {
-	log.Printf("[METASERVER] Root share request for user root: %s to share with: %s", req.RootUser, req.ShareWith)
+	log.Printf("[METASERVER] Root share request for dir: %s to share with: %s", req.RootPath, req.ShareWith)
 
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
 	// Consistency check 1: root user must exist
-	if _, exists := h.MetaServer.users[req.RootUser]; !exists {
+	if _, exists := h.MetaServer.users[req.Owner]; !exists {
 		log.Printf(
 			"[METASERVER] Share failed: root user '%s' does not exist",
-			req.RootUser,
+			req.Owner,
 		)
 
 		return &pb.RootShareResponse{
 			Success: false,
-			Error:   "root user '%s' does not exist" + req.RootUser,
+			Error:   "root user '%s' does not exist" + req.Owner,
 		}, nil
 	}
 
@@ -349,10 +349,10 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 
 	// Consistency check 3: avoid duplicate sharing entries
 	for _, existing := range h.MetaServer.shared[req.ShareWith] {
-		if existing.Owner == req.RootUser {
+		if existing.Owner == req.Owner {
 			log.Printf(
 				"[METASERVER] Share skipped: root '%s' already shared with '%s'",
-				req.RootUser,
+				req.Owner,
 				req.ShareWith,
 			)
 
@@ -363,12 +363,12 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 	}
 
 	// Do sharing
-	h.MetaServer.shared[req.ShareWith] = append(h.MetaServer.shared[req.ShareWith], SharedDirEntry{Owner: req.RootUser})
+	h.MetaServer.shared[req.ShareWith] = append(h.MetaServer.shared[req.ShareWith], SharedDirEntry{Owner: req.Owner, DisplayName: req.Name, Path: req.RootPath})
 	if err := h.MetaServer.saveStateLocked(); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after share: %v", err)
 		return &pb.RootShareResponse{Success: false, Error: "failed to persist metaserver state"}, nil
 	}
-	log.Printf("[METASERVER] User root %s successfully shared with %s", req.RootUser, req.ShareWith)
+	log.Printf("[METASERVER] Dir %s successfully shared with %s", req.RootPath, req.ShareWith)
 	return &pb.RootShareResponse{
 		Success: true,
 	}, nil
@@ -376,21 +376,21 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 
 // Unshare a root
 func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareRequest) (*pb.RootUnshareResponse, error) {
-	log.Printf("[METASERVER] Root unshare request for user root: %s to unshare with: %s", req.RootUser, req.UnshareWith)
+	log.Printf("[METASERVER] Root unshare request for dir: %s to unshare with: %s", req.RootPath, req.UnshareWith)
 
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
 
 	// Consistency check 1: root user must exist
-	if _, exists := h.MetaServer.users[req.RootUser]; !exists {
+	if _, exists := h.MetaServer.users[req.Owner]; !exists {
 		log.Printf(
 			"[METASERVER] Share failed: root user '%s' does not exist",
-			req.RootUser,
+			req.Owner,
 		)
 
 		return &pb.RootUnshareResponse{
 			Success: false,
-			Error:   "root user '%s' does not exist" + req.RootUser,
+			Error:   "root user '%s' does not exist" + req.Owner,
 		}, nil
 	}
 
@@ -411,7 +411,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 	sharedRoots := h.MetaServer.shared[req.UnshareWith]
 	index := -1
 	for i, root := range sharedRoots {
-		if root.Owner == req.RootUser {
+		if root.Owner == req.Owner && root.Path == req.RootPath {
 			index = i
 			break
 		}
@@ -419,7 +419,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 
 	if index == -1 {
 		log.Printf(
-			"[METASERVER] Unshare skipped: root '%s' was not shared with '%s'", req.RootUser, req.UnshareWith)
+			"[METASERVER] Unshare skipped: dir '%s' was not shared with '%s'", req.RootPath, req.UnshareWith)
 
 		return &pb.RootUnshareResponse{
 			Success: true,
@@ -436,7 +436,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 		return &pb.RootUnshareResponse{Success: false, Error: "failed to persist metaserver state"}, nil
 	}
 
-	log.Printf("[METASERVER] Root '%s' successfully unshared from '%s'", req.RootUser, req.UnshareWith)
+	log.Printf("[METASERVER] Dir '%s' successfully unshared from '%s'", req.RootPath, req.UnshareWith)
 	return &pb.RootUnshareResponse{
 		Success: true,
 	}, nil
