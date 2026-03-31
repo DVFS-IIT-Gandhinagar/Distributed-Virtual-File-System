@@ -33,7 +33,7 @@ go.work
 Thumbs.db
 
 # File server runtime data
-fileserver_data*/
+fileserver*_data*/
 Download/
 
 # Development and temporary files

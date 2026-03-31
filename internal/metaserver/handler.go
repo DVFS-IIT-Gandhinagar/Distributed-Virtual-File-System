@@ -10,19 +10,19 @@ import (
 )
 
 // helper func
-func contains(slice []string, target string) bool {
+func contains(slice []SharedDirEntry, target string) bool {
 	for _, s := range slice {
-		if s == target {
+		if s.Owner == target {
 			return true
 		}
 	}
 	return false
 }
 
-func removeValue(slice []string, target string) []string {
-	out := make([]string, 0, len(slice))
+func removeValue(slice []SharedDirEntry, target string) []SharedDirEntry {
+	out := make([]SharedDirEntry, 0, len(slice))
 	for _, s := range slice {
-		if s != target {
+		if s.Owner != target {
 			out = append(out, s)
 		}
 	}
@@ -113,7 +113,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		}
 		h.MetaServer.users[username] = fsID
 		if h.MetaServer.shared[username] == nil {
-			h.MetaServer.shared[username] = []string{}
+			h.MetaServer.shared[username] = []SharedDirEntry{}
 		}
 	}
 
@@ -131,10 +131,10 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 		for _, sharedWith := range userACL.Shared {
 			if h.MetaServer.shared[sharedWith] == nil {
-				h.MetaServer.shared[sharedWith] = []string{}
+				h.MetaServer.shared[sharedWith] = []SharedDirEntry{}
 			}
 			if !contains(h.MetaServer.shared[sharedWith], username) {
-				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], username)
+				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{Owner: username})
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 		allowed = true
 	} else {
 		for _, s := range h.MetaServer.shared[user] {
-			if s == rootUser {
+			if s.Owner == rootUser {
 				allowed = true
 				break
 			}
@@ -292,7 +292,7 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 		fs = minFS
 		h.MetaServer.users[user] = fs
 		h.MetaServer.fileservers[fs].UserCount++
-		h.MetaServer.shared[user] = []string{}
+		h.MetaServer.shared[user] = []SharedDirEntry{}
 
 		if err := h.MetaServer.saveStateLocked(); err != nil {
 			log.Printf("[METASERVER] ERROR: failed to persist state after user assignment: %v", err)
@@ -304,11 +304,13 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 
 	roots := []string{}
 	roots = append(roots, "mydrive")
-	root := append(roots, h.MetaServer.shared[user]...)
+	for _, sharedRoot := range h.MetaServer.shared[user] {
+		roots = append(roots, sharedRoot.Owner)
+	}
 
 	return &pb.GetRootsResponse{
 		Success: true,
-		Roots:   root,
+		Roots:   roots,
 	}, nil
 }
 
@@ -347,7 +349,7 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 
 	// Consistency check 3: avoid duplicate sharing entries
 	for _, existing := range h.MetaServer.shared[req.ShareWith] {
-		if existing == req.RootUser {
+		if existing.Owner == req.RootUser {
 			log.Printf(
 				"[METASERVER] Share skipped: root '%s' already shared with '%s'",
 				req.RootUser,
@@ -361,7 +363,7 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 	}
 
 	// Do sharing
-	h.MetaServer.shared[req.ShareWith] = append(h.MetaServer.shared[req.ShareWith], req.RootUser)
+	h.MetaServer.shared[req.ShareWith] = append(h.MetaServer.shared[req.ShareWith], SharedDirEntry{Owner: req.RootUser})
 	if err := h.MetaServer.saveStateLocked(); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after share: %v", err)
 		return &pb.RootShareResponse{Success: false, Error: "failed to persist metaserver state"}, nil
@@ -409,7 +411,7 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 	sharedRoots := h.MetaServer.shared[req.UnshareWith]
 	index := -1
 	for i, root := range sharedRoots {
-		if root == req.RootUser {
+		if root.Owner == req.RootUser {
 			index = i
 			break
 		}
