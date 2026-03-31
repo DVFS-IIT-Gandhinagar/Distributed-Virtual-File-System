@@ -12,10 +12,17 @@ import (
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
 
+type SharedDirEntry struct {
+  Owner       string  // Directory owner username
+  Path        string  // Full path including username 
+  DisplayName string  // Directory name to display 
+  FileServerID uint64 // Which fileserver hosts this directory
+}
+
 type MetaServer struct {
 	fileservers map[uint64]*domain.FileServerInfo // fs_id -> fs
 	users       map[string]uint64                 // username -> fs_id
-	shared      map[string][]string               // username -> accessible root
+	shared      map[string][]SharedDirEntry       // username -> accessible root
 	nextFsID    uint64
 	stateFile   string
 
@@ -34,7 +41,7 @@ const (
 type persistedState struct {
 	FileServers map[uint64]*domain.FileServerInfo `json:"fileservers"`
 	Users       map[string]uint64                 `json:"users"`
-	Shared      map[string][]string               `json:"shared"`
+	Shared      map[string][]SharedDirEntry       `json:"shared"`
 	NextFsID    uint64                            `json:"next_fs_id"`
 }
 
@@ -47,7 +54,7 @@ func NewMetaServer(stateFile string) (*MetaServer, error) {
 	ms := &MetaServer{
 		fileservers: make(map[uint64]*domain.FileServerInfo),
 		users:       make(map[string]uint64),
-		shared:      make(map[string][]string),
+		shared:      make(map[string][]SharedDirEntry),
 		nextFsID:    0,
 		stateFile:   stateFile,
 
@@ -214,7 +221,7 @@ func (ms *MetaServer) loadState() error {
 		state.Users = make(map[string]uint64)
 	}
 	if state.Shared == nil {
-		state.Shared = make(map[string][]string)
+		state.Shared = make(map[string][]SharedDirEntry)
 	}
 
 	ms.fileservers = state.FileServers
