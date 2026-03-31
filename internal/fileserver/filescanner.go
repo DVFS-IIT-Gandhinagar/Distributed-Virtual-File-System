@@ -40,7 +40,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 				// Load ACL from disk (or use default if not found)
 				var ACL domain.ACL
 				if scanner.fs != nil {
-					loadedACL, err := scanner.fs.LoadACL(username)
+					loadedACL, err := scanner.fs.LoadACL(username, username)
 					if err != nil {
 						fmt.Printf("Warning: failed to load ACL for user %s: %v, using default ACL\n", username, err)
 						ACL = domain.ACL{
@@ -81,7 +81,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 				(*inodes)[userRootFID.String()] = userRootInode
 
 				// Scan user's files and directories (first level only)
-				if err := scanner.scanUserDirectory(userDir, userRootInode, nextInodeID, inodes); err != nil {
+				if err := scanner.scanUserDirectory(username, userDir, userRootInode, nextInodeID, inodes); err != nil {
 					return fmt.Errorf("failed to scan user directory %s: %w", username, err)
 				}
 				userDirSize, err := scanner.calculateDirectorySizes(userRootInode, inodes) // calculate and store sizes of all directories under this user
@@ -100,7 +100,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 }
 
 // scanUserDirectory scans a user's directory and creates inodes for all files and directories using BFS
-func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domain.Inode, nextInodeID *uint64, inodes *map[string]*domain.Inode) error {
+func (scanner *FileScanner) scanUserDirectory(username string, userDir string, parentInode *domain.Inode, nextInodeID *uint64, inodes *map[string]*domain.Inode) error {
 
 	type bfsItem struct {
 		dirPath string
@@ -136,12 +136,43 @@ func (scanner *FileScanner) scanUserDirectory(userDir string, parentInode *domai
 
 			// Create inode
 			itemPath := filepath.Join(userDir, entry.Name())
+
+			// Calculate relative path from rootDir for ACL loading
+			relPath, err := filepath.Rel(scanner.rootDir, itemPath)
+			if err != nil {
+				return fmt.Errorf("failed to calculate relative path: %w", err)
+			}
+
+			// Load ACL from disk (or use default if not found)
+			var ACL domain.ACL
+			if scanner.fs != nil {
+				loadedACL, err := scanner.fs.LoadACL(username, relPath)
+				if err != nil {
+					// No ACL file found, use default (inherit from parent or create new)
+					ACL = domain.ACL{
+						Owner:  username,
+						Shared: []string{},
+					}
+				} else {
+					ACL = loadedACL
+					// Only log when ACL has shared users (reduces log spam)
+					if len(ACL.Shared) > 0 {
+						fmt.Printf("[%s] Loaded ACL for %s: owner=%s, shared=%v\n", username, relPath, ACL.Owner, ACL.Shared)
+					}
+				}
+			} else {
+				// Fallback if fs is nil
+				ACL = domain.ACL{
+					Owner:  username,
+					Shared: []string{},
+				}
+			}
 			newInode := &domain.Inode{
 				FID:    newFID,
 				Type:   inodeType,
 				Name:   entry.Name(),
 				OSPath: itemPath,
-				ACL:    parentInode.ACL, // Same as parent (user)
+				ACL:    ACL,
 				Parent: parentInode,
 			}
 

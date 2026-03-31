@@ -432,14 +432,41 @@ func (fs *FileServer) GetChildInodeByName(parentInode *domain.Inode, name string
 	return inode, nil
 }
 
-// Share another user the root dir only if current user is owner
-func (fs *FileServer) Share(username string, root_user string, share_with string) error {
-	rootInodeFID, err := fs.GetUserRoot(root_user)
-	if err != nil {
-		return err
+// collectSubtreeInodes performs DFS traversal to collect all inodes in a subtree
+// Returns a list containing the root inode and all its descendants
+func (fs *FileServer) collectSubtreeInodes(rootInode *domain.Inode) []*domain.Inode {
+	if rootInode == nil {
+		return []*domain.Inode{}
 	}
 
-	rootInode, err := fs.GetInode(rootInodeFID)
+	result := []*domain.Inode{rootInode} // Include root itself
+
+	// If not a directory, return just the root
+	if rootInode.Type != domain.InodeTypeDirectory {
+		return result
+	}
+
+	// DFS traversal of children
+	for _, childFID := range rootInode.Children {
+		childInode, exists := fs.inodes[childFID.String()]
+		if !exists {
+			log.Printf("Warning: child inode %s not found during subtree collection", childFID.String())
+			continue
+		}
+
+		// Recursively collect child's subtree
+		childSubtree := fs.collectSubtreeInodes(childInode)
+		result = append(result, childSubtree...)
+	}
+
+	return result
+}
+
+// Share another user the root dir only if current user is owner
+// This method now recursively updates ACLs for all inodes in the subtree
+func (fs *FileServer) Share(username string, share_with string, dirFID *domain.FID) error {
+
+	dirInode, err := fs.GetInode(dirFID)
 	if err != nil {
 		return err
 	}
@@ -447,41 +474,75 @@ func (fs *FileServer) Share(username string, root_user string, share_with string
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
+	// Only directories can be shared
+	if dirInode.Type != domain.InodeTypeDirectory {
+		return fmt.Errorf("only directories can be shared")
+	}
+
 	// Sharing is allowed only if current user is the owner
-	if rootInode.ACL.Owner != username {
+	if dirInode.ACL.Owner != username {
 		return fmt.Errorf("Only owner can share")
 	}
 
-	if share_with == root_user {
+	if share_with == dirInode.ACL.Owner {
 		return fmt.Errorf("Cannot share with self")
 	}
 
-	// if not already share append share_with in shared ACL
-	for _, u := range rootInode.ACL.Shared {
+	// Check if already shared at directory level (idempotent)
+	for _, u := range dirInode.ACL.Shared {
 		if u == share_with {
 			return nil
 		}
 	}
 
-	rootInode.ACL.Shared = append(rootInode.ACL.Shared, share_with)
-	// Persist ACL to disk
-	if err := fs.SaveACL(root_user, rootInode.ACL); err != nil {
-		log.Printf("Warning: failed to persist ACL: %v", err)
-		// Continue anyway - in-memory ACL is updated
+	// Collect all inodes in the subtree using DFS traversal
+	subtreeInodes := fs.collectSubtreeInodes(dirInode)
+	log.Printf("Share: collected %d inodes in subtree for directory '%s'", len(subtreeInodes), dirInode.Name)
+
+	// Update ACL for each inode in the subtree
+	for _, inode := range subtreeInodes {
+		// Check if share_with is already in the ACL.Shared list (idempotent)
+		alreadyShared := false
+		for _, u := range inode.ACL.Shared {
+			if u == share_with {
+				alreadyShared = true
+				break
+			}
+		}
+
+		// If not already shared, append share_with to ACL.Shared
+		if !alreadyShared {
+			inode.ACL.Shared = append(inode.ACL.Shared, share_with)
+
+			// Persist ACL to disk for this inode
+			// Get the relative path from root for ACL storage
+			inodePath, err := filepath.Rel(fs.rootDir, inode.OSPath)
+			if err != nil {
+				log.Printf("Warning: failed to compute relative path for inode '%s': %v", inode.Name, err)
+				continue
+			}
+
+			if err := fs.SaveACL(inodePath, inode.ACL); err != nil {
+				log.Printf("Warning: failed to persist ACL for inode '%s': %v", inode.Name, err)
+				// Continue anyway - in-memory ACL is updated
+			}
+		}
 	}
+
+	// Notify metaserver once after all ACLs are updated
 	fs.RootShare(username, share_with)
+
+	log.Printf("Share: successfully shared directory '%s' with user '%s' (updated %d inodes)",
+		dirInode.Name, share_with, len(subtreeInodes))
+
 	return nil
 }
 
 // Unshare removes a user from the shared list of the root dir
-func (fs *FileServer) Unshare(username string, root_user string, unshare_with string) error {
+// This method now recursively updates ACLs for all inodes in the subtree
+func (fs *FileServer) Unshare(username string, unshare_with string, dirFID *domain.FID) error {
 
-	rootInodeFID, err := fs.GetUserRoot(root_user)
-	if err != nil {
-		return err
-	}
-
-	rootInode, err := fs.GetInode(rootInodeFID)
+	dirInode, err := fs.GetInode(dirFID)
 	if err != nil {
 		return err
 	}
@@ -490,38 +551,70 @@ func (fs *FileServer) Unshare(username string, root_user string, unshare_with st
 	defer fs.mu.Unlock()
 
 	// Sharing is allowed only if current user is the owner
-	if rootInode.ACL.Owner != username {
+	if dirInode.ACL.Owner != username {
 		return fmt.Errorf("Only owner can unshare")
 	}
 
-	if unshare_with == root_user {
+	if unshare_with == dirInode.ACL.Owner {
 		return fmt.Errorf("Cannot unshare with self")
 	}
 
-	// remove unshare_with from shared list
-	newShared := []string{}
-
-	// if user is present in shared ACL, remove it
+	// Check if user is present in root directory's shared ACL
 	found := false
-	for _, u := range rootInode.ACL.Shared {
+	for _, u := range dirInode.ACL.Shared {
 		if u == unshare_with {
 			found = true
-			continue
+			break
 		}
-		newShared = append(newShared, u)
 	}
 
 	if !found {
 		return fmt.Errorf("user not in shared list")
 	}
 
-	rootInode.ACL.Shared = newShared
-	// Persist ACL to disk
-	if err := fs.SaveACL(root_user, rootInode.ACL); err != nil {
-		log.Printf("Warning: failed to persist ACL: %v", err)
-		// Continue anyway - in-memory ACL is updated
+	// Collect all inodes in the subtree using DFS traversal
+	subtreeInodes := fs.collectSubtreeInodes(dirInode)
+	log.Printf("Unshare: collected %d inodes in subtree for directory '%s'", len(subtreeInodes), dirInode.Name)
+
+	// Update ACL for each inode in the subtree
+	for _, inode := range subtreeInodes {
+		// Remove unshare_with from ACL.Shared list
+		newShared := []string{}
+		userFound := false
+
+		for _, u := range inode.ACL.Shared {
+			if u == unshare_with {
+				userFound = true
+				continue
+			}
+			newShared = append(newShared, u)
+		}
+
+		// Only update and persist if the user was found in this inode's ACL
+		if userFound {
+			inode.ACL.Shared = newShared
+
+			// Persist ACL to disk for this inode
+			// Get the relative path from root for ACL storage
+			inodePath, err := filepath.Rel(fs.rootDir, inode.OSPath)
+			if err != nil {
+				log.Printf("Warning: failed to compute relative path for inode '%s': %v", inode.Name, err)
+				continue
+			}
+
+			if err := fs.SaveACL(inodePath, inode.ACL); err != nil {
+				log.Printf("Warning: failed to persist ACL for inode '%s': %v", inode.Name, err)
+				// Continue anyway - in-memory ACL is updated
+			}
+		}
 	}
+
+	// Notify metaserver once after all ACLs are updated
 	fs.RootUnshare(username, unshare_with)
+
+	log.Printf("Unshare: successfully unshared directory '%s' with user '%s' (updated %d inodes)",
+		dirInode.Name, unshare_with, len(subtreeInodes))
+
 	return nil
 }
 
@@ -654,10 +747,7 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		}
 	}
 
-	ACL := domain.ACL{
-		Owner:  root_user,
-		Shared: []string{},
-	}
+	ACL := parent.ACL
 
 	// Create inode
 	newInode := &domain.Inode{
@@ -670,8 +760,14 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		Size:   0,
 	}
 
+	path, err := filepath.Rel(fs.rootDir, osPath)
+	if err != nil {
+		return nil, fmt.Errorf("internal error can't compute path")
+	}
+
 	if fileType == domain.InodeTypeDirectory {
 		newInode.Children = make([]*domain.FID, 0)
+		fs.SaveACL(path, ACL)
 	}
 
 	// Store inode

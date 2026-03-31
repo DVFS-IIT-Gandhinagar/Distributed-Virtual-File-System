@@ -213,7 +213,7 @@ message DownloadFileResponse {
 
 message ShareRequest {
   string username = 1; // username for access control
-  string root_user = 2; // username of root which client is using
+  FID fid = 2; // FID of root which client is using
   string share_with = 3; // username of the user to share with
 }
 
@@ -224,8 +224,8 @@ message ShareResponse {
 
 message UnshareRequest {
   string username = 1; // username for access control
-  string root_user = 2; // username of root which client is using
-  string share_with = 3; // username of the user to share with
+  FID fid = 2; // FID of root which client is using
+  string unshare_with = 3; // username of the user to share with
 }
 
 message UnshareResponse {

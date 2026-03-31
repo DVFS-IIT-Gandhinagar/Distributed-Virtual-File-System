@@ -94,7 +94,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 func (c *Client) Share(share_with string) (error) {
 	resp, err := c.serverConn.Share(context.Background(), &pb.ShareRequest{
 		Username: c.username,
-		RootUser: c.root_user,
+		Fid: c.rootFID.ToProto(),
 		ShareWith: share_with,
 	})
 	if err != nil {
@@ -112,8 +112,8 @@ func (c *Client) Share(share_with string) (error) {
 func (c *Client) Unshare(share_with string) (error) {
 	resp, err := c.serverConn.Unshare(context.Background(), &pb.UnshareRequest{
 		Username: c.username,
-		RootUser: c.root_user,
-		ShareWith: share_with,
+		Fid: c.rootFID.ToProto(),
+		UnshareWith: share_with,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to share: %w", err)

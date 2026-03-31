@@ -18,13 +18,13 @@ type ACLMetadata struct {
 const aclFileName = ".acl"
 
 // getACLPath returns the path to the ACL file for a given username
-func (fs *FileServer) getACLPath(username string) string {
-	return filepath.Join(fs.rootDir, username, aclFileName)
+func (fs *FileServer) getACLPath(path string) string {
+	return filepath.Join(fs.rootDir, path, aclFileName)
 }
 
 // SaveACL persists the ACL to disk in the user's root directory
 // Uses atomic write (write to temp file, then rename) to prevent corruption
-func (fs *FileServer) SaveACL(username string, acl domain.ACL) error {
+func (fs *FileServer) SaveACL(path string, acl domain.ACL) error {
 	// Convert domain.ACL to ACLMetadata
 	metadata := ACLMetadata{
 		Owner:  acl.Owner,
@@ -38,7 +38,7 @@ func (fs *FileServer) SaveACL(username string, acl domain.ACL) error {
 	}
 
 	// Get ACL file path
-	aclPath := fs.getACLPath(username)
+	aclPath := fs.getACLPath(path)
 	tmpPath := aclPath + ".tmp"
 
 	// Write to temporary file first
@@ -58,7 +58,7 @@ func (fs *FileServer) SaveACL(username string, acl domain.ACL) error {
 
 // LoadACL loads the ACL from disk for a user's root directory
 // Returns default ACL (owner only, no shared users) if file doesn't exist
-func (fs *FileServer) LoadACL(username string) (domain.ACL, error) {
+func (fs *FileServer) LoadACL(username, path string) (domain.ACL, error) {
 	// Default ACL (owner only, no shared users)
 	defaultACL := domain.ACL{
 		Owner:  username,
@@ -66,7 +66,7 @@ func (fs *FileServer) LoadACL(username string) (domain.ACL, error) {
 	}
 
 	// Get ACL file path
-	aclPath := fs.getACLPath(username)
+	aclPath := fs.getACLPath(path)
 
 	// Check if ACL file exists
 	if _, err := os.Stat(aclPath); os.IsNotExist(err) {

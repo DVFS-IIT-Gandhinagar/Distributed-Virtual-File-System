@@ -133,7 +133,7 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 
 // Share another user the root dir only if current user is owner
 func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.ShareResponse, error) {
-	if req.Username == "" || req.RootUser == "" || req.ShareWith == "" {
+	if req.Username == "" || req.Fid == nil || req.ShareWith == "" {
 		log.Printf("Share: error - username, user_root and share with username are required")
 		return &pb.ShareResponse{
 			Success: false,
@@ -141,7 +141,7 @@ func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.Shar
 		}, nil
 	}
 
-	err := h.fileServer.Share(req.Username, req.RootUser, req.ShareWith)
+	err := h.fileServer.Share(req.Username, req.ShareWith, domain.FIDFromProto(req.Fid))
 	if err != nil {
 		log.Printf("Share: error sharing - %v", err)
 		return &pb.ShareResponse{
@@ -157,7 +157,7 @@ func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.Shar
 
 // Unshare another user the root dir only if current user is owner
 func (h *GRPCHandler) Unshare(ctx context.Context, req *pb.UnshareRequest) (*pb.UnshareResponse, error) {
-	if req.Username == "" || req.RootUser == "" || req.ShareWith == "" {
+	if req.Username == "" || req.Fid == nil || req.UnshareWith == "" {
 		log.Printf("Unshare: error - username, user_root and share with username are required")
 		return &pb.UnshareResponse{
 			Success: false,
@@ -165,7 +165,7 @@ func (h *GRPCHandler) Unshare(ctx context.Context, req *pb.UnshareRequest) (*pb.
 		}, nil
 	}
 
-	err := h.fileServer.Unshare(req.Username, req.RootUser, req.ShareWith)
+	err := h.fileServer.Unshare(req.Username, req.UnshareWith, domain.FIDFromProto(req.Fid))
 	if err != nil {
 		log.Printf("Unshare: error sharing - %v", err)
 		return &pb.UnshareResponse{
