@@ -122,19 +122,37 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		h.removeRootFromAllSharedLocked(username)
 	}
 
-	log.Printf("[METASERVER] Processing %d ACL entries from registration", len(req.Acls))
-	for _, userACL := range req.Acls {
-		username := userACL.Username
+	log.Printf("[METASERVER] Processing %d ACL entries from registration", len(req.Shared))
+	for _, sharedDir := range req.Shared {
+		username := sharedDir.Owner
+		log.Printf("[METASERVER] Processing ACL for owner=%s, users=%v", username, sharedDir.Users)
+
 		if _, ownedByThisFS := incomingUsers[username]; !ownedByThisFS {
+			log.Printf("[METASERVER] Skipping owner %s (not on this FS)", username)
 			continue
 		}
 
-		for _, sharedWith := range userACL.Shared {
+		for _, sharedWith := range sharedDir.Users {
+			log.Printf("[METASERVER] Processing share: %s -> %s", username, sharedWith)
+
+			// Skip if owner is trying to share with themselves
+			if sharedWith == username {
+				log.Printf("[METASERVER] Skipping self-share: %s cannot share with themselves", username)
+				continue
+			}
+
 			if h.MetaServer.shared[sharedWith] == nil {
 				h.MetaServer.shared[sharedWith] = []SharedDirEntry{}
 			}
 			if !contains(h.MetaServer.shared[sharedWith], username) {
-				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{Owner: username, DisplayName: username})
+				log.Printf("[METASERVER] Adding %s to %s's shared list", username, sharedWith)
+				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{
+					Owner:       username,
+					Path:        "/" + username, // Root path includes username prefix
+					DisplayName: username,
+				})
+			} else {
+				log.Printf("[METASERVER] Skipping duplicate: %s already in %s's shared list", username, sharedWith)
 			}
 		}
 	}

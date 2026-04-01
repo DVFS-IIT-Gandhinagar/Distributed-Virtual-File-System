@@ -3,6 +3,7 @@ package fileserver
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -86,6 +87,8 @@ func (fs *FileServer) LoadACL(username, path string) (domain.ACL, error) {
 		return defaultACL, fmt.Errorf("failed to parse ACL JSON: %w", err)
 	}
 
+	log.Printf("[FILESERVER] LoadACL for path=%s: owner=%s, shared=%v (from file)", path, metadata.Owner, metadata.Shared)
+
 	// Convert ACLMetadata to domain.ACL
 	acl := domain.ACL{
 		Owner:  metadata.Owner,
@@ -96,6 +99,8 @@ func (fs *FileServer) LoadACL(username, path string) (domain.ACL, error) {
 	if acl.Shared == nil {
 		acl.Shared = []string{}
 	}
+
+	log.Printf("[FILESERVER] LoadACL returning: owner=%s, shared=%v", acl.Owner, acl.Shared)
 
 	return acl, nil
 }

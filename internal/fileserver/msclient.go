@@ -50,7 +50,7 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	// Collect known users and their ACLs under the read lock
 	fs.mu.RLock()
 	users := make([]string, 0, len(fs.users))
-	acls := make([]*mspb.UserACL, 0, len(fs.users))
+	acls := make([]*mspb.SharedDir, 0, len(fs.users))
 
 	for username, rootFID := range fs.users {
 		users = append(users, username)
@@ -58,12 +58,20 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 		// Get root inode to access ACL
 		rootInode := fs.inodes[rootFID.String()]
 
-		// Create UserACL message
-		userACL := &mspb.UserACL{
-			Username: username,
-			Shared:   rootInode.ACL.Shared,
+		path, err := fs.Path(rootFID)
+		if err != nil {
+			log.Printf("[FILESERVER] Failed to resolve path for user %s: %v", username, err)
+			continue
 		}
-		acls = append(acls, userACL)
+
+		// Create SharedDir message
+		sharedDir := &mspb.SharedDir{
+			Owner: username,
+			Name: username,
+			Path: path,
+			Users:   rootInode.ACL.Shared,
+		}
+		acls = append(acls, sharedDir)
 	}
 	fs.mu.RUnlock()
 
@@ -71,7 +79,7 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	resp, err := client.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
 		Address: selfAddr,
 		Users:   users,
-		Acls:    acls,
+		Shared:    acls,
 	})
 	if err != nil {
 		return fmt.Errorf("RegisterFileServer RPC failed: %w", err)

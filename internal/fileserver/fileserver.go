@@ -23,6 +23,7 @@ type FileServer struct {
 	useTLS      bool
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
 	msAddr      string
+	Shared      map[string][]string // dirFID to users map
 }
 
 type trashEntry struct {
@@ -93,9 +94,10 @@ func (fs *FileServer) GetUserRoot(root_user string) (*domain.FID, error) {
 		GenerationNumber: 1,
 	}
 
-	ACL := domain.ACL{
-		Owner:  root_user,
-		Shared: []string{},
+	// Load ACL from disk if it exists, otherwise use default
+	ACL, err := fs.LoadACL(root_user, root_user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load ACL for user %s: %w", root_user, err)
 	}
 
 	// Create root inode
@@ -491,7 +493,7 @@ func (fs *FileServer) Share(username string, share_with string, dirFID *domain.F
 	// Check if already shared at directory level (idempotent)
 	for _, u := range dirInode.ACL.Shared {
 		if u == share_with {
-			return nil
+			return fmt.Errorf("The given already has the access to this directory")
 		}
 	}
 

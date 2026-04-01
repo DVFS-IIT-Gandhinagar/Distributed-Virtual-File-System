@@ -21,28 +21,30 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type UserACL struct {
+type SharedDir struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Shared        []string               `protobuf:"bytes,2,rep,name=shared,proto3" json:"shared,omitempty"` // users who have access to this user's root
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`   // Full path including username (e.g., "/umang", "/umang/proj")
+	Users         []string               `protobuf:"bytes,2,rep,name=users,proto3" json:"users,omitempty"` // Users with explicit access to this directory
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Owner         string                 `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UserACL) Reset() {
-	*x = UserACL{}
+func (x *SharedDir) Reset() {
+	*x = SharedDir{}
 	mi := &file_api_metaserver_metaserver_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UserACL) String() string {
+func (x *SharedDir) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UserACL) ProtoMessage() {}
+func (*SharedDir) ProtoMessage() {}
 
-func (x *UserACL) ProtoReflect() protoreflect.Message {
+func (x *SharedDir) ProtoReflect() protoreflect.Message {
 	mi := &file_api_metaserver_metaserver_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -54,30 +56,44 @@ func (x *UserACL) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UserACL.ProtoReflect.Descriptor instead.
-func (*UserACL) Descriptor() ([]byte, []int) {
+// Deprecated: Use SharedDir.ProtoReflect.Descriptor instead.
+func (*SharedDir) Descriptor() ([]byte, []int) {
 	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *UserACL) GetUsername() string {
+func (x *SharedDir) GetPath() string {
 	if x != nil {
-		return x.Username
+		return x.Path
 	}
 	return ""
 }
 
-func (x *UserACL) GetShared() []string {
+func (x *SharedDir) GetUsers() []string {
 	if x != nil {
-		return x.Shared
+		return x.Users
 	}
 	return nil
+}
+
+func (x *SharedDir) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SharedDir) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
 }
 
 type RegisterFileServerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
 	Users         []string               `protobuf:"bytes,2,rep,name=users,proto3" json:"users,omitempty"`
-	Acls          []*UserACL             `protobuf:"bytes,3,rep,name=acls,proto3" json:"acls,omitempty"` // ACL information for each user
+	Shared        []*SharedDir           `protobuf:"bytes,3,rep,name=shared,proto3" json:"shared,omitempty"` // ACL information for each user
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -126,9 +142,9 @@ func (x *RegisterFileServerRequest) GetUsers() []string {
 	return nil
 }
 
-func (x *RegisterFileServerRequest) GetAcls() []*UserACL {
+func (x *RegisterFileServerRequest) GetShared() []*SharedDir {
 	if x != nil {
-		return x.Acls
+		return x.Shared
 	}
 	return nil
 }
@@ -742,14 +758,16 @@ var File_api_metaserver_metaserver_proto protoreflect.FileDescriptor
 const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\n" +
 	"\x1fapi/metaserver/metaserver.proto\x12\n" +
-	"metaserver\"=\n" +
-	"\aUserACL\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\x12\x16\n" +
-	"\x06shared\x18\x02 \x03(\tR\x06shared\"t\n" +
+	"metaserver\"_\n" +
+	"\tSharedDir\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
+	"\x05users\x18\x02 \x03(\tR\x05users\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
+	"\x05owner\x18\x04 \x01(\tR\x05owner\"z\n" +
 	"\x19RegisterFileServerRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x14\n" +
-	"\x05users\x18\x02 \x03(\tR\x05users\x12'\n" +
-	"\x04acls\x18\x03 \x03(\v2\x13.metaserver.UserACLR\x04acls\"L\n" +
+	"\x05users\x18\x02 \x03(\tR\x05users\x12-\n" +
+	"\x06shared\x18\x03 \x03(\v2\x15.metaserver.SharedDirR\x06shared\"L\n" +
 	"\x1aRegisterFileServerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"J\n" +
@@ -811,7 +829,7 @@ func file_api_metaserver_metaserver_proto_rawDescGZIP() []byte {
 
 var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_api_metaserver_metaserver_proto_goTypes = []any{
-	(*UserACL)(nil),                    // 0: metaserver.UserACL
+	(*SharedDir)(nil),                  // 0: metaserver.SharedDir
 	(*RegisterFileServerRequest)(nil),  // 1: metaserver.RegisterFileServerRequest
 	(*RegisterFileServerResponse)(nil), // 2: metaserver.RegisterFileServerResponse
 	(*NavigateRequest)(nil),            // 3: metaserver.NavigateRequest
@@ -826,7 +844,7 @@ var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*HeartbeatResponse)(nil),          // 12: metaserver.HeartbeatResponse
 }
 var file_api_metaserver_metaserver_proto_depIdxs = []int32{
-	0,  // 0: metaserver.RegisterFileServerRequest.acls:type_name -> metaserver.UserACL
+	0,  // 0: metaserver.RegisterFileServerRequest.shared:type_name -> metaserver.SharedDir
 	1,  // 1: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
 	3,  // 2: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
 	11, // 3: metaserver.MetaServer.Heartbeat:input_type -> metaserver.HeartbeatRequest
