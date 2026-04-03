@@ -23,7 +23,7 @@ type FileServer struct {
 	useTLS      bool
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
 	msAddr      string
-	Shared      map[string][]string // dirFID to users map
+	Shared      map[string][]string // directory path -> users map (e.g., "umang/proj" -> ["romit"])
 }
 
 type trashEntry struct {
@@ -58,11 +58,21 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileS
 
 		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
 
+		// Load explicit directory shares from disk
+		if err := fs.LoadDirShares(); err != nil {
+			log.Printf("Warning: failed to load dirShares: %v", err)
+			// Continue anyway - start with empty dirShares
+			fs.Shared = make(map[string][]string)
+		}
+
 	} else {
 		// Root directory doesn't exist, create it
 		if err := os.MkdirAll(rootDir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create root dir: %w", err)
 		}
+
+		// Initialize empty dirShares
+		fs.Shared = make(map[string][]string)
 	}
 
 	return fs, nil
@@ -501,6 +511,12 @@ func (fs *FileServer) Share(username string, share_with string, dirFID *domain.F
 	subtreeInodes := fs.collectSubtreeInodes(dirInode)
 	log.Printf("Share: collected %d inodes in subtree for directory '%s'", len(subtreeInodes), dirInode.Name)
 
+	// Log all collected inodes for debugging
+	log.Printf("Share: Collected inodes:")
+	for i, inode := range subtreeInodes {
+		log.Printf("  [%d] Name=%s, Type=%s, OSPath=%s", i, inode.Name, inode.Type, inode.OSPath)
+	}
+
 	// Update ACL for each inode in the subtree
 	for _, inode := range subtreeInodes {
 		// Check if share_with is already in the ACL.Shared list (idempotent)
@@ -531,7 +547,41 @@ func (fs *FileServer) Share(username string, share_with string, dirFID *domain.F
 		}
 	}
 
+	// Track explicit directory share in fs.Shared map (dirShares)
+	// This is CRITICAL: only track the explicit share, not inherited ones
+	// Use path as key (stable across restarts), not FID
 	path, err := filepath.Rel(fs.rootDir, dirInode.OSPath)
+	if err != nil {
+		log.Printf("Warning: failed to compute relative path for dirShares tracking: %v", err)
+		path = dirInode.Name // Fallback to just the name
+	}
+
+	if fs.Shared == nil {
+		fs.Shared = make(map[string][]string)
+	}
+	if fs.Shared[path] == nil {
+		fs.Shared[path] = []string{}
+	}
+
+	// Check if already in explicit shares (idempotent)
+	alreadyInShared := false
+	for _, u := range fs.Shared[path] {
+		if u == share_with {
+			alreadyInShared = true
+			break
+		}
+	}
+	if !alreadyInShared {
+		fs.Shared[path] = append(fs.Shared[path], share_with)
+		log.Printf("Share: Added explicit share tracking: path=%s, user=%s", path, share_with)
+	}
+
+	// Persist dirShares to disk
+	if saveErr := fs.SaveDirShares(); saveErr != nil {
+		log.Printf("Warning: failed to persist dirShares: %v", saveErr)
+		// Continue anyway - in-memory state is updated
+	}
+
 	if err != nil {
 		log.Printf("Warning: failed to compute relative path for inode '%s': %v", dirInode.Name, err)
 	}
@@ -614,6 +664,36 @@ func (fs *FileServer) Unshare(username string, unshare_with string, dirFID *doma
 				// Continue anyway - in-memory ACL is updated
 			}
 		}
+	}
+
+	// Remove explicit directory share from fs.Shared map (dirShares)
+	// Use path as key (stable across restarts), not FID
+	dirPath, pathErr := filepath.Rel(fs.rootDir, dirInode.OSPath)
+	if pathErr != nil {
+		log.Printf("Warning: failed to compute relative path for dirShares tracking: %v", pathErr)
+		dirPath = dirInode.Name // Fallback
+	}
+
+	if fs.Shared != nil && fs.Shared[dirPath] != nil {
+		newSharedList := []string{}
+		for _, u := range fs.Shared[dirPath] {
+			if u != unshare_with {
+				newSharedList = append(newSharedList, u)
+			}
+		}
+		fs.Shared[dirPath] = newSharedList
+		log.Printf("Unshare: Removed explicit share tracking: path=%s, user=%s", dirPath, unshare_with)
+
+		// If no more explicit shares, remove the entry
+		if len(fs.Shared[dirPath]) == 0 {
+			delete(fs.Shared, dirPath)
+		}
+	}
+
+	// Persist dirShares to disk
+	if saveErr := fs.SaveDirShares(); saveErr != nil {
+		log.Printf("Warning: failed to persist dirShares: %v", saveErr)
+		// Continue anyway - in-memory state is updated
 	}
 
 	path, err := filepath.Rel(fs.rootDir, dirInode.OSPath)
@@ -759,7 +839,13 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		}
 	}
 
-	ACL := parent.ACL
+	// Create a deep copy of parent's ACL (not a reference)
+	// This ensures child ACL modifications don't affect parent
+	ACL := domain.ACL{
+		Owner:  parent.ACL.Owner,
+		Shared: make([]string, len(parent.ACL.Shared)),
+	}
+	copy(ACL.Shared, parent.ACL.Shared)
 
 	// Create inode
 	newInode := &domain.Inode{

@@ -122,37 +122,52 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		h.removeRootFromAllSharedLocked(username)
 	}
 
-	log.Printf("[METASERVER] Processing %d ACL entries from registration", len(req.Shared))
+	log.Printf("[METASERVER] Processing %d shared directory entries from registration", len(req.Shared))
 	for _, sharedDir := range req.Shared {
-		username := sharedDir.Owner
-		log.Printf("[METASERVER] Processing ACL for owner=%s, users=%v", username, sharedDir.Users)
+		owner := sharedDir.Owner
+		dirPath := sharedDir.Path
+		dirName := sharedDir.Name
+		log.Printf("[METASERVER] Processing shared dir: owner=%s, path=%s, name=%s, users=%v",
+			owner, dirPath, dirName, sharedDir.Users)
 
-		if _, ownedByThisFS := incomingUsers[username]; !ownedByThisFS {
-			log.Printf("[METASERVER] Skipping owner %s (not on this FS)", username)
+		if _, ownedByThisFS := incomingUsers[owner]; !ownedByThisFS {
+			log.Printf("[METASERVER] Skipping owner %s (not on this FS)", owner)
 			continue
 		}
 
 		for _, sharedWith := range sharedDir.Users {
-			log.Printf("[METASERVER] Processing share: %s -> %s", username, sharedWith)
+			log.Printf("[METASERVER] Processing share: %s (path=%s) -> %s", owner, dirPath, sharedWith)
 
 			// Skip if owner is trying to share with themselves
-			if sharedWith == username {
-				log.Printf("[METASERVER] Skipping self-share: %s cannot share with themselves", username)
+			if sharedWith == owner {
+				log.Printf("[METASERVER] Skipping self-share: %s cannot share with themselves", owner)
 				continue
 			}
 
 			if h.MetaServer.shared[sharedWith] == nil {
 				h.MetaServer.shared[sharedWith] = []SharedDirEntry{}
 			}
-			if !contains(h.MetaServer.shared[sharedWith], username) {
-				log.Printf("[METASERVER] Adding %s to %s's shared list", username, sharedWith)
+
+			// Check if this specific directory is already shared (by path, not just owner)
+			alreadyShared := false
+			for _, existing := range h.MetaServer.shared[sharedWith] {
+				if existing.Owner == owner && existing.Path == "/"+dirPath {
+					alreadyShared = true
+					break
+				}
+			}
+
+			if !alreadyShared {
+				log.Printf("[METASERVER] Adding %s (path=%s, name=%s) to %s's shared list",
+					owner, dirPath, dirName, sharedWith)
 				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{
-					Owner:       username,
-					Path:        "/" + username, // Root path includes username prefix
-					DisplayName: username,
+					Owner:       owner,
+					Path:        "/" + dirPath, // Use actual directory path from registration
+					DisplayName: dirName,       // Use actual directory name from registration
 				})
 			} else {
-				log.Printf("[METASERVER] Skipping duplicate: %s already in %s's shared list", username, sharedWith)
+				log.Printf("[METASERVER] Skipping duplicate: %s/%s already in %s's shared list",
+					owner, dirPath, sharedWith)
 			}
 		}
 	}

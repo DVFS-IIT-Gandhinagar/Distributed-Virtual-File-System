@@ -167,6 +167,13 @@ func (scanner *FileScanner) scanUserDirectory(username string, userDir string, p
 					Shared: []string{},
 				}
 			}
+
+			// CRITICAL: Check if this child's ACL would incorrectly modify parent
+			// This should NEVER happen - child ACLs should not affect parent ACLs
+			if len(ACL.Shared) > 0 && parentInode != nil {
+				fmt.Printf("[SCANNER DEBUG] Child %s has ACL shared=%v, parent=%s has ACL shared=%v\n",
+					relPath, ACL.Shared, parentInode.Name, parentInode.ACL.Shared)
+			}
 			newInode := &domain.Inode{
 				FID:    newFID,
 				Type:   inodeType,

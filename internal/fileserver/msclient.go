@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"path/filepath"
 	"time"
 
 	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
 	"github.com/umangshikarvar/dvfs/internal/certs"
+	"github.com/umangshikarvar/dvfs/internal/domain"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -47,39 +49,68 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	}
 	defer conn.Close()
 
-	// Collect known users and their ACLs under the read lock
+	// Collect known users and their explicit directory shares under the read lock
 	fs.mu.RLock()
 	users := make([]string, 0, len(fs.users))
-	acls := make([]*mspb.SharedDir, 0, len(fs.users))
+	acls := make([]*mspb.SharedDir, 0)
 
-	for username, rootFID := range fs.users {
+	// Collect all users
+	for username := range fs.users {
 		users = append(users, username)
+	}
 
-		// Get root inode to access ACL
-		rootInode := fs.inodes[rootFID.String()]
+	// Build SharedDir messages from fs.Shared (dirShares)
+	// fs.Shared maps path -> []users
+	for dirPath, sharedUsers := range fs.Shared {
+		// Find the inode for this path
+		fullPath := filepath.Join(fs.rootDir, dirPath)
 
-		path, err := fs.Path(rootFID)
-		if err != nil {
-			log.Printf("[FILESERVER] Failed to resolve path for user %s: %v", username, err)
+		// Clean both paths for comparison (resolve . and .. components)
+		cleanFullPath := filepath.Clean(fullPath)
+
+		var foundInode *domain.Inode
+		for _, inode := range fs.inodes {
+			cleanInodePath := filepath.Clean(inode.OSPath)
+			if cleanInodePath == cleanFullPath {
+				foundInode = inode
+				break
+			}
+		}
+
+		if foundInode == nil {
+			log.Printf("[FILESERVER] Warning: path '%s' in Shared map but inode not found (looking for OSPath='%s')",
+				dirPath, cleanFullPath)
+			// Debug: print first few inodes to help diagnose
+			count := 0
+			for _, inode := range fs.inodes {
+				if count < 5 {
+					log.Printf("[FILESERVER] Debug: sample inode OSPath='%s', Name='%s'", inode.OSPath, inode.Name)
+					count++
+				}
+			}
 			continue
 		}
 
-		// Create SharedDir message
+		// Create SharedDir message with explicit shares
 		sharedDir := &mspb.SharedDir{
-			Owner: username,
-			Name: username,
-			Path: path,
-			Users:   rootInode.ACL.Shared,
+			Owner: foundInode.ACL.Owner,
+			Name:  foundInode.Name,
+			Path:  dirPath,
+			Users: sharedUsers,
 		}
 		acls = append(acls, sharedDir)
+		log.Printf("[FILESERVER] Registration: dir=%s (owner=%s, path=%s) shared with %v",
+			foundInode.Name, foundInode.ACL.Owner, dirPath, sharedUsers)
 	}
 	fs.mu.RUnlock()
+
+	log.Printf("[FILESERVER] Registering with metaserver: %d users, %d explicit shares", len(users), len(acls))
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
 		Address: selfAddr,
 		Users:   users,
-		Shared:    acls,
+		Shared:  acls,
 	})
 	if err != nil {
 		return fmt.Errorf("RegisterFileServer RPC failed: %w", err)
@@ -122,10 +153,10 @@ func (fs *FileServer) RootShare(owner, name, path, share_with string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RootShare(context.Background(), &mspb.RootShareRequest{
-		Owner: owner,
+		Owner:     owner,
 		RootPath:  path,
 		ShareWith: share_with,
-		Name: 	name,
+		Name:      name,
 	})
 	if err != nil {
 		return fmt.Errorf("RootShare RPC failed: %w", err)
@@ -168,10 +199,10 @@ func (fs *FileServer) RootUnshare(owner, name, path, unshare_with string) error 
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RootUnshare(context.Background(), &mspb.RootUnshareRequest{
-		Owner: owner,
-		RootPath:  path,
+		Owner:       owner,
+		RootPath:    path,
 		UnshareWith: unshare_with,
-		Name: 	name,
+		Name:        name,
 	})
 	if err != nil {
 		return fmt.Errorf("RootShare RPC failed: %w", err)
