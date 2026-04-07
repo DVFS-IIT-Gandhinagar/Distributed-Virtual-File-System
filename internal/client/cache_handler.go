@@ -217,6 +217,12 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 		c.client.ChangeCurrentFID(c.curr.fid)
 		return c.populateCurrentDirCache()
 	case "..":
+		// Check if we're at the root (either own root or shared directory root)
+		if c.curr == c.root {
+			// User is at root, return special error to trigger metaserver screen
+			return fmt.Errorf("RETURN_TO_METASERVER")
+		}
+
 		c.curr = c.curr.parent
 		if c.curr == nil { // if parent is nil, we're at root, so stay at root
 			c.curr = c.root

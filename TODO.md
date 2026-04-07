@@ -18,8 +18,8 @@
 - [x] sharing phase-1 - @Umang-Shikarvar
 - [x] Implement crash recovery for MDS - @ShardulJunagade
 - [x] Implement heartbeat - @ShardulJunagade
+- [x] sharing phase-2 - @Umang-Shikarvar
 - [ ] Implement authentication of users - @Reckadon
-- [ ] sharing phase-2 - @Umang-Shikarvar
 - [ ] chunked upload/download + read_at @jsmaskeen
 - [ ] CI - @jsmaskeen
 - [ ] unittests - @jsmaskeen

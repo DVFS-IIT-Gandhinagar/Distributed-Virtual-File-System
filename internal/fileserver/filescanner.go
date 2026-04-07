@@ -31,7 +31,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 		if entry.IsDir() {
 			userWaitGroup.Add(1)
 
-			go func() error {
+			go func(entry os.DirEntry) error {
 				defer userWaitGroup.Done()
 
 				username := entry.Name()
@@ -91,7 +91,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 
 				fmt.Printf("Scanned user directory: %s, total size: %d bytes\n", username, userDirSize)
 				return nil
-			}()
+			}(entry)
 		}
 	}
 	userWaitGroup.Wait() // wait for all user scanning goroutines to finish before returning
