@@ -32,31 +32,70 @@ func main() {
 
 	serverAddress := fmt.Sprintf("%s:%s", *ip_addr, *port)
 
-	// If metaserver flag is set, navigate to the appropriate file server based on the username
 	if *metaserver {
 		roots, err := c.GetRoots(*ip_addr + ":" + *port)
 		if err != nil {
 			log.Fatalf("Failed to get roots: %v", err)
 		}
 
-		fmt.Printf("Available roots:\n")
-
-		for _, root := range roots {
-			fmt.Printf("%s\n", root.DisplayName)
+		if len(roots) == 0 {
+			log.Fatalf("No roots available")
 		}
 
-		user_root := *root_user
-		fmt.Print("Enter the root you want to access: ")
-		fmt.Scanln(&user_root)
-		if user_root == "mydrive" {
-			user_root = *username
+		fmt.Println("\nAvailable roots:")
+		fmt.Println("────────────────────────────────")
+
+		fmt.Printf("  %-3s %-15s %-10s\n", "#", "ROOT", "OWNER")
+		fmt.Println("  --------------------------------")
+
+		for i, root := range roots {
+			owner := root.Owner
+			if owner == *username {
+				owner = "you"
+			}
+
+			fmt.Printf("  %-3d %-15s %-10s\n", i+1, root.DisplayName, owner)
 		}
-		c.SetRootUser(user_root)
+
+		fmt.Println("\n  0   Exit\n")
+
+		var selectedRootUser string
+
+		for {
+			var choice int
+
+			fmt.Printf("Select root [1-%d] or 0 to exit: ", len(roots))
+
+			_, err := fmt.Scanln(&choice)
+			if err != nil {
+				fmt.Println("Invalid input. Enter a number.")
+				continue
+			}
+
+			if choice == 0 {
+				fmt.Println("Goodbye!")
+				return
+			}
+
+			if choice >= 1 && choice <= len(roots) {
+				selectedRootUser = roots[choice-1].Owner
+				break
+			}
+
+			fmt.Println("Invalid selection. Try again.")
+		}
+
+		if selectedRootUser == "mydrive" {
+			selectedRootUser = *username
+		}
+
+		c.SetRootUser(selectedRootUser)
 
 		fileserver, err := c.NavigateToFileServer(*ip_addr + ":" + *port)
 		if err != nil {
 			log.Fatalf("Failed to navigate to file server: %v", err)
 		}
+
 		serverAddress = fileserver
 	}
 
