@@ -119,6 +119,11 @@ func (scanner *FileScanner) scanUserDirectory(username string, userDir string, p
 			return fmt.Errorf("failed to read user directory: %w", err)
 		}
 		for _, entry := range entries {
+			// Skip .acl files (they are metadata, not user files)
+			if entry.Name() == ".acl" {
+				continue
+			}
+
 			// Generate new FID for this item
 			newFID := &domain.FID{
 				FileServerID:     scanner.serverID,

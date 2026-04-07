@@ -335,11 +335,20 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 		log.Printf("[METASERVER] Assigned user %s to FS %s (users: %d)", user, h.MetaServer.fileservers[fs].Address, h.MetaServer.fileservers[fs].UserCount)
 	}
 
-	roots := []string{}
-	roots = append(roots, "mydrive")
-	for _, sharedRoot := range h.MetaServer.shared[user] {
-		roots = append(roots, sharedRoot.DisplayName)
+	roots := []*pb.SharedRoot{
+		{
+			Owner:       user,
+			Path:        user,
+			DisplayName: "mydrive",
+		},
 	}
+	for _, sharedRoot := range h.MetaServer.shared[user] {
+	roots = append(roots, &pb.SharedRoot{
+		Owner:       sharedRoot.Owner,
+		Path:        sharedRoot.Path,
+		DisplayName: sharedRoot.DisplayName,
+	})
+}
 
 	return &pb.GetRootsResponse{
 		Success: true,
