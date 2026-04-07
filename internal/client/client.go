@@ -20,6 +20,7 @@ import (
 type Client struct {
 	username   string
 	root_user  string
+	root_path  string
 	rootFID    *domain.FID
 	currentFID *domain.FID
 	serverConn pb.FileServerClient
@@ -48,6 +49,11 @@ func NewClient(username string, root_user string, useTLS bool) *Client {
 // Set user root
 func (c *Client) SetRootUser(root_user string) {
 	c.root_user = root_user
+}
+
+// Set root path
+func (c *Client) SetRootPath(path string) {
+	c.root_path = path
 }
 
 // Connect connects to a file server and gets user root and files/dir in the root
@@ -83,6 +89,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	resp, err := c.serverConn.RegisterClient(context.Background(), &pb.RegisterClientRequest{
 		Username: c.username,
 		RootUser: c.root_user,
+		RootPath: c.root_path,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to register: %w", err)

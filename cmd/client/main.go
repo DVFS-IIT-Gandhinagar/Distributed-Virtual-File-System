@@ -57,14 +57,14 @@ func main() {
 			fmt.Printf("  %-3d %-15s %-10s\n", i+1, root.DisplayName, owner)
 		}
 
-		fmt.Println("\n  0   Exit\n")
+		fmt.Println("\n  0   Exit")
 
 		var selectedRootUser string
 
 		for {
 			var choice int
 
-			fmt.Printf("Select root [1-%d] or 0 to exit: ", len(roots))
+			fmt.Printf("\nSelect root [1-%d] or 0 to exit: ", len(roots))
 
 			_, err := fmt.Scanln(&choice)
 			if err != nil {
@@ -79,6 +79,7 @@ func main() {
 
 			if choice >= 1 && choice <= len(roots) {
 				selectedRootUser = roots[choice-1].Owner
+				c.SetRootPath(roots[choice-1].Path)
 				break
 			}
 

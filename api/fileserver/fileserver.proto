@@ -237,7 +237,8 @@ message RegisterClientRequest {
   string client_id = 1;
   string callback_address = 2; // host:port for callbacks
   string username = 3; // username for access control
-  string root_user = 4; // username of root which client is using
+  string root_user = 4; // root user
+  string root_path = 5; // path of the root
 }
 
 message RegisterClientResponse {
