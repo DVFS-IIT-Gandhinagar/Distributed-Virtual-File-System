@@ -1269,6 +1269,7 @@ type PathRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Fid           *FID                   `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
 	RootUser      string                 `protobuf:"bytes,2,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1313,6 +1314,13 @@ func (x *PathRequest) GetFid() *FID {
 func (x *PathRequest) GetRootUser() string {
 	if x != nil {
 		return x.RootUser
+	}
+	return ""
+}
+
+func (x *PathRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
 	}
 	return ""
 }
@@ -2258,7 +2266,8 @@ type RegisterClientRequest struct {
 	ClientId        string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	CallbackAddress string                 `protobuf:"bytes,2,opt,name=callback_address,json=callbackAddress,proto3" json:"callback_address,omitempty"` // host:port for callbacks
 	Username        string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`                                      // username for access control
-	RootUser        string                 `protobuf:"bytes,4,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`                      // username of root which client is using
+	RootUser        string                 `protobuf:"bytes,4,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`                      // root user
+	RootPath        string                 `protobuf:"bytes,5,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"`                      // path of the root
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2317,6 +2326,13 @@ func (x *RegisterClientRequest) GetUsername() string {
 func (x *RegisterClientRequest) GetRootUser() string {
 	if x != nil {
 		return x.RootUser
+	}
+	return ""
+}
+
+func (x *RegisterClientRequest) GetRootPath() string {
+	if x != nil {
+		return x.RootPath
 	}
 	return ""
 }
@@ -2467,10 +2483,11 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12)\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x15.fileserver.InodeTypeR\x04type\x12\x12\n" +
 	"\x04size\x18\x05 \x01(\x04R\x04size\x12\x18\n" +
-	"\aversion\x18\x06 \x01(\x04R\aversion\"M\n" +
+	"\aversion\x18\x06 \x01(\x04R\aversion\"p\n" +
 	"\vPathRequest\x12!\n" +
 	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12\x1b\n" +
-	"\troot_user\x18\x02 \x01(\tR\brootUser\"R\n" +
+	"\troot_user\x18\x02 \x01(\tR\brootUser\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"R\n" +
 	"\fPathResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
@@ -2533,12 +2550,13 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\funshare_with\x18\x03 \x01(\tR\vunshareWith\"A\n" +
 	"\x0fUnshareResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\x98\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xb5\x01\n" +
 	"\x15RegisterClientRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12)\n" +
 	"\x10callback_address\x18\x02 \x01(\tR\x0fcallbackAddress\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x1b\n" +
-	"\troot_user\x18\x04 \x01(\tR\brootUser\"}\n" +
+	"\troot_user\x18\x04 \x01(\tR\brootUser\x12\x1b\n" +
+	"\troot_path\x18\x05 \x01(\tR\brootPath\"}\n" +
 	"\x16RegisterClientResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x123\n" +

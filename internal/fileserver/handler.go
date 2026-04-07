@@ -32,8 +32,8 @@ func NewGRPCHandler(fileServer *FileServer) *GRPCHandler {
 func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClientRequest) (*pb.RegisterClientResponse, error) {
 	log.Printf("RegisterClient: username=%s requesting for user root=%s", req.Username, req.RootUser)
 
-	if req.Username == "" || req.RootUser == "" {
-		log.Printf("RegisterClient: error - username and request user root are required")
+	if req.Username == "" || req.RootUser == "" || req.RootPath == "" {
+		log.Printf("RegisterClient: error - username ,request user root and path are required")
 		return &pb.RegisterClientResponse{
 			Success: false,
 			Error:   "username and request user root are required",
@@ -45,7 +45,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 		h.fileServer.mu.RLock()
 		_, isPresent := h.fileServer.users[req.RootUser]
 		h.fileServer.mu.RUnlock()
-		if !isPresent{
+		if !isPresent {
 			log.Printf("RegisterClient: error - user root %s is not present on this fs", req.RootUser)
 			return &pb.RegisterClientResponse{
 				Success: false,
@@ -53,7 +53,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			}, nil
 		}
 	}
-	rootFID, err := h.fileServer.GetUserRoot(req.RootUser)
+	rootFID, err := h.fileServer.GetUserRoot(req.RootPath, req.RootUser)
 	if err != nil {
 		log.Printf("RegisterClient: error getting requested root - %v", err)
 		return &pb.RegisterClientResponse{
@@ -85,7 +85,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			}
 		}
 		if !isShared {
-			log.Printf("RegisterClient: error - user %s is not allowed to access root %s", req.Username, req.RootUser)
+			log.Printf("RegisterClient: error - user %s is not allowed to access root %s", req.Username, req.RootPath)
 			return &pb.RegisterClientResponse{
 				Success: false,
 				Error:   fmt.Sprintf("user %s is not allowed to access root %s", req.Username, req.RootUser),
@@ -93,7 +93,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 		}
 	}
 
-	log.Printf("RegisterClient: success for user %s for the user root %s", req.Username, req.RootUser)
+	log.Printf("RegisterClient: success for user %s for the user root %s", req.Username, req.RootPath)
 	return &pb.RegisterClientResponse{
 		Success:     true,
 		UserRootFid: rootFID.ToProto(),
@@ -204,7 +204,7 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 	if err != nil {
 		log.Printf("Path: error - error in path computation")
 	}
-	path = filepath.Join("mydrive", path)
+	path = filepath.Join(req.DisplayName, path)
 	return &pb.PathResponse{
 		Path:    path,
 		Success: true,

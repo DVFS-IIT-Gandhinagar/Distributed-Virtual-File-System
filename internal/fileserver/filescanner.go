@@ -31,7 +31,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 		if entry.IsDir() {
 			userWaitGroup.Add(1)
 
-			go func() error {
+			go func(entry os.DirEntry) error {
 				defer userWaitGroup.Done()
 
 				username := entry.Name()
@@ -91,7 +91,7 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 
 				fmt.Printf("Scanned user directory: %s, total size: %d bytes\n", username, userDirSize)
 				return nil
-			}()
+			}(entry)
 		}
 	}
 	userWaitGroup.Wait() // wait for all user scanning goroutines to finish before returning
@@ -119,6 +119,11 @@ func (scanner *FileScanner) scanUserDirectory(username string, userDir string, p
 			return fmt.Errorf("failed to read user directory: %w", err)
 		}
 		for _, entry := range entries {
+			// Skip .acl files (they are metadata, not user files)
+			if entry.Name() == ".acl" {
+				continue
+			}
+
 			// Generate new FID for this item
 			newFID := &domain.FID{
 				FileServerID:     scanner.serverID,

@@ -19,65 +19,117 @@ func main() {
 
 	flag.Parse()
 
-	if *port == "" { 
-		if *metaserver { 
-			*port = "50051" 
+	if *port == "" {
+		if *metaserver {
+			*port = "50051"
 		} else {
-			*port = "50052" 
+			*port = "50052"
 		}
 	}
-	
-	// Create and connect client
+
+	// Create client
 	c := client.NewClient(*username, *root_user, *useTLS)
 
-	serverAddress := fmt.Sprintf("%s:%s", *ip_addr, *port)
+	// Main loop for metaserver navigation
+	for {
+		serverAddress := fmt.Sprintf("%s:%s", *ip_addr, *port)
 
-	// If metaserver flag is set, navigate to the appropriate file server based on the username
-	if *metaserver {
-		roots, err := c.GetRoots(*ip_addr+":"+*port)
+		if *metaserver {
+			roots, err := c.GetRoots(*ip_addr + ":" + *port)
+			if err != nil {
+				log.Fatalf("Failed to get roots: %v", err)
+			}
+
+			if len(roots) == 0 {
+				log.Fatalf("No roots available")
+			}
+
+			fmt.Println("\nAvailable roots:")
+			fmt.Println("────────────────────────────────")
+
+			fmt.Printf("  %-3s %-15s %-10s\n", "#", "ROOT", "OWNER")
+			fmt.Println("  --------------------------------")
+
+			for i, root := range roots {
+				owner := root.Owner
+				if owner == *username {
+					owner = "you"
+				}
+
+				fmt.Printf("  %-3d %-15s %-10s\n", i+1, root.DisplayName, owner)
+			}
+
+			fmt.Println("\n  0   Exit")
+
+			var selectedRootUser string
+
+			for {
+				var choice int
+
+				fmt.Printf("\nSelect root [1-%d] or 0 to exit: ", len(roots))
+
+				_, err := fmt.Scanln(&choice)
+				if err != nil {
+					fmt.Println("Invalid input. Enter a number.")
+					continue
+				}
+
+				if choice == 0 {
+					fmt.Println("Goodbye!")
+					return
+				}
+
+				if choice >= 1 && choice <= len(roots) {
+					selectedRootUser = roots[choice-1].Owner
+					c.SetRootPath(roots[choice-1].DisplayName, roots[choice-1].Path)
+					break
+				}
+
+				fmt.Println("Invalid selection. Try again.")
+			}
+
+			if selectedRootUser == "mydrive" {
+				selectedRootUser = *username
+			}
+
+			c.SetRootUser(selectedRootUser)
+
+			fileserver, err := c.NavigateToFileServer(*ip_addr + ":" + *port)
+			if err != nil {
+				log.Fatalf("Failed to navigate to file server: %v", err)
+			}
+
+			serverAddress = fileserver
+		}
+
+		fmt.Printf("Connecting to server at %s as user %s...\n", serverAddress, *username)
+
+		fid, err := c.Connect(serverAddress)
 		if err != nil {
-			log.Fatalf("Failed to get roots: %v", err)
+			log.Fatalf("Failed to connect: %v", err)
+		} else {
+			fmt.Printf("Connected successfully! Root FID: %s\n\n", fid.String())
 		}
 
-		fmt.Printf("Available roots:\n")
+		fmt.Printf("Connected successfully!\n\n")
 
-		for _, root := range roots {
-			fmt.Printf("%s\n", root)
+		cacheHandler := client.NewCacheHandler(c, fid) // initialise and populate cache handler with root directory and its contents from server
+		if cacheHandler == nil {
+			log.Fatalf("Failed to initialize cache handler")
+		}
+		cacheHandler.VisualizeCache("") // visualize the cache structure after initialization
+
+		// Start interactive command handler
+		handler := client.NewCobraHandler(cacheHandler)
+		shouldReturn := handler.Start()
+
+		// If Start returns false, exit the program
+		if !shouldReturn {
+			fmt.Println("Goodbye!")
+			return
 		}
 
-		user_root := *root_user
-		fmt.Print("Enter the root you want to access: ")
-		fmt.Scanln(&user_root)
-		if user_root == "mydrive" {
-			user_root = *username
-		}
-		c.SetRootUser(user_root)
-
-		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port)
-		if err != nil {
-			log.Fatalf("Failed to navigate to file server: %v", err)
-		}
-		serverAddress = fileserver
+		// Otherwise, loop back to metaserver selection
+		fmt.Println("Returning to metaserver root selection...")
 	}
-	
-	fmt.Printf("Connecting to server at %s as user %s...\n", serverAddress, *username)
-	
-	fid, err := c.Connect(serverAddress)
-	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
-	} else {
-		fmt.Printf("Connected successfully! Root FID: %s\n\n", fid.String())
-	}
-	
-	fmt.Printf("Connected successfully!\n\n")
-	
-	cacheHandler := client.NewCacheHandler(c, fid)   // initialise and populate cache handler with root directory and its contents from server
-	if cacheHandler == nil {
-		log.Fatalf("Failed to initialize cache handler")
-	}
-	cacheHandler.VisualizeCache("") // visualize the cache structure after initialization
-
-	// Start interactive command handler
-	handler := client.NewCobraHandler(cacheHandler)
-	handler.Start()
 }

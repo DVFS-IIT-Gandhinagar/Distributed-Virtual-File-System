@@ -79,60 +79,113 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileS
 }
 
 // GetUserRoot returns the root FID for a user, creating it if necessary
-func (fs *FileServer) GetUserRoot(root_user string) (*domain.FID, error) {
+func (fs *FileServer) GetUserRoot(root_path, root_user string) (*domain.FID, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	// If user already exists, ensure trash directory exists and return.
-	if rootFID := fs.users[root_user]; rootFID != nil {
-		if _, err := fs.getOrCreateTrashDirLocked(root_user); err != nil {
-			return nil, err
+	// Get or create the root user's directory
+	var rootFID *domain.FID
+	if existingRootFID := fs.users[root_user]; existingRootFID != nil {
+		rootFID = existingRootFID
+	} else {
+		// Create user directory if it doesn't exist
+		userDir := filepath.Join(fs.rootDir, root_user)
+		if err := os.MkdirAll(userDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create user dir: %w", err)
 		}
-		return rootFID, nil
+
+		// Create root FID for user
+		rootFID = &domain.FID{
+			FileServerID:     fs.serverID,
+			InodeID:          fs.nextInodeID,
+			GenerationNumber: 1,
+		}
+
+		// Load ACL from disk if it exists, otherwise use default
+		ACL, err := fs.LoadACL(root_user, root_user)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load ACL for user %s: %w", root_user, err)
+		}
+
+		// Create root inode
+		rootInode := &domain.Inode{
+			FID:      rootFID,
+			Type:     domain.InodeTypeDirectory,
+			Name:     root_user,
+			OSPath:   userDir,
+			ACL:      ACL,
+			Children: make([]*domain.FID, 0),
+		}
+
+		rootInode.Parent = rootInode
+
+		fs.inodes[rootFID.String()] = rootInode
+		fs.users[root_user] = rootFID
+
+		atomic.AddUint64(&fs.nextInodeID, 1)
 	}
 
-	// Create user directory if it doesn't exist
-	userDir := filepath.Join(fs.rootDir, root_user)
-	if err := os.MkdirAll(userDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create user dir: %w", err)
-	}
-
-	// Create root FID for user
-	rootFID := &domain.FID{
-		FileServerID:     fs.serverID,
-		InodeID:          fs.nextInodeID,
-		GenerationNumber: 1,
-	}
-
-	// Load ACL from disk if it exists, otherwise use default
-	ACL, err := fs.LoadACL(root_user, root_user)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load ACL for user %s: %w", root_user, err)
-	}
-
-	// Create root inode
-	rootInode := &domain.Inode{
-		FID:      rootFID,
-		Type:     domain.InodeTypeDirectory,
-		Name:     root_user,
-		OSPath:   userDir,
-		ACL:      ACL,
-		Children: make([]*domain.FID, 0),
-	}
-
-	rootInode.Parent = rootInode
-
-	fs.inodes[rootFID.String()] = rootInode
-	fs.users[root_user] = rootFID
-
-	atomic.AddUint64(&fs.nextInodeID, 1)
-
-	// Ensure per-user trash exists.
+	// Ensure per-user trash exists (always use root_user for trash)
 	if _, err := fs.getOrCreateTrashDirLocked(root_user); err != nil {
 		return nil, err
 	}
 
-	return rootFID, nil
+	// If root_path is same as root_user, return root FID
+	if root_path == root_user {
+		return rootFID, nil
+	}
+
+	// Parse the path - it should be in format "root_user/subdir/..." or "/root_user/subdir/..."
+	// Remove leading slash if present
+	cleanPath := strings.TrimPrefix(root_path, "/")
+
+	// Split the path
+	pathComponents := strings.Split(cleanPath, "/")
+	log.Printf("GetUserRoot: root_path=%s, root_user=%s, cleanPath=%s, pathComponents=%v", root_path, root_user, cleanPath, pathComponents)
+
+	// Find where to start traversal
+	startIdx := 0
+	if len(pathComponents) > 0 && pathComponents[0] == root_user {
+		// Path starts with root_user, skip it
+		startIdx = 1
+	}
+	log.Printf("GetUserRoot: startIdx=%d, len(pathComponents)=%d", startIdx, len(pathComponents))
+
+	// If no components to traverse, return root
+	if startIdx >= len(pathComponents) {
+		return rootFID, nil
+	}
+
+	// Traverse from root to the requested path
+	currentFID := rootFID
+	for i := startIdx; i < len(pathComponents); i++ {
+		component := pathComponents[i]
+		log.Printf("GetUserRoot: traversing component[%d]=%s", i, component)
+
+		if component == "" || component == "." {
+			log.Printf("GetUserRoot: skipping empty/dot component")
+			continue
+		}
+
+		currentInode, err := fs.GetInode(currentFID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get inode during traversal: %w", err)
+		}
+
+		if currentInode.Type != domain.InodeTypeDirectory {
+			return nil, fmt.Errorf("path component is not a directory: %s", component)
+		}
+
+		// Find child with matching name
+		childInode, err := fs.GetChildInodeByName(currentInode, component)
+		if err != nil {
+			return nil, fmt.Errorf("path component not found: %s (looking in %s)", component, currentInode.Name)
+		}
+
+		currentFID = childInode.FID
+	}
+
+	return currentFID, nil
 }
 
 func (fs *FileServer) getOrCreateTrashDirLocked(root_user string) (*domain.Inode, error) {

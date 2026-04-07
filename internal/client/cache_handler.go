@@ -19,7 +19,7 @@ type CNode struct {
 	Name          string
 	Type          domain.InodeType  // 0 for file, 1 for directory
 	fid           *domain.FID       // FID of the file/directory represented by this node
-	Size		  uint64             // size of the file (for files)
+	Size          uint64            // size of the file (for files)
 	children      map[string]*CNode // child names -> child nodes (for directories)
 	contentCached bool              // indicates if file content is cached (for files)
 	contentUID    string            // unique identifier for cached content (for files)
@@ -94,7 +94,6 @@ func (c *CacheHandler) visualizeCacheHelper(node *CNode, indent string) {
 		c.visualizeCacheHelper(child, indent+"  ")
 	}
 }
-
 
 func (c *CacheHandler) GetFileInfo() (*FileInfo, error) {
 	return c.client.GetFileInfo()
@@ -179,7 +178,7 @@ func (c *CacheHandler) Download(s string) error {
 
 func (c *CacheHandler) Upload(s string) error {
 	// create a new file node in the cache for the uploaded file
-	// extract file name from path 
+	// extract file name from path
 	fileName := filepath.Base(s)
 	// exctract file size from local file info
 	fi, err := os.Stat(s)
@@ -189,11 +188,11 @@ func (c *CacheHandler) Upload(s string) error {
 	fileSize := uint64(fi.Size())
 
 	c.curr.children[fileName] = &CNode{
-		Name:          fileName,
-		Type:          domain.InodeTypeFile,
-		fid:           nil, // FID will be updated after successful upload when we get the file info from server
-		Size:          fileSize,
-		parent:        c.curr,
+		Name:   fileName,
+		Type:   domain.InodeTypeFile,
+		fid:    nil, // FID will be updated after successful upload when we get the file info from server
+		Size:   fileSize,
+		parent: c.curr,
 	}
 	fid, err := c.client.Upload(s)
 	if err != nil {
@@ -218,6 +217,12 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 		c.client.ChangeCurrentFID(c.curr.fid)
 		return c.populateCurrentDirCache()
 	case "..":
+		// Check if we're at the root (either own root or shared directory root)
+		if c.curr == c.root {
+			// User is at root, return special error to trigger metaserver screen
+			return fmt.Errorf("RETURN_TO_METASERVER")
+		}
+
 		c.curr = c.curr.parent
 		if c.curr == nil { // if parent is nil, we're at root, so stay at root
 			c.curr = c.root
@@ -254,6 +259,14 @@ func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
 }
 
 func (c *CacheHandler) Path() (string, error) {
+	// If we're at root, return the display name (e.g., "proj" for shared dirs)
+	if c.curr == c.root {
+		if c.client.display_name != "" {
+			return c.client.display_name, nil
+		}
+		return c.root.Name, nil
+	}
+
 	// construct path by traversing up the cache tree from current node to root
 	path := ""
 	node := c.curr
@@ -261,7 +274,14 @@ func (c *CacheHandler) Path() (string, error) {
 		path = node.Name + "/" + path
 		node = node.parent
 	}
-	return "/" + path, nil
+
+	// Use display_name as the root prefix if available
+	rootPrefix := c.root.Name
+	if c.client.display_name != "" {
+		rootPrefix = c.client.display_name
+	}
+
+	return rootPrefix + "/" + path, nil
 }
 
 // get files/dir in the current dir from server and populate the cache
@@ -402,7 +422,7 @@ func (c *CacheHandler) ClearCache() {
 	if _, err := os.Stat(CacheDir); os.IsNotExist(err) {
 		return // silently return if cache directory doesn't exist
 	}
-	
+
 	// Existing logic continues unchanged
 	files, err := os.ReadDir(CacheDir)
 	if err != nil {

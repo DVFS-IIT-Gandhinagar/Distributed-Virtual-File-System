@@ -13,9 +13,9 @@ import (
 
 // CobraHandler handles commands using Cobra
 type CobraHandler struct {
-	cacheHandler  *CacheHandler
-	rootCmd *cobra.Command
-	rl      *readline.Instance
+	cacheHandler *CacheHandler
+	rootCmd      *cobra.Command
+	rl           *readline.Instance
 }
 
 // NewCobraHandler creates a new Cobra-based command handler
@@ -29,9 +29,10 @@ func NewCobraHandler(cacheHandler *CacheHandler) *CobraHandler {
 
 func (h *CobraHandler) setupCommands() {
 	h.rootCmd = &cobra.Command{
-		Use:   "dvfs",
-		Short: "Distributed Virtual File System Client",
-		SilenceUsage: true,
+		Use:           "dvfs",
+		Short:         "Distributed Virtual File System Client",
+		SilenceUsage:  true,
+		SilenceErrors: true, // Don't print errors, we handle them manually
 	}
 
 	// ls
@@ -319,7 +320,7 @@ func (h *CobraHandler) setupCommands() {
 }
 
 // Start begins the interactive command loop
-func (h *CobraHandler) Start() {
+func (h *CobraHandler) Start() bool {
 	completer := &CobraCompleter{handler: h}
 
 	rl, err := readline.NewEx(&readline.Config{
@@ -331,7 +332,7 @@ func (h *CobraHandler) Start() {
 	})
 	if err != nil {
 		fmt.Printf("Error initializing readline: %v", err)
-		return
+		return false
 	}
 	defer rl.Close()
 	h.rl = rl
@@ -345,12 +346,12 @@ func (h *CobraHandler) Start() {
 		if err != nil {
 			if err == readline.ErrInterrupt {
 				if len(line) == 0 {
-					break
+					return false // Exit program
 				} else {
 					continue
 				}
 			} else if err == io.EOF {
-				break
+				return false // Exit program
 			}
 			fmt.Printf("Error reading input: %v", err)
 			continue
@@ -364,7 +365,12 @@ func (h *CobraHandler) Start() {
 		// Use Cobra to execute the command
 		h.rootCmd.SetArgs(strings.Fields(line))
 		if err := h.rootCmd.Execute(); err != nil {
-			// Cobra already prints errors if SilenceErrors is not set
+			// Check if this is the special return to metaserver error
+			if err.Error() == "RETURN_TO_METASERVER" {
+				return true // Return to metaserver selection
+			}
+			// Print other errors
+			fmt.Printf("Error: %v\n", err)
 		}
 	}
 }
@@ -384,7 +390,7 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 		if len(parts) == 1 {
 			prefix = parts[0]
 		}
-		
+
 		var suggestions [][]rune
 		for _, cmd := range c.handler.rootCmd.Commands() {
 			if strings.HasPrefix(cmd.Name(), prefix) {
@@ -410,8 +416,8 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 
 	// Commands that need remote file completion
 	needsRemoteFile := map[string]bool{
-		"cd":       true,
-		"read":     true,
+		"cd":   true,
+		"read": true,
 		// "write":    true,
 		"download": true,
 		"rm":       true,
