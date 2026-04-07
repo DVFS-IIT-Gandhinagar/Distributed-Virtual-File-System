@@ -1,0 +1,42 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.0'
+
+    - name: Install Protoc
+      run: sudo apt-get install -y protobuf-compiler
+
+    - name: Install Go Protobuf plugins
+      run: |
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+    - name: Run Format and Vet
+      run: |
+        make fmt
+        make vet
+
+    - name: Attempt Protobuf Generation
+      run: make proto
+
+    - name: Generate Certs
+      run: make certs
+      
+    - name: Build Binaries
+      run: make build
