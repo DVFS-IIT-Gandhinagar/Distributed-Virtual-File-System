@@ -1,4 +1,4 @@
-.PHONY: all build proto clean run-server run-client help
+.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help
 
 # Variables
 BINARY_DIR=bin
@@ -91,6 +91,37 @@ vet:
 	@$(GO) vet ./...
 	@echo "Vet complete!"
 
+# Run unit tests
+test: certs
+	@echo "Running unit tests..."
+	@$(GO) test ./... -count=1 -v
+	@echo "Tests complete!"
+
+# Run client-focused tests
+test-client: certs
+	@echo "Running client test suite..."
+	@$(GO) test ./internal/client -count=1 -v
+	@echo "Client tests complete!"
+
+# Run edge-case tests
+test-edge: certs
+	@echo "Running edge-case test suite..."
+	@$(GO) test ./internal/fileserver ./internal/metaserver -count=1 -v
+	@echo "Edge-case tests complete!"
+
+# Run integration and end-to-end tests
+test-integration: certs
+	@echo "Running integration/e2e test suite..."
+	@$(GO) test ./integration -count=1 -v
+	@echo "Integration tests complete!"
+
+# Run unit tests with coverage
+test-cover: certs
+	@echo "Running unit tests with coverage..."
+	@$(GO) test ./... -count=1 -coverprofile=coverage.out -covermode=atomic
+	@$(GO) tool cover -func=coverage.out
+	@echo "Coverage report written to coverage.out"
+
 # Help
 help:
 	@echo "Available targets:"
@@ -104,6 +135,11 @@ help:
 	@echo "  make deps         - Install and tidy dependencies"
 	@echo "  make fmt          - Format code"
 	@echo "  make vet          - Run go vet"
+	@echo "  make test         - Run unit tests"
+	@echo "  make test-client  - Run client test suite"
+	@echo "  make test-edge    - Run edge-case test suite"
+	@echo "  make test-integration - Run integration/e2e tests"
+	@echo "  make test-cover   - Run unit tests with coverage"
 	@echo "  make help         - Show this help message"
 
 # Generate TLS certificates
