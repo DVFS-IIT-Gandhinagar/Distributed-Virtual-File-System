@@ -951,7 +951,7 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 		node := inode
 		for {
 			node.Size += uint64(sizeDiff)
-			if node.Parent != nil {
+			if node.Parent != nil && node.Parent != node {
 				node = node.Parent
 			} else {
 				// Reached root
