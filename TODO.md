@@ -22,6 +22,6 @@
 - [ ] Implement authentication of users - @Reckadon
 - [ ] chunked upload/download + read_at @jsmaskeen
 - [x] CI/CD - @jsmaskeen
-- [ ] unittests - @jsmaskeen
+- [x] unittests - @jsmaskeen
 - [ ] Compression in Upload/Download - @jsmaskeen
 - [ ] Fix TLS, and use a standard key pattern: have separate vert rather than embedding in the binary file, [give client and mds the same root CS], then client will connect to MDS. and for files/etc mds will reply with fileserver's IP. during TLS handshake wiht fileserver, fs will present its own cert. and client will verify FS's cert using its root cert locally. 
