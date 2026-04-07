@@ -19,14 +19,14 @@ func main() {
 
 	flag.Parse()
 
-	if *port == "" { 
-		if *metaserver { 
-			*port = "50051" 
+	if *port == "" {
+		if *metaserver {
+			*port = "50051"
 		} else {
-			*port = "50052" 
+			*port = "50052"
 		}
 	}
-	
+
 	// Create and connect client
 	c := client.NewClient(*username, *root_user, *useTLS)
 
@@ -34,7 +34,7 @@ func main() {
 
 	// If metaserver flag is set, navigate to the appropriate file server based on the username
 	if *metaserver {
-		roots, err := c.GetRoots(*ip_addr+":"+*port)
+		roots, err := c.GetRoots(*ip_addr + ":" + *port)
 		if err != nil {
 			log.Fatalf("Failed to get roots: %v", err)
 		}
@@ -42,7 +42,7 @@ func main() {
 		fmt.Printf("Available roots:\n")
 
 		for _, root := range roots {
-			fmt.Printf("%s\n", root)
+			fmt.Printf("%s\n", root.DisplayName)
 		}
 
 		user_root := *root_user
@@ -53,25 +53,25 @@ func main() {
 		}
 		c.SetRootUser(user_root)
 
-		fileserver, err := c.NavigateToFileServer(*ip_addr+":"+*port)
+		fileserver, err := c.NavigateToFileServer(*ip_addr + ":" + *port)
 		if err != nil {
 			log.Fatalf("Failed to navigate to file server: %v", err)
 		}
 		serverAddress = fileserver
 	}
-	
+
 	fmt.Printf("Connecting to server at %s as user %s...\n", serverAddress, *username)
-	
+
 	fid, err := c.Connect(serverAddress)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	} else {
 		fmt.Printf("Connected successfully! Root FID: %s\n\n", fid.String())
 	}
-	
+
 	fmt.Printf("Connected successfully!\n\n")
-	
-	cacheHandler := client.NewCacheHandler(c, fid)   // initialise and populate cache handler with root directory and its contents from server
+
+	cacheHandler := client.NewCacheHandler(c, fid) // initialise and populate cache handler with root directory and its contents from server
 	if cacheHandler == nil {
 		log.Fatalf("Failed to initialize cache handler")
 	}

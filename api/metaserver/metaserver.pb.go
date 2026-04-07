@@ -89,6 +89,66 @@ func (x *SharedDir) GetOwner() string {
 	return ""
 }
 
+type SharedRoot struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Owner         string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SharedRoot) Reset() {
+	*x = SharedRoot{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SharedRoot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SharedRoot) ProtoMessage() {}
+
+func (x *SharedRoot) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SharedRoot.ProtoReflect.Descriptor instead.
+func (*SharedRoot) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SharedRoot) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SharedRoot) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *SharedRoot) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
 type RegisterFileServerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
@@ -100,7 +160,7 @@ type RegisterFileServerRequest struct {
 
 func (x *RegisterFileServerRequest) Reset() {
 	*x = RegisterFileServerRequest{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[1]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -112,7 +172,7 @@ func (x *RegisterFileServerRequest) String() string {
 func (*RegisterFileServerRequest) ProtoMessage() {}
 
 func (x *RegisterFileServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[1]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -125,7 +185,7 @@ func (x *RegisterFileServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterFileServerRequest.ProtoReflect.Descriptor instead.
 func (*RegisterFileServerRequest) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{1}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RegisterFileServerRequest) GetAddress() string {
@@ -159,7 +219,7 @@ type RegisterFileServerResponse struct {
 
 func (x *RegisterFileServerResponse) Reset() {
 	*x = RegisterFileServerResponse{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[2]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -171,7 +231,7 @@ func (x *RegisterFileServerResponse) String() string {
 func (*RegisterFileServerResponse) ProtoMessage() {}
 
 func (x *RegisterFileServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[2]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -184,7 +244,7 @@ func (x *RegisterFileServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterFileServerResponse.ProtoReflect.Descriptor instead.
 func (*RegisterFileServerResponse) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{2}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RegisterFileServerResponse) GetSuccess() bool {
@@ -211,7 +271,7 @@ type NavigateRequest struct {
 
 func (x *NavigateRequest) Reset() {
 	*x = NavigateRequest{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[3]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -223,7 +283,7 @@ func (x *NavigateRequest) String() string {
 func (*NavigateRequest) ProtoMessage() {}
 
 func (x *NavigateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[3]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -236,7 +296,7 @@ func (x *NavigateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NavigateRequest.ProtoReflect.Descriptor instead.
 func (*NavigateRequest) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{3}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *NavigateRequest) GetUsername() string {
@@ -264,7 +324,7 @@ type NavigateResponse struct {
 
 func (x *NavigateResponse) Reset() {
 	*x = NavigateResponse{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[4]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -276,7 +336,7 @@ func (x *NavigateResponse) String() string {
 func (*NavigateResponse) ProtoMessage() {}
 
 func (x *NavigateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[4]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -289,7 +349,7 @@ func (x *NavigateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NavigateResponse.ProtoReflect.Descriptor instead.
 func (*NavigateResponse) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{4}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *NavigateResponse) GetSuccess() bool {
@@ -322,7 +382,7 @@ type GetRootsRequest struct {
 
 func (x *GetRootsRequest) Reset() {
 	*x = GetRootsRequest{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[5]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -334,7 +394,7 @@ func (x *GetRootsRequest) String() string {
 func (*GetRootsRequest) ProtoMessage() {}
 
 func (x *GetRootsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[5]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -347,7 +407,7 @@ func (x *GetRootsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRootsRequest.ProtoReflect.Descriptor instead.
 func (*GetRootsRequest) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{5}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetRootsRequest) GetUsername() string {
@@ -361,14 +421,14 @@ type GetRootsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Roots         []string               `protobuf:"bytes,3,rep,name=roots,proto3" json:"roots,omitempty"`
+	Roots         []*SharedRoot          `protobuf:"bytes,3,rep,name=roots,proto3" json:"roots,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetRootsResponse) Reset() {
 	*x = GetRootsResponse{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[6]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -380,7 +440,7 @@ func (x *GetRootsResponse) String() string {
 func (*GetRootsResponse) ProtoMessage() {}
 
 func (x *GetRootsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[6]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -393,7 +453,7 @@ func (x *GetRootsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRootsResponse.ProtoReflect.Descriptor instead.
 func (*GetRootsResponse) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{6}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetRootsResponse) GetSuccess() bool {
@@ -410,7 +470,7 @@ func (x *GetRootsResponse) GetError() string {
 	return ""
 }
 
-func (x *GetRootsResponse) GetRoots() []string {
+func (x *GetRootsResponse) GetRoots() []*SharedRoot {
 	if x != nil {
 		return x.Roots
 	}
@@ -429,7 +489,7 @@ type RootShareRequest struct {
 
 func (x *RootShareRequest) Reset() {
 	*x = RootShareRequest{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[7]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +501,7 @@ func (x *RootShareRequest) String() string {
 func (*RootShareRequest) ProtoMessage() {}
 
 func (x *RootShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[7]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +514,7 @@ func (x *RootShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootShareRequest.ProtoReflect.Descriptor instead.
 func (*RootShareRequest) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{7}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RootShareRequest) GetRootPath() string {
@@ -495,7 +555,7 @@ type RootShareResponse struct {
 
 func (x *RootShareResponse) Reset() {
 	*x = RootShareResponse{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[8]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +567,7 @@ func (x *RootShareResponse) String() string {
 func (*RootShareResponse) ProtoMessage() {}
 
 func (x *RootShareResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[8]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +580,7 @@ func (x *RootShareResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootShareResponse.ProtoReflect.Descriptor instead.
 func (*RootShareResponse) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{8}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RootShareResponse) GetSuccess() bool {
@@ -549,7 +609,7 @@ type RootUnshareRequest struct {
 
 func (x *RootUnshareRequest) Reset() {
 	*x = RootUnshareRequest{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[9]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -561,7 +621,7 @@ func (x *RootUnshareRequest) String() string {
 func (*RootUnshareRequest) ProtoMessage() {}
 
 func (x *RootUnshareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[9]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -574,7 +634,7 @@ func (x *RootUnshareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootUnshareRequest.ProtoReflect.Descriptor instead.
 func (*RootUnshareRequest) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{9}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RootUnshareRequest) GetRootPath() string {
@@ -615,7 +675,7 @@ type RootUnshareResponse struct {
 
 func (x *RootUnshareResponse) Reset() {
 	*x = RootUnshareResponse{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[10]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -627,7 +687,7 @@ func (x *RootUnshareResponse) String() string {
 func (*RootUnshareResponse) ProtoMessage() {}
 
 func (x *RootUnshareResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[10]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -640,7 +700,7 @@ func (x *RootUnshareResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootUnshareResponse.ProtoReflect.Descriptor instead.
 func (*RootUnshareResponse) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{10}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RootUnshareResponse) GetSuccess() bool {
@@ -666,7 +726,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[11]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -678,7 +738,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[11]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -691,7 +751,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{11}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HeartbeatRequest) GetAddress() string {
@@ -711,7 +771,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[12]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -723,7 +783,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_metaserver_metaserver_proto_msgTypes[12]
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -736,7 +796,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{12}
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *HeartbeatResponse) GetSuccess() bool {
@@ -763,7 +823,12 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
 	"\x05users\x18\x02 \x03(\tR\x05users\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
-	"\x05owner\x18\x04 \x01(\tR\x05owner\"z\n" +
+	"\x05owner\x18\x04 \x01(\tR\x05owner\"Y\n" +
+	"\n" +
+	"SharedRoot\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x14\n" +
+	"\x05owner\x18\x03 \x01(\tR\x05owner\"z\n" +
 	"\x19RegisterFileServerRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x14\n" +
 	"\x05users\x18\x02 \x03(\tR\x05users\x12-\n" +
@@ -779,11 +844,11 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12\x18\n" +
 	"\aaddress\x18\x03 \x01(\tR\aaddress\"-\n" +
 	"\x0fGetRootsRequest\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"X\n" +
+	"\busername\x18\x01 \x01(\tR\busername\"p\n" +
 	"\x10GetRootsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\x12\x14\n" +
-	"\x05roots\x18\x03 \x03(\tR\x05roots\"x\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12,\n" +
+	"\x05roots\x18\x03 \x03(\v2\x16.metaserver.SharedRootR\x05roots\"x\n" +
 	"\x10RootShareRequest\x12\x1b\n" +
 	"\troot_path\x18\x01 \x01(\tR\brootPath\x12\x14\n" +
 	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x1d\n" +
@@ -827,41 +892,43 @@ func file_api_metaserver_metaserver_proto_rawDescGZIP() []byte {
 	return file_api_metaserver_metaserver_proto_rawDescData
 }
 
-var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*SharedDir)(nil),                  // 0: metaserver.SharedDir
-	(*RegisterFileServerRequest)(nil),  // 1: metaserver.RegisterFileServerRequest
-	(*RegisterFileServerResponse)(nil), // 2: metaserver.RegisterFileServerResponse
-	(*NavigateRequest)(nil),            // 3: metaserver.NavigateRequest
-	(*NavigateResponse)(nil),           // 4: metaserver.NavigateResponse
-	(*GetRootsRequest)(nil),            // 5: metaserver.GetRootsRequest
-	(*GetRootsResponse)(nil),           // 6: metaserver.GetRootsResponse
-	(*RootShareRequest)(nil),           // 7: metaserver.RootShareRequest
-	(*RootShareResponse)(nil),          // 8: metaserver.RootShareResponse
-	(*RootUnshareRequest)(nil),         // 9: metaserver.RootUnshareRequest
-	(*RootUnshareResponse)(nil),        // 10: metaserver.RootUnshareResponse
-	(*HeartbeatRequest)(nil),           // 11: metaserver.HeartbeatRequest
-	(*HeartbeatResponse)(nil),          // 12: metaserver.HeartbeatResponse
+	(*SharedRoot)(nil),                 // 1: metaserver.SharedRoot
+	(*RegisterFileServerRequest)(nil),  // 2: metaserver.RegisterFileServerRequest
+	(*RegisterFileServerResponse)(nil), // 3: metaserver.RegisterFileServerResponse
+	(*NavigateRequest)(nil),            // 4: metaserver.NavigateRequest
+	(*NavigateResponse)(nil),           // 5: metaserver.NavigateResponse
+	(*GetRootsRequest)(nil),            // 6: metaserver.GetRootsRequest
+	(*GetRootsResponse)(nil),           // 7: metaserver.GetRootsResponse
+	(*RootShareRequest)(nil),           // 8: metaserver.RootShareRequest
+	(*RootShareResponse)(nil),          // 9: metaserver.RootShareResponse
+	(*RootUnshareRequest)(nil),         // 10: metaserver.RootUnshareRequest
+	(*RootUnshareResponse)(nil),        // 11: metaserver.RootUnshareResponse
+	(*HeartbeatRequest)(nil),           // 12: metaserver.HeartbeatRequest
+	(*HeartbeatResponse)(nil),          // 13: metaserver.HeartbeatResponse
 }
 var file_api_metaserver_metaserver_proto_depIdxs = []int32{
 	0,  // 0: metaserver.RegisterFileServerRequest.shared:type_name -> metaserver.SharedDir
-	1,  // 1: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
-	3,  // 2: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
-	11, // 3: metaserver.MetaServer.Heartbeat:input_type -> metaserver.HeartbeatRequest
-	5,  // 4: metaserver.MetaServer.GetRoots:input_type -> metaserver.GetRootsRequest
-	7,  // 5: metaserver.MetaServer.RootShare:input_type -> metaserver.RootShareRequest
-	9,  // 6: metaserver.MetaServer.RootUnshare:input_type -> metaserver.RootUnshareRequest
-	2,  // 7: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
-	4,  // 8: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
-	12, // 9: metaserver.MetaServer.Heartbeat:output_type -> metaserver.HeartbeatResponse
-	6,  // 10: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
-	8,  // 11: metaserver.MetaServer.RootShare:output_type -> metaserver.RootShareResponse
-	10, // 12: metaserver.MetaServer.RootUnshare:output_type -> metaserver.RootUnshareResponse
-	7,  // [7:13] is the sub-list for method output_type
-	1,  // [1:7] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	1,  // 1: metaserver.GetRootsResponse.roots:type_name -> metaserver.SharedRoot
+	2,  // 2: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
+	4,  // 3: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
+	12, // 4: metaserver.MetaServer.Heartbeat:input_type -> metaserver.HeartbeatRequest
+	6,  // 5: metaserver.MetaServer.GetRoots:input_type -> metaserver.GetRootsRequest
+	8,  // 6: metaserver.MetaServer.RootShare:input_type -> metaserver.RootShareRequest
+	10, // 7: metaserver.MetaServer.RootUnshare:input_type -> metaserver.RootUnshareRequest
+	3,  // 8: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
+	5,  // 9: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
+	13, // 10: metaserver.MetaServer.Heartbeat:output_type -> metaserver.HeartbeatResponse
+	7,  // 11: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
+	9,  // 12: metaserver.MetaServer.RootShare:output_type -> metaserver.RootShareResponse
+	11, // 13: metaserver.MetaServer.RootUnshare:output_type -> metaserver.RootUnshareResponse
+	8,  // [8:14] is the sub-list for method output_type
+	2,  // [2:8] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_api_metaserver_metaserver_proto_init() }
@@ -875,7 +942,7 @@ func file_api_metaserver_metaserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_metaserver_metaserver_proto_rawDesc), len(file_api_metaserver_metaserver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -13,9 +13,9 @@ import (
 )
 
 // GetRoots gets the accessible roots to the user from the metaserver
-func (client *Client) GetRoots(msAddr string) ([]string, error) {
+func (client *Client) GetRoots(msAddr string) ([]SharedRoot, error) {
 	if msAddr == "" {
-		return []string{}, nil
+		return []SharedRoot{}, nil
 	}
 
 	// Build the same CA-backed TLS config the client uses when talking to FS.
@@ -23,7 +23,7 @@ func (client *Client) GetRoots(msAddr string) ([]string, error) {
 	if client.useTLS {
 		cp := x509.NewCertPool()
 		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return []string{}, fmt.Errorf("failed to append CA certificate")
+			return []SharedRoot{}, fmt.Errorf("failed to append CA certificate")
 		}
 
 		host, _, err := net.SplitHostPort(msAddr)
@@ -38,7 +38,7 @@ func (client *Client) GetRoots(msAddr string) ([]string, error) {
 
 	conn, err := grpc.NewClient(msAddr, opts...)
 	if err != nil {
-		return []string{}, fmt.Errorf("failed to connect to meta server: %w", err)
+		return []SharedRoot{}, fmt.Errorf("failed to connect to meta server: %w", err)
 	}
 	defer conn.Close()
 
@@ -47,13 +47,18 @@ func (client *Client) GetRoots(msAddr string) ([]string, error) {
 		Username: client.username,
 	})
 	if err != nil {
-		return []string{}, fmt.Errorf("Navigate RPC failed: %w", err)
+		return []SharedRoot{}, fmt.Errorf("Navigate RPC failed: %w", err)
 	}
 	if !resp.Success {
-		return []string{}, fmt.Errorf("meta server rejected get roots: %s", resp.Error)
+		return []SharedRoot{}, fmt.Errorf("meta server rejected get roots: %s", resp.Error)
 	}
 
-	return resp.Roots, nil
+	SharedRoots := []SharedRoot{}
+	for _, root := range resp.Roots {
+		SharedRoots = append(SharedRoots, SharedRoot{Path: root.Path, DisplayName: root.DisplayName, Owner: root.Owner})
+	}
+
+	return SharedRoots, nil
 }
 
 // NavigateToFileServer dials the meta server over TLS and navigates the client to the appropriate file server.

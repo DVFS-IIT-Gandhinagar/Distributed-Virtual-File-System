@@ -26,15 +26,22 @@ type Client struct {
 	useTLS     bool
 }
 
+// Shared Roots with the user
+type SharedRoot struct {
+	Path        string
+	DisplayName string
+	Owner       string
+}
+
 const chunkSize = 1024 * 1024 * 4 // 4MB
 const DownloadDir = "./Download"
 
 // NewClient creates a new VFS client
 func NewClient(username string, root_user string, useTLS bool) *Client {
 	return &Client{
-		username: username,
+		username:  username,
 		root_user: root_user,
-		useTLS:   useTLS,
+		useTLS:    useTLS,
 	}
 }
 
@@ -91,10 +98,10 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 }
 
 // Share another user the root dir only if current user is owner
-func (c *Client) Share(share_with string) (error) {
+func (c *Client) Share(share_with string) error {
 	resp, err := c.serverConn.Share(context.Background(), &pb.ShareRequest{
-		Username: c.username,
-		Fid: c.currentFID.ToProto(),
+		Username:  c.username,
+		Fid:       c.currentFID.ToProto(),
 		ShareWith: share_with,
 	})
 	if err != nil {
@@ -109,10 +116,10 @@ func (c *Client) Share(share_with string) (error) {
 }
 
 // Unshare another user the root dir only if current user is owner
-func (c *Client) Unshare(unshare_with string) (error) {
+func (c *Client) Unshare(unshare_with string) error {
 	resp, err := c.serverConn.Unshare(context.Background(), &pb.UnshareRequest{
-		Username: c.username,
-		Fid: c.currentFID.ToProto(),
+		Username:    c.username,
+		Fid:         c.currentFID.ToProto(),
 		UnshareWith: unshare_with,
 	})
 	if err != nil {
@@ -129,7 +136,7 @@ func (c *Client) Unshare(unshare_with string) (error) {
 // Returns current user path
 func (c *Client) Path() (string, error) {
 	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
-		Fid:  c.currentFID.ToProto(),
+		Fid:      c.currentFID.ToProto(),
 		RootUser: c.username,
 	})
 	if err != nil {
@@ -178,7 +185,7 @@ func (c *Client) ListFilesAt(dirFID *domain.FID) ([]*FileInfo, error) {
 		return nil, fmt.Errorf("invalid directory fid")
 	}
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
-		Fid:  dirFID.ToProto(),
+		Fid: dirFID.ToProto(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list directory: %w", err)
@@ -204,7 +211,7 @@ func (c *Client) ListFilesAt(dirFID *domain.FID) ([]*FileInfo, error) {
 // GetFileInfo gets information about user's current directory
 func (c *Client) GetFileInfo() (*FileInfo, error) {
 	resp, err := c.serverConn.GetAttr(context.Background(), &pb.GetAttrRequest{
-		Fid:  c.currentFID.ToProto(),
+		Fid: c.currentFID.ToProto(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attributes: %w", err)
@@ -225,10 +232,10 @@ func (c *Client) GetFileInfo() (*FileInfo, error) {
 // CreateFile creates a new file
 func (c *Client) CreateFile(name string) (*FileInfo, error) {
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
-		Name: name,
+		Name:     name,
 		RootUser: c.root_user,
-		Fid:  c.currentFID.ToProto(),
-		Type: pb.InodeType_FILE,
+		Fid:      c.currentFID.ToProto(),
+		Type:     pb.InodeType_FILE,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
@@ -266,10 +273,10 @@ func (c *Client) uploadRecursive(localPath string, parentFID *domain.FID) (*doma
 
 	// 1. Create directory on server
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
-		Name: baseName,
+		Name:     baseName,
 		RootUser: c.root_user,
-		Fid:  parentFID.ToProto(),
-		Type: pb.InodeType_DIRECTORY,
+		Fid:      parentFID.ToProto(),
+		Type:     pb.InodeType_DIRECTORY,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory %s: %w", baseName, err)
@@ -313,10 +320,10 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) (*domain
 	name := filepath.Base(path)
 
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
-		Name: name,
+		Name:     name,
 		RootUser: c.root_user,
-		Fid:  parentFID.ToProto(),
-		Type: pb.InodeType_FILE,
+		Fid:      parentFID.ToProto(),
+		Type:     pb.InodeType_FILE,
 	})
 
 	if err != nil {
@@ -407,7 +414,7 @@ func (c *Client) Download(path string) error {
 
 	// get current directory contents to find 'baseName'
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
-		Fid:  parentFID.ToProto(),
+		Fid: parentFID.ToProto(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list directory: %w", err)
@@ -445,7 +452,7 @@ func (c *Client) downloadRecursive(parentFID *domain.FID, entry *pb.DirEntry, lo
 	// List children of this directory
 	childFID := domain.FIDFromProto(entry.Fid)
 	resp, err := c.serverConn.ListDir(context.Background(), &pb.ListDirRequest{
-		Fid:  childFID.ToProto(),
+		Fid: childFID.ToProto(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list directory %s: %w", entry.Name, err)
@@ -518,10 +525,10 @@ func (c *Client) DownloadFile(name string) error {
 // CreateDirectory creates a new directory
 func (c *Client) CreateDirectory(name string) (*FileInfo, error) {
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
-		Name: name,
+		Name:     name,
 		RootUser: c.root_user,
-		Fid:  c.currentFID.ToProto(),
-		Type: pb.InodeType_DIRECTORY,
+		Fid:      c.currentFID.ToProto(),
+		Type:     pb.InodeType_DIRECTORY,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
@@ -669,7 +676,7 @@ func (c *Client) RestoreFile(name string) (string, error) {
 	}
 
 	resp, err := c.serverConn.RestoreFile(context.Background(), &pb.RestoreFileRequest{
-		Fid:  targetFID.ToProto(),
+		Fid:      targetFID.ToProto(),
 		RootUser: c.root_user,
 	})
 	if err != nil {

@@ -11,6 +11,12 @@ message SharedDir {
   string owner = 4;
 }
 
+message SharedRoot {
+  string path = 1;
+  string display_name = 2;
+  string owner = 3;
+}
+
 message RegisterFileServerRequest {
   string address = 1;
   repeated string users = 2;
@@ -40,7 +46,7 @@ message GetRootsRequest {
 message GetRootsResponse {
   bool success = 1;
   string error = 2;
-  repeated string roots = 3;
+  repeated SharedRoot roots = 3;
 }
 
 message RootShareRequest {

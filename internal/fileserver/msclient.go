@@ -80,12 +80,11 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 		if foundInode == nil {
 			log.Printf("[FILESERVER] Warning: path '%s' in Shared map but inode not found (looking for OSPath='%s')",
 				dirPath, cleanFullPath)
-			// Debug: print first few inodes to help diagnose
-			count := 0
+			// Debug: print all directory inodes to help diagnose
+			log.Printf("[FILESERVER] Debug: All directory inodes:")
 			for _, inode := range fs.inodes {
-				if count < 5 {
-					log.Printf("[FILESERVER] Debug: sample inode OSPath='%s', Name='%s'", inode.OSPath, inode.Name)
-					count++
+				if inode.Type == domain.InodeTypeDirectory {
+					log.Printf("[FILESERVER] Debug:   OSPath='%s', Name='%s'", inode.OSPath, inode.Name)
 				}
 			}
 			continue
