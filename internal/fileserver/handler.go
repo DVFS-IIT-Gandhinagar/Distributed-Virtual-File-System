@@ -45,7 +45,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 		h.fileServer.mu.RLock()
 		_, isPresent := h.fileServer.users[req.RootUser]
 		h.fileServer.mu.RUnlock()
-		if !isPresent{
+		if !isPresent {
 			log.Printf("RegisterClient: error - user root %s is not present on this fs", req.RootUser)
 			return &pb.RegisterClientResponse{
 				Success: false,
@@ -53,7 +53,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			}, nil
 		}
 	}
-	rootFID, err := h.fileServer.GetUserRoot(req.RootPath)
+	rootFID, err := h.fileServer.GetUserRoot(req.RootPath, req.RootUser)
 	if err != nil {
 		log.Printf("RegisterClient: error getting requested root - %v", err)
 		return &pb.RegisterClientResponse{
@@ -204,7 +204,7 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 	if err != nil {
 		log.Printf("Path: error - error in path computation")
 	}
-	path = filepath.Join("mydrive", path)
+	path = filepath.Join(req.DisplayName, path)
 	return &pb.PathResponse{
 		Path:    path,
 		Success: true,

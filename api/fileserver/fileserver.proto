@@ -138,6 +138,7 @@ message GetAttrResponse {
 message PathRequest {
   FID fid = 1;
   string root_user = 2;
+  string display_name = 3;
 }
 
 message PathResponse {

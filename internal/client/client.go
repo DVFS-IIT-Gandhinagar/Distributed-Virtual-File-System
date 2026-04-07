@@ -21,6 +21,7 @@ type Client struct {
 	username   string
 	root_user  string
 	root_path  string
+	display_name string
 	rootFID    *domain.FID
 	currentFID *domain.FID
 	serverConn pb.FileServerClient
@@ -52,8 +53,9 @@ func (c *Client) SetRootUser(root_user string) {
 }
 
 // Set root path
-func (c *Client) SetRootPath(path string) {
+func (c *Client) SetRootPath(display_name, path string) {
 	c.root_path = path
+	c.display_name = display_name
 }
 
 // Connect connects to a file server and gets user root and files/dir in the root
@@ -144,6 +146,7 @@ func (c *Client) Unshare(unshare_with string) error {
 func (c *Client) Path() (string, error) {
 	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
 		Fid:      c.currentFID.ToProto(),
+		DisplayName: c.display_name,
 		RootUser: c.username,
 	})
 	if err != nil {

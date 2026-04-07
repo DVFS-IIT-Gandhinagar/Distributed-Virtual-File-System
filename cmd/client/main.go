@@ -79,7 +79,7 @@ func main() {
 
 			if choice >= 1 && choice <= len(roots) {
 				selectedRootUser = roots[choice-1].Owner
-				c.SetRootPath(roots[choice-1].Path)
+				c.SetRootPath(roots[choice-1].DisplayName, roots[choice-1].Path)
 				break
 			}
 
