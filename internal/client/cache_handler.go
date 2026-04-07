@@ -327,9 +327,7 @@ func (c *CacheHandler) TrashFile(name string, recursive bool) (string, error) {
 		return "", err
 	}
 	// Remove from current directory cache (it no longer lives here).
-	if _, ok := c.curr.children[name]; ok {
-		delete(c.curr.children, name)
-	}
+	delete(c.curr.children, name)
 	return trashedName, nil
 }
 

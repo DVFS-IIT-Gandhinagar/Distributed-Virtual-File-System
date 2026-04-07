@@ -37,6 +37,9 @@ jobs:
       run: |
         make fmt
         make vet
+        
+    - name: Run Tests
+      run: make test
       
     - name: Build Binaries
       run: make build
