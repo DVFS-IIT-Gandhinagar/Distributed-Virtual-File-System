@@ -27,7 +27,7 @@ func TestLoadACLReturnsDefaultWhenMissing(t *testing.T) {
 func TestSaveAndLoadACLRoundTrip(t *testing.T) {
 	fs := newTestFileServer(t)
 
-	if _, err := fs.GetUserRoot("alice"); err != nil {
+	if _, err := fs.GetUserRoot("alice", "alice"); err != nil {
 		t.Fatalf("GetUserRoot failed: %v", err)
 	}
 

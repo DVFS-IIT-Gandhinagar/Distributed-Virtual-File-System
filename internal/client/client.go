@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/certs"
@@ -18,14 +19,14 @@ import (
 
 // Client provides basic VFS client functionality
 type Client struct {
-	username   string
-	root_user  string
-	root_path  string
+	username     string
+	root_user    string
+	root_path    string
 	display_name string
-	rootFID    *domain.FID
-	currentFID *domain.FID
-	serverConn pb.FileServerClient
-	useTLS     bool
+	rootFID      *domain.FID
+	currentFID   *domain.FID
+	serverConn   pb.FileServerClient
+	useTLS       bool
 }
 
 // Shared Roots with the user
@@ -54,7 +55,8 @@ func (c *Client) SetRootUser(root_user string) {
 
 // Set root path
 func (c *Client) SetRootPath(display_name, path string) {
-	c.root_path = path
+	// Normalize separators so cross-platform shared root paths resolve correctly.
+	c.root_path = strings.ReplaceAll(path, "\\", "/")
 	c.display_name = display_name
 }
 
@@ -145,9 +147,9 @@ func (c *Client) Unshare(unshare_with string) error {
 // Returns current user path
 func (c *Client) Path() (string, error) {
 	resp, err := c.serverConn.Path(context.Background(), &pb.PathRequest{
-		Fid:      c.currentFID.ToProto(),
+		Fid:         c.currentFID.ToProto(),
 		DisplayName: c.display_name,
-		RootUser: c.username,
+		RootUser:    c.username,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get path: %w", err)

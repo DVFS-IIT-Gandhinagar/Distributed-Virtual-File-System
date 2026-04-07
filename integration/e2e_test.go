@@ -79,9 +79,15 @@ func TestE2E_MDSRoutingAndClientCRUD(t *testing.T) {
 	}
 
 	alice := client.NewClient("alice", "alice", false)
-	if _, err := alice.GetRoots(mdsAddr); err != nil {
+	aliceRoots, err := alice.GetRoots(mdsAddr)
+	if err != nil {
 		t.Fatalf("GetRoots failed: %v", err)
 	}
+	if len(aliceRoots) == 0 {
+		t.Fatalf("expected at least one root for alice")
+	}
+	alice.SetRootUser(aliceRoots[0].Owner)
+	alice.SetRootPath(aliceRoots[0].DisplayName, aliceRoots[0].Path)
 
 	navAddr, err := alice.NavigateToFileServer(mdsAddr)
 	if err != nil {
@@ -131,12 +137,19 @@ func TestE2E_ShareUnshareFlowAcrossUsers(t *testing.T) {
 	alice := client.NewClient("alice", "alice", false)
 	bob := client.NewClient("bob", "bob", false)
 
-	if _, err := alice.GetRoots(mdsAddr); err != nil {
+	aliceRoots, err := alice.GetRoots(mdsAddr)
+	if err != nil {
 		t.Fatalf("alice GetRoots failed: %v", err)
 	}
-	if _, err := bob.GetRoots(mdsAddr); err != nil {
+	bobRoots, err := bob.GetRoots(mdsAddr)
+	if err != nil {
 		t.Fatalf("bob GetRoots failed: %v", err)
 	}
+
+	alice.SetRootUser(aliceRoots[0].Owner)
+	alice.SetRootPath(aliceRoots[0].DisplayName, aliceRoots[0].Path)
+	bob.SetRootUser(bobRoots[0].Owner)
+	bob.SetRootPath(bobRoots[0].DisplayName, bobRoots[0].Path)
 
 	aliceFSAddr, err := alice.NavigateToFileServer(mdsAddr)
 	if err != nil {
@@ -157,7 +170,26 @@ func TestE2E_ShareUnshareFlowAcrossUsers(t *testing.T) {
 		t.Fatalf("alice Share failed: %v", err)
 	}
 
-	bob.SetRootUser("alice")
+	bobRoots, err = bob.GetRoots(mdsAddr)
+	if err != nil {
+		t.Fatalf("bob GetRoots after share failed: %v", err)
+	}
+
+	var sharedRoot client.SharedRoot
+	found := false
+	for _, root := range bobRoots {
+		if root.Owner == "alice" && root.Path != "" && root.Path != "bob" {
+			sharedRoot = root
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected bob to receive shared root from alice in GetRoots: %+v", bobRoots)
+	}
+
+	bob.SetRootUser(sharedRoot.Owner)
+	bob.SetRootPath(sharedRoot.DisplayName, sharedRoot.Path)
 	bobFSAddr, err := bob.NavigateToFileServer(mdsAddr)
 	if err != nil {
 		t.Fatalf("bob NavigateToFileServer to alice root failed: %v", err)
@@ -199,15 +231,21 @@ func TestIntegration_HeartbeatStaleTransition(t *testing.T) {
 	}
 
 	alice := client.NewClient("alice", "alice", false)
-	if _, err := alice.GetRoots(mdsAddr); err != nil {
+	aliceRoots, err := alice.GetRoots(mdsAddr)
+	if err != nil {
 		t.Fatalf("GetRoots before stale transition failed: %v", err)
 	}
+	alice.SetRootUser(aliceRoots[0].Owner)
+	alice.SetRootPath(aliceRoots[0].DisplayName, aliceRoots[0].Path)
 
-	time.Sleep(1500 * time.Millisecond)
-
-	if _, err := alice.NavigateToFileServer(mdsAddr); err == nil {
-		t.Fatalf("expected NavigateToFileServer to fail after fileserver becomes stale")
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := alice.NavigateToFileServer(mdsAddr); err != nil {
+			return
+		}
+		time.Sleep(120 * time.Millisecond)
 	}
+	t.Fatalf("expected NavigateToFileServer to fail after fileserver becomes stale")
 }
 
 func TestIntegration_MetaServerGRPCHealthy(t *testing.T) {
