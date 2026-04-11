@@ -75,7 +75,7 @@ func startTestMetaServerGRPC(t *testing.T) (addr string, ms *metaserver.MetaServ
 func connectTestClient(t *testing.T, username, rootUser, fsAddr string) *Client {
 	t.Helper()
 
-	c := NewClient(username, rootUser, false)
+	c := NewClient(username, false)
 	c.SetRootPath("mydrive", rootUser)
 	if _, err := c.Connect(fsAddr); err != nil {
 		t.Fatalf("Connect failed: %v", err)
@@ -195,7 +195,7 @@ func TestClientMetaServerRootsAndNavigation(t *testing.T) {
 		t.Fatalf("RegisterWithMetaServer failed: %v", err)
 	}
 
-	c := NewClient("alice", "alice", false)
+	c := NewClient("alice", false)
 
 	roots, err := c.GetRoots(mdsAddr)
 	if err != nil {
@@ -222,7 +222,7 @@ func TestClientMetaServerRootsAndNavigation(t *testing.T) {
 
 func TestClientEdgeCases(t *testing.T) {
 	t.Run("connect invalid address", func(t *testing.T) {
-		c := NewClient("alice", "alice", false)
+		c := NewClient("alice", false)
 		if _, err := c.Connect("127.0.0.1:1"); err == nil {
 			t.Fatalf("expected Connect to invalid address to fail")
 		}
@@ -259,7 +259,7 @@ func TestClientEdgeCases(t *testing.T) {
 	})
 
 	t.Run("GetRoots and Navigate no-op for empty msAddr", func(t *testing.T) {
-		c := NewClient("alice", "alice", false)
+		c := NewClient("alice", false)
 		roots, err := c.GetRoots("")
 		if err != nil {
 			t.Fatalf("GetRoots with empty msAddr should not fail: %v", err)
@@ -289,8 +289,8 @@ func TestClientSharedRootSelectionFlow(t *testing.T) {
 		t.Fatalf("RegisterWithMetaServer failed: %v", err)
 	}
 
-	alice := NewClient("alice", "alice", false)
-	bob := NewClient("bob", "bob", false)
+	alice := NewClient("alice", false)
+	bob := NewClient("bob", false)
 
 	// Ensure both users are assigned in metaserver.
 	if _, err := alice.GetRoots(mdsAddr); err != nil {
@@ -421,7 +421,7 @@ func TestClientDownloadMissingPath(t *testing.T) {
 }
 
 func TestClientListFilesAtNilFID(t *testing.T) {
-	c := NewClient("alice", "alice", false)
+	c := NewClient("alice", false)
 	if _, err := c.ListFilesAt(nil); err == nil {
 		t.Fatalf("expected ListFilesAt(nil) to fail")
 	}
@@ -431,7 +431,7 @@ func TestClientCanReconnectAndKeepWorking(t *testing.T) {
 	fsAddr, _, cleanupFS := startTestFileServerGRPC(t, "")
 	defer cleanupFS()
 
-	c := NewClient("alice", "alice", false)
+	c := NewClient("alice", false)
 	c.SetRootPath("mydrive", "alice")
 	if _, err := c.Connect(fsAddr); err != nil {
 		t.Fatalf("first connect failed: %v", err)
