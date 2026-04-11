@@ -187,13 +187,24 @@ func (c *CacheHandler) Upload(s string) error {
 	}
 	fileSize := uint64(fi.Size())
 
-	c.curr.children[fileName] = &CNode{
-		Name:   fileName,
-		Type:   domain.InodeTypeFile,
-		fid:    nil, // FID will be updated after successful upload when we get the file info from server
-		Size:   fileSize,
-		parent: c.curr,
+	if fi.IsDir() {
+		c.curr.children[fileName] = &CNode{
+			Name:   fileName,
+			Type:   domain.InodeTypeDirectory,
+			fid:    nil, // FID will be updated after successful upload when we get the file info from server
+			Size:   fileSize,
+			parent: c.curr,
+		}
+	} else {
+		c.curr.children[fileName] = &CNode{
+			Name:   fileName,
+			Type:   domain.InodeTypeFile,
+			fid:    nil, // FID will be updated after successful upload when we get the file info from server
+			Size:   fileSize,
+			parent: c.curr,
+		}
 	}
+
 	fid, err := c.client.Upload(s)
 	if err != nil {
 		return err
