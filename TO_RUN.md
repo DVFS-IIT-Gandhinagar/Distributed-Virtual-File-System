@@ -27,7 +27,7 @@ Other flags and defaults:
 ### For Client (from root)
 
 ```
-go run .\cmd\client\main.go --username <username> --ip_addr <mds/fs ip address> --root_user <root username to access>
+go run .\cmd\client\main.go --username <username> --ip_addr <mds/fs ip address>
 ```
 
 Other flags and defaults

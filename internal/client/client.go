@@ -40,10 +40,9 @@ const chunkSize = 1024 * 1024 * 4 // 4MB
 const DownloadDir = "./Download"
 
 // NewClient creates a new VFS client
-func NewClient(username string, root_user string, useTLS bool) *Client {
+func NewClient(username string, useTLS bool) *Client {
 	return &Client{
 		username:  username,
-		root_user: root_user,
 		useTLS:    useTLS,
 	}
 }
