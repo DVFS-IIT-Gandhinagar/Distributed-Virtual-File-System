@@ -330,16 +330,36 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	}, nil
 }
 
-// UploadFile uploads a file in the working directory
+// UploadFile uploads a file in the working directory (should exist already) with the given name and content
 func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 
 	var name string
 	first := true
+	var parentFID *domain.FID
+	var ogHash string
 
+	// receive in chunks
 	for {
 		req, err := stream.Recv()
-
+		
 		if err == io.EOF {
+			// check new hash to check if content has changed
+			newHash, _ := h.fileServer.GetFileHash(parentFID, name)
+			log.Printf("UploadFile: completed upload for file %s with new hash %s", name, newHash)
+
+			changed := false
+			// compare with original hash byte by byte
+			for i := 0; i < len(newHash) && i < len(ogHash); i++ {
+				if newHash[i] != ogHash[i] {
+					log.Printf("%s - %s", string(newHash[i]), string(ogHash[i]))
+					log.Printf("UploadFile: file %s content has changed, updating disk", name)
+					changed = true
+					break
+				}
+			}
+			if !changed {
+				log.Printf("UploadFile: file %s content has not changed", name)
+			}
 			return stream.SendAndClose(&pb.UploadFileResponse{
 				Success: true,
 			})
@@ -354,11 +374,19 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 				Error:   "missing parentFid",
 			})
 		}
-
-		parentFID := domain.FIDFromProto(req.ParentFid)
-
+		
+		parentFID = domain.FIDFromProto(req.ParentFid)
+		
 		if first {
 			name = req.Name
+			ogHash, err := h.fileServer.GetFileHash(parentFID, name) // hash of the orignal file before upload
+			if err != nil {
+				return stream.SendAndClose(&pb.UploadFileResponse{
+					Success: false,
+					Error:   err.Error(),
+				})
+			}
+			log.Printf("UploadFile: initialized upload for file %s with original hash %s", name, ogHash)
 			first = false
 		}
 

@@ -1,7 +1,10 @@
 package fileserver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -32,7 +35,7 @@ type trashEntry struct {
 }
 
 const trashDirName = ".trash"
-const storageQuota uint64 = 1 * 1024 // 1 MB per user, for demonstration
+const storageQuota uint64 = 10 * 1024 // 1 MB per user, for demonstration
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
 func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileServer, error) {
@@ -476,7 +479,7 @@ func (fs *FileServer) checkStorageQuota(username string) error {
 	return nil
 }
 
-// find the inode in parent's children
+// find the inode in parent's children (should be existing)
 func (fs *FileServer) GetChildInodeByName(parentInode *domain.Inode, name string) (*domain.Inode, error) {
 	var inode *domain.Inode
 	found := false
@@ -852,19 +855,22 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 	if name == trashDirName {
 		return nil, fmt.Errorf("'%s' is a reserved name", trashDirName)
 	}
-	// Get parent inode
-	parent, err := fs.GetInode(parentFID)
+	// check if already exists in parent
+	parentInode, err := fs.GetInode(parentFID)
 	if err != nil {
 		return nil, fmt.Errorf("parent directory not found, %s", parentFID.String())
 	}
-
-	// Check if parent is directory
-	if parent.Type != domain.InodeTypeDirectory {
+	if parentInode.Type != domain.InodeTypeDirectory {
 		return nil, fmt.Errorf("parent is not a directory, %s", parentFID.String())
+	}
+	// if same name exists, return existing one's fid instead of error to make it idempotent
+	existingInode, err := fs.GetChildInodeByName(parentInode, name)
+	if err == nil {
+		return existingInode.FID, nil
 	}
 
 	// Disallow creating inside trash.
-	if fs.isUnderTrashLocked(parent, root_user) {
+	if fs.isUnderTrashLocked(parentInode, root_user) {
 		return nil, fmt.Errorf("cannot create files/directories inside trash")
 	}
 
@@ -876,7 +882,7 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 	}
 
 	// Create OS path
-	osPath := filepath.Join(parent.OSPath, name)
+	osPath := filepath.Join(parentInode.OSPath, name)
 
 	// Create on filesystem
 	switch fileType {
@@ -895,10 +901,10 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 	// Create a deep copy of parent's ACL (not a reference)
 	// This ensures child ACL modifications don't affect parent
 	ACL := domain.ACL{
-		Owner:  parent.ACL.Owner,
-		Shared: make([]string, len(parent.ACL.Shared)),
+		Owner:  parentInode.ACL.Owner,
+		Shared: make([]string, len(parentInode.ACL.Shared)),
 	}
-	copy(ACL.Shared, parent.ACL.Shared)
+	copy(ACL.Shared, parentInode.ACL.Shared)
 
 	// Create inode
 	newInode := &domain.Inode{
@@ -907,7 +913,7 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		Name:   name,
 		OSPath: osPath,
 		ACL:    ACL,
-		Parent: parent,
+		Parent: parentInode,
 		Size:   0,
 	}
 
@@ -925,7 +931,7 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 	fs.inodes[newFID.String()] = newInode
 
 	// Add to parent's children
-	parent.Children = append(parent.Children, newFID)
+	parentInode.Children = append(parentInode.Children, newFID)
 
 	atomic.AddUint64(&fs.nextInodeID, 1)
 
@@ -958,6 +964,38 @@ func (fs *FileServer) ReadFile(parentFID *domain.FID, name string, offset, lengt
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 	return data, nil
+}
+
+// GetFileHash computes and returns the hash of a file's contents.
+func (fs *FileServer) GetFileHash(parentFID *domain.FID, name string) (string, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	parentInode, err := fs.GetInode(parentFID)
+	if err != nil {
+		return "", fmt.Errorf("parent directory not found, %s", parentFID.String())
+	}
+
+	inode, err := fs.GetChildInodeByName(parentInode, name)
+	if err != nil {
+		return "", fmt.Errorf("file not found, %s", name)
+	}
+	if inode.Type != domain.InodeTypeFile {
+		return "", fmt.Errorf("not a file, %s", name)
+	}
+
+	f, err := os.Open(inode.OSPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for hashing: %w", err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("failed to hash file contents: %w", err)
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // WriteFile writes given data to a file

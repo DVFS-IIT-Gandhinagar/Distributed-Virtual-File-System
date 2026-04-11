@@ -271,7 +271,7 @@ func (c *Client) Upload(localPath string) (*domain.FID, error) {
 		return nil, err
 	}
 
-	if !info.IsDir() {
+	if !info.IsDir() {  // file, will be handled by uploadFileInternal
 		return c.uploadFileInternal(localPath, c.currentFID)
 	}
 

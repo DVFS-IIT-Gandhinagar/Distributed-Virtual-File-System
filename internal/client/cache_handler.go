@@ -185,6 +185,12 @@ func (c *CacheHandler) Upload(s string) error {
 	if err != nil {
 		return fmt.Errorf("error getting local file info: %v", err)
 	}
+
+	fid, err := c.client.Upload(s)
+	if err != nil {
+		return err
+	}
+	
 	fileSize := uint64(fi.Size())
 
 	if fi.IsDir() {
@@ -205,10 +211,6 @@ func (c *CacheHandler) Upload(s string) error {
 		}
 	}
 
-	fid, err := c.client.Upload(s)
-	if err != nil {
-		return err
-	}
 	// after successful upload, set the FID and size of the file node in cache to reflect the new file on server
 	c.curr.children[fileName].fid = fid
 	// update parents sizes up the cache tree to reflect the new file size
