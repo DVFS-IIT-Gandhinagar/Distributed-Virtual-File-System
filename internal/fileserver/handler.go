@@ -346,7 +346,13 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 		
 		if err == io.EOF {
 			// check new hash to check if content has changed
-			newHash, _ := h.fileServer.GetFileHash(parentFID, name)
+			newHash, err := h.fileServer.GetFileHash(parentFID, name)
+			if err != nil {
+				return stream.SendAndClose(&pb.UploadFileResponse{
+					Success: false,
+					Error:   err.Error(),
+				})
+			}
 			log.Printf("UploadFile: completed upload for file %s with new hash %s and old hash %s with %d chunks", name, newHash, ogHash, chunkCount)
 
 			// compare with original hash byte by byte
