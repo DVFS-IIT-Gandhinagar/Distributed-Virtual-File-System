@@ -78,7 +78,7 @@ func TestE2E_MDSRoutingAndClientCRUD(t *testing.T) {
 		t.Fatalf("RegisterWithMetaServer failed: %v", err)
 	}
 
-	alice := client.NewClient("alice", "alice", false)
+	alice := client.NewClient("alice", false)
 	aliceRoots, err := alice.GetRoots(mdsAddr)
 	if err != nil {
 		t.Fatalf("GetRoots failed: %v", err)
@@ -134,8 +134,8 @@ func TestE2E_ShareUnshareFlowAcrossUsers(t *testing.T) {
 		t.Fatalf("RegisterWithMetaServer failed: %v", err)
 	}
 
-	alice := client.NewClient("alice", "alice", false)
-	bob := client.NewClient("bob", "bob", false)
+	alice := client.NewClient("alice", false)
+	bob := client.NewClient("bob", false)
 
 	aliceRoots, err := alice.GetRoots(mdsAddr)
 	if err != nil {
@@ -230,7 +230,7 @@ func TestIntegration_HeartbeatStaleTransition(t *testing.T) {
 		t.Fatalf("RegisterWithMetaServer failed: %v", err)
 	}
 
-	alice := client.NewClient("alice", "alice", false)
+	alice := client.NewClient("alice", false)
 	aliceRoots, err := alice.GetRoots(mdsAddr)
 	if err != nil {
 		t.Fatalf("GetRoots before stale transition failed: %v", err)
