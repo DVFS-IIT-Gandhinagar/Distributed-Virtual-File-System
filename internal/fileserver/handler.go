@@ -337,29 +337,23 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 	first := true
 	var parentFID *domain.FID
 	var ogHash string
+	var chunkCount int
 
 	// receive in chunks
 	for {
+		chunkCount++
 		req, err := stream.Recv()
 		
 		if err == io.EOF {
 			// check new hash to check if content has changed
 			newHash, _ := h.fileServer.GetFileHash(parentFID, name)
-			log.Printf("UploadFile: completed upload for file %s with new hash %s", name, newHash)
+			log.Printf("UploadFile: completed upload for file %s with new hash %s and old hash %s with %d chunks", name, newHash, ogHash, chunkCount)
 
-			changed := false
 			// compare with original hash byte by byte
-			for i := 0; i < len(newHash) && i < len(ogHash); i++ {
-				if newHash[i] != ogHash[i] {
-					log.Printf("%s - %s", string(newHash[i]), string(ogHash[i]))
-					log.Printf("UploadFile: file %s content has changed, updating disk", name)
-					changed = true
-					break
-				}
+			if newHash != ogHash {
+				log.Printf("UploadFile: file %s has been modified, new hash %s is different from original hash %s", name, newHash, ogHash)
 			}
-			if !changed {
-				log.Printf("UploadFile: file %s content has not changed", name)
-			}
+
 			return stream.SendAndClose(&pb.UploadFileResponse{
 				Success: true,
 			})
@@ -379,14 +373,13 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 		
 		if first {
 			name = req.Name
-			ogHash, err := h.fileServer.GetFileHash(parentFID, name) // hash of the orignal file before upload
+			ogHash, err = h.fileServer.GetFileHash(parentFID, name) // hash of the original file before upload
 			if err != nil {
 				return stream.SendAndClose(&pb.UploadFileResponse{
 					Success: false,
 					Error:   err.Error(),
 				})
 			}
-			log.Printf("UploadFile: initialized upload for file %s with original hash %s", name, ogHash)
 			first = false
 		}
 
