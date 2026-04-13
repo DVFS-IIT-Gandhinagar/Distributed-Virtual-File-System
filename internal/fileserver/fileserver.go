@@ -27,6 +27,7 @@ type FileServer struct {
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
 	msAddr      string
 	Shared      map[string][]string // directory path -> users map (e.g., "umang/proj" -> ["romit"])
+	sessions    map[string]*clientSession // username -> last known session metadata
 }
 
 type trashEntry struct {
@@ -48,6 +49,7 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileS
 		useTLS:      useTLS,
 		trashMeta:   make(map[string]trashEntry),
 		msAddr:      msAddr,
+		sessions:    make(map[string]*clientSession),
 	}
 
 	// Check if rootDir already exists

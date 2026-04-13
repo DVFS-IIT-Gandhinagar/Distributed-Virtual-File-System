@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/umangshikarvar/dvfs/internal/domain"
@@ -448,4 +449,44 @@ func (c *CacheHandler) ClearCache() {
 			log.Printf("Error removing cached file %s: %v", file.Name(), err)
 		}
 	}
+}
+
+// InvalidateFileByFID clears cached content for a file and returns a display path.
+func (c *CacheHandler) InvalidateFileByFID(fid *domain.FID) (string, bool) {
+	if c == nil || c.root == nil || fid == nil {
+		return "", false
+	}
+
+	node, path, ok := c.findNodeByFID(c.root, fid, c.root.Name)
+	if !ok || node == nil {
+		return "", false
+	}
+
+	if node.Type == domain.InodeTypeFile {
+		if node.contentCached && node.contentUID != "" {
+			if err := os.Remove(filepath.Join(CacheDir, node.contentUID)); err != nil && !os.IsNotExist(err) {
+				log.Printf("Error removing invalidated cache file %s: %v", node.contentUID, err)
+			}
+		}
+		node.contentCached = false
+		node.contentUID = ""
+	}
+
+	return strings.TrimSuffix(path, "/"), true
+}
+
+func (c *CacheHandler) findNodeByFID(node *CNode, fid *domain.FID, path string) (*CNode, string, bool) {
+	if node == nil || fid == nil {
+		return nil, "", false
+	}
+	if node.fid != nil && node.fid.String() == fid.String() {
+		return node, path, true
+	}
+	for _, child := range node.children {
+		childPath := path + "/" + child.Name
+		if found, foundPath, ok := c.findNodeByFID(child, fid, childPath); ok {
+			return found, foundPath, true
+		}
+	}
+	return nil, "", false
 }

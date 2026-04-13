@@ -53,6 +53,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			}, nil
 		}
 	}
+
 	rootFID, err := h.fileServer.GetUserRoot(req.RootPath, req.RootUser)
 	if err != nil {
 		log.Printf("RegisterClient: error getting requested root - %v", err)
@@ -62,17 +63,16 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 		}, nil
 	}
 
+	h.fileServer.mu.RLock()
 	rootInode, err := h.fileServer.GetInode(rootFID)
 	if err != nil {
+		h.fileServer.mu.RUnlock()
 		log.Printf("RegisterClient: error getting root inode - %v", err)
 		return &pb.RegisterClientResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
-
-	h.fileServer.mu.RLock()
-	defer h.fileServer.mu.RUnlock()
 
 	// registration should succeed only if user is owner or root is shared with them
 	if rootInode.ACL.Owner != req.Username {
@@ -85,6 +85,7 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			}
 		}
 		if !isShared {
+			h.fileServer.mu.RUnlock()
 			log.Printf("RegisterClient: error - user %s is not allowed to access root %s", req.Username, req.RootPath)
 			return &pb.RegisterClientResponse{
 				Success: false,
@@ -92,6 +93,9 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 			}, nil
 		}
 	}
+	h.fileServer.mu.RUnlock()
+
+	h.fileServer.UpsertClientSession(req.Username, req.CallbackAddress, rootFID)
 
 	log.Printf("RegisterClient: success for user %s for the user root %s", req.Username, req.RootPath)
 	return &pb.RegisterClientResponse{
@@ -234,6 +238,9 @@ func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (
 		}, nil
 	}
 
+	h.fileServer.TouchClientActivityByRootFID(root_fid)
+	h.fileServer.UpdateClientCurrentDirByRootFID(root_fid, new_fid)
+
 	log.Printf("ChangeDir: success - changed Dir to %v", fid)
 	return &pb.ChangeDirResponse{
 		Success: true,
@@ -338,12 +345,13 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 	var parentFID *domain.FID
 	var ogHash string
 	var chunkCount int
+	var uploadUser string
 
 	// receive in chunks
 	for {
 		chunkCount++
 		req, err := stream.Recv()
-		
+
 		if err == io.EOF {
 			// check new hash to check if content has changed
 			newHash, err := h.fileServer.GetFileHash(parentFID, name)
@@ -360,6 +368,8 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 				log.Printf("UploadFile: file %s has been modified, new hash %s is different from original hash %s", name, newHash, ogHash)
 			}
 
+			h.fileServer.NotifyFileUpdated(parentFID, name, uploadUser)
+
 			return stream.SendAndClose(&pb.UploadFileResponse{
 				Success: true,
 			})
@@ -374,9 +384,14 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 				Error:   "missing parentFid",
 			})
 		}
-		
+
+		if req.User != "" {
+			uploadUser = req.User
+			h.fileServer.TouchClientActivity(uploadUser)
+		}
+
 		parentFID = domain.FIDFromProto(req.ParentFid)
-		
+
 		if first {
 			name = req.Name
 			ogHash, err = h.fileServer.GetFileHash(parentFID, name) // hash of the original file before upload
@@ -512,6 +527,8 @@ func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (
 			Error:   err.Error(),
 		}, nil
 	}
+
+	h.fileServer.NotifyFileUpdated(parentFID, req.Name, "")
 
 	return &pb.WriteFileResponse{
 		Success: true,

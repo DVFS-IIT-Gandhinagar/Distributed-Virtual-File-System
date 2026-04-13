@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/certs"
@@ -23,10 +24,14 @@ type Client struct {
 	root_user    string
 	root_path    string
 	display_name string
+	clientID     string
+	callbackAddr string
 	rootFID      *domain.FID
 	currentFID   *domain.FID
 	serverConn   pb.FileServerClient
 	useTLS       bool
+	cacheHandler *CacheHandler
+	stopCallback func() error
 }
 
 // Shared Roots with the user
@@ -42,9 +47,15 @@ const DownloadDir = "./Download"
 // NewClient creates a new VFS client
 func NewClient(username string, useTLS bool) *Client {
 	return &Client{
-		username:  username,
-		useTLS:    useTLS,
+		username: username,
+		useTLS:   useTLS,
+		clientID: fmt.Sprintf("%s-%d", username, time.Now().UnixNano()),
 	}
+}
+
+// AttachCacheHandler wires cache invalidation callbacks to the active cache handler.
+func (c *Client) AttachCacheHandler(cacheHandler *CacheHandler) {
+	c.cacheHandler = cacheHandler
 }
 
 // Set user root
@@ -61,6 +72,15 @@ func (c *Client) SetRootPath(display_name, path string) {
 
 // Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
+	if c.stopCallback == nil {
+		callbackAddr, stopFn, err := c.startCallbackServer()
+		if err != nil {
+			return nil, fmt.Errorf("failed to start callback server: %w", err)
+		}
+		c.callbackAddr = callbackAddr
+		c.stopCallback = stopFn
+	}
+
 	// TLS configuration
 	var opts []grpc.DialOption
 	if c.useTLS {
@@ -90,9 +110,11 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 
 	// Register and get root FID
 	resp, err := c.serverConn.RegisterClient(context.Background(), &pb.RegisterClientRequest{
-		Username: c.username,
-		RootUser: c.root_user,
-		RootPath: c.root_path,
+		ClientId:        c.clientID,
+		CallbackAddress: c.callbackAddr,
+		Username:        c.username,
+		RootUser:        c.root_user,
+		RootPath:        c.root_path,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to register: %w", err)

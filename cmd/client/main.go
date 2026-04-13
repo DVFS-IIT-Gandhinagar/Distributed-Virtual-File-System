@@ -116,6 +116,7 @@ func main() {
 		if cacheHandler == nil {
 			log.Fatalf("Failed to initialize cache handler")
 		}
+		c.AttachCacheHandler(cacheHandler)
 		cacheHandler.VisualizeCache("") // visualize the cache structure after initialization
 
 		// Start interactive command handler
