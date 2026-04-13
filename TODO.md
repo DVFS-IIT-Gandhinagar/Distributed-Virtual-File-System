@@ -13,7 +13,8 @@
 - [x] Delete File function - @ShardulJunagade
 - [x] Implement trash and restore for recycle bin - @ShardulJunagade
 - [x] Client Side Caching - @Reckadon
-- [ ] Cache Invalidation via Callbacks - @Reckadon
+- [x] File Cache Invalidation via Callbacks - @Reckadon
+- [ ] Directory Cache Invalidation via Callbacks - @Reckadon
 - [x] TLS handshake @jsmaskeen
 - [x] Implement storage quotas - @Reckadon
 - [x] sharing phase-1 - @Umang-Shikarvar
