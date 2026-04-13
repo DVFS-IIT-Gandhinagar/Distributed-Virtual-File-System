@@ -76,6 +76,7 @@ func connectTestClient(t *testing.T, username, rootUser, fsAddr string) *Client 
 	t.Helper()
 
 	c := NewClient(username, false)
+	c.SetRootUser(rootUser)
 	c.SetRootPath("mydrive", rootUser)
 	if _, err := c.Connect(fsAddr); err != nil {
 		t.Fatalf("Connect failed: %v", err)
@@ -432,6 +433,7 @@ func TestClientCanReconnectAndKeepWorking(t *testing.T) {
 	defer cleanupFS()
 
 	c := NewClient("alice", false)
+	c.SetRootUser("alice")
 	c.SetRootPath("mydrive", "alice")
 	if _, err := c.Connect(fsAddr); err != nil {
 		t.Fatalf("first connect failed: %v", err)
