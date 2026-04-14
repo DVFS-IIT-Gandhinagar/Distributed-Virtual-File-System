@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,7 +27,7 @@ type FileServer struct {
 	useTLS      bool
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
 	msAddr      string
-	Shared      map[string][]string // directory path -> users map (e.g., "umang/proj" -> ["romit"])
+	Shared      map[string][]string       // directory path -> users map (e.g., "umang/proj" -> ["romit"])
 	sessions    map[string]*clientSession // username -> last known session metadata
 }
 
@@ -37,6 +38,7 @@ type trashEntry struct {
 
 const trashDirName = ".trash"
 const storageQuota uint64 = 10 * 1024 // 1 MB per user, for demonstration
+const trashNavigationDeniedMsg = "access denied: use show_trash to view trash contents"
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
 func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileServer, error) {
@@ -296,6 +298,66 @@ func (fs *FileServer) isUnderTrashLocked(inode *domain.Inode, root_user string) 
 		}
 	}
 	return false
+}
+
+func pathContainsTrashSegment(path string) bool {
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		if part == trashDirName {
+			return true
+		}
+	}
+	return false
+}
+
+func (fs *FileServer) isUnderRootTrashLocked(inode *domain.Inode, rootFID *domain.FID) bool {
+	if inode == nil || rootFID == nil {
+		return false
+	}
+
+	rootInode, ok := fs.inodes[rootFID.String()]
+	if !ok {
+		return false
+	}
+
+	trashInode, err := fs.GetChildInodeByName(rootInode, trashDirName)
+	if err != nil {
+		return false
+	}
+
+	for n := inode; n != nil; n = n.Parent {
+		if n.FID != nil && n.FID.String() == trashInode.FID.String() {
+			return true
+		}
+		if n.Parent == nil || (n.Parent.FID != nil && n.FID != nil && n.Parent.FID.String() == n.FID.String()) {
+			break
+		}
+	}
+	return false
+}
+
+// ShowTrash returns all entries from the caller's trash directory.
+func (fs *FileServer) ShowTrash(root_user string) ([]*domain.Inode, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	trashInode, err := fs.getOrCreateTrashDirLocked(root_user)
+	if err != nil {
+		return nil, err
+	}
+
+	children := make([]*domain.Inode, 0, len(trashInode.Children))
+	for _, childFID := range trashInode.Children {
+		if childInode, err := fs.GetInode(childFID); err == nil {
+			children = append(children, childInode)
+		}
+	}
+
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].Name < children[j].Name
+	})
+
+	return children, nil
 }
 
 func (fs *FileServer) updateSubtreePathsLocked(inode *domain.Inode, newOSPath string) {
@@ -791,6 +853,10 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
+	if pathContainsTrashSegment(path) {
+		return CurrentFID, fmt.Errorf("%s", trashNavigationDeniedMsg)
+	}
+
 	CurrentInode, err := fs.GetInode(CurrentFID)
 	if err != nil {
 		return CurrentFID, fmt.Errorf("directory not found, %s", CurrentFID.String())
@@ -811,6 +877,16 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 	parts := strings.Split(path, "/")
 	log.Println("Parts:", parts)
 	for _, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." {
+			if CurrentInode.Parent != nil {
+				CurrentInode = CurrentInode.Parent
+				CurrentFID = CurrentInode.FID
+			}
+			continue
+		}
 
 		childInode, found := fs.GetChildInodeByName(CurrentInode, part)
 
@@ -820,6 +896,10 @@ func (fs *FileServer) ChangeDir(CurrentFID *domain.FID, path string, RootFID *do
 
 		CurrentInode = childInode
 		CurrentFID = childInode.FID
+	}
+
+	if fs.isUnderRootTrashLocked(CurrentInode, RootFID) {
+		return CurrentFID, fmt.Errorf("%s", trashNavigationDeniedMsg)
 	}
 
 	return CurrentFID, nil

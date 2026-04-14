@@ -271,6 +271,35 @@ func (h *CobraHandler) setupCommands() {
 	}
 	h.rootCmd.AddCommand(restoreCmd)
 
+	// show_trash
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "show_trash",
+		Short: "List entries currently present in trash",
+		Long:  "Lists the contents of the user's .trash directory without navigating into it.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			files, err := h.cacheHandler.ShowTrash()
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				fmt.Println("(trash is empty)")
+				return nil
+			}
+
+			fmt.Printf("%-20s %-10s %10s\n", "Name", "Type", "Size")
+			fmt.Printf("%-20s %-10s %10s\n", "----", "----", "----")
+			for _, file := range files {
+				typeStr := "file"
+				if file.Type == domain.InodeTypeDirectory {
+					typeStr = "dir"
+				}
+				fmt.Printf("%-20s %-10s %10d\n", file.Name, typeStr, file.Size)
+			}
+			return nil
+		},
+	})
+
 	// info
 	h.rootCmd.AddCommand(&cobra.Command{
 		Use:   "info",
@@ -432,7 +461,15 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 			prefix = parts[len(parts)-1]
 		}
 
-		files, err := c.handler.cacheHandler.ListFiles()
+		var (
+			files []*FileInfo
+			err   error
+		)
+		if commandName == "restore" {
+			files, err = c.handler.cacheHandler.ShowTrash()
+		} else {
+			files, err = c.handler.cacheHandler.ListFiles()
+		}
 		if err != nil {
 			return nil, 0
 		}

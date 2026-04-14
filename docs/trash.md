@@ -5,6 +5,7 @@ This repo supports:
 - `rm` = **permanent delete** (server-side DFS post-order delete + inode map cleanup)
 - `trash` = **soft delete** (moves item into `.trash`)
 - `restore` = **restore** from `.trash` back to original location (best-effort)
+- `show_trash` = **safe listing** of `.trash` contents without `cd`
 
 ## Prerequisites (one-time)
 
@@ -82,8 +83,7 @@ Now verify it exists in `.trash`:
 
 ```text
 cd ..
-cd .trash
-ls
+show_trash
 ```
 
 You should see `a.txt` (or a collision-safe name like `a.txt__<inodeID>`).
@@ -97,7 +97,6 @@ restore a.txt
 Then confirm it’s back:
 
 ```text
-cd ..
 cd t
 ls
 ```
@@ -157,8 +156,7 @@ cd ..
 cd c2
 trash same
 cd ..
-cd .trash
-ls
+show_trash
 ```
 
 Expected:
@@ -167,13 +165,15 @@ Expected:
 ### 5) You cannot create inside `.trash`
 
 ```text
-cd .trash
 mkdir nope
-create nope.txt
+trash nope
+show_trash
 ```
 
 Expected:
-- Both operations fail (trash is treated as a protected area).
+- `show_trash` lists trashed entries.
+- Direct navigation into `.trash` and its subfolders is rejected.
+- Direct file creation inside `.trash` remains blocked.
 
 ### 6) Important limitation (current implementation)
 

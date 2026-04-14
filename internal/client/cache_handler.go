@@ -191,7 +191,7 @@ func (c *CacheHandler) Upload(s string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	fileSize := uint64(fi.Size())
 
 	if fi.IsDir() {
@@ -225,6 +225,10 @@ func (c *CacheHandler) Upload(s string) error {
 }
 
 func (c *CacheHandler) ChangeDirectory(s string) error {
+	if s == ".trash" || strings.HasPrefix(s, ".trash/") {
+		return fmt.Errorf("access denied: use show_trash to view trash contents")
+	}
+
 	switch s {
 	case "/":
 		c.curr = c.root
@@ -256,6 +260,10 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 			return fmt.Errorf("directory '%s' not found in current directory", s)
 		}
 	}
+}
+
+func (c *CacheHandler) ShowTrash() ([]*FileInfo, error) {
+	return c.client.ShowTrash()
 }
 
 func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
