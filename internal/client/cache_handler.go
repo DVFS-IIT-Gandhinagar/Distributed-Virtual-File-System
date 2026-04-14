@@ -266,6 +266,12 @@ func (c *CacheHandler) ShowTrash() ([]*FileInfo, error) {
 	return c.client.ShowTrash()
 }
 
+func (c *CacheHandler) ClearTrash() (int, error) {
+	deleted, err := c.client.ClearTrash()
+	_ = c.populateNodeCache(c.root)
+	return deleted, err
+}
+
 func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
 	// read from cache of current directory
 	files := make([]*FileInfo, 0)

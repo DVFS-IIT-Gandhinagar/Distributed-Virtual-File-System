@@ -300,6 +300,26 @@ func (h *CobraHandler) setupCommands() {
 		},
 	})
 
+	// clear_trash
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "clear_trash",
+		Short: "Permanently delete all entries from trash",
+		Long:  "Empties the user's .trash by permanently deleting all files and directories currently present.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deleted, err := h.cacheHandler.ClearTrash()
+			if err != nil {
+				return err
+			}
+			if deleted == 0 {
+				fmt.Println("Trash is already empty")
+				return nil
+			}
+			fmt.Printf("Permanently deleted %d entr(y/ies) from trash\n", deleted)
+			return nil
+		},
+	})
+
 	// info
 	h.rootCmd.AddCommand(&cobra.Command{
 		Use:   "info",

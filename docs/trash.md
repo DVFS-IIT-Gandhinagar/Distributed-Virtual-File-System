@@ -6,6 +6,7 @@ This repo supports:
 - `trash` = **soft delete** (moves item into `.trash`)
 - `restore` = **restore** from `.trash` back to original location (best-effort)
 - `show_trash` = **safe listing** of `.trash` contents without `cd`
+- `clear_trash` = **empty trash** permanently
 
 ## Prerequisites (one-time)
 
@@ -175,7 +176,19 @@ Expected:
 - Direct navigation into `.trash` and its subfolders is rejected.
 - Direct file creation inside `.trash` remains blocked.
 
-### 6) Important limitation (current implementation)
+### 6) Empty trash with `clear_trash`
+
+```text
+show_trash
+clear_trash
+show_trash
+```
+
+Expected:
+- `clear_trash` permanently deletes all entries currently listed in trash.
+- A follow-up `show_trash` prints `(trash is empty)`.
+
+### 7) Important limitation (current implementation)
 
 Restore requires server-side metadata that is stored **in-memory**.
 

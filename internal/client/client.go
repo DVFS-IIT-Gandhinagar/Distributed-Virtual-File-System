@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -748,6 +749,40 @@ func (c *Client) ShowTrash() ([]*FileInfo, error) {
 	}
 
 	return files, nil
+}
+
+// ClearTrash permanently deletes every entry currently present in trash.
+func (c *Client) ClearTrash() (int, error) {
+	entries, err := c.ShowTrash()
+	if err != nil {
+		return 0, err
+	}
+	if len(entries) == 0 {
+		return 0, nil
+	}
+
+	failed := make([]string, 0)
+	deleted := 0
+
+	for _, entry := range entries {
+		resp, err := c.serverConn.DeleteFile(context.Background(), &pb.DeleteFileRequest{
+			Fid:       entry.FID.ToProto(),
+			RootUser:  c.root_user,
+			Recursive: true,
+		})
+		if err != nil || !resp.Success {
+			failed = append(failed, entry.Name)
+			continue
+		}
+		deleted++
+	}
+
+	if len(failed) > 0 {
+		sort.Strings(failed)
+		return deleted, fmt.Errorf("failed to delete trash entries: %s", strings.Join(failed, ", "))
+	}
+
+	return deleted, nil
 }
 
 // WriteFile writes given data to a file
