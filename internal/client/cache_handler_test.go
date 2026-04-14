@@ -118,6 +118,10 @@ func TestCacheHandlerNavigationAndPath(t *testing.T) {
 	h, _, cleanup := setupCacheHandlerTest(t)
 	defer cleanup()
 
+	if err := h.ChangeDirectory(".trash"); err == nil {
+		t.Fatalf("expected cd into .trash to fail")
+	}
+
 	if err := h.ChangeDirectory("docs"); err != nil {
 		t.Fatalf("ChangeDirectory docs failed: %v", err)
 	}
@@ -146,6 +150,31 @@ func TestCacheHandlerNavigationAndPath(t *testing.T) {
 
 	if err := h.ChangeDirectory("missing"); err == nil {
 		t.Fatalf("expected cd into missing directory to fail")
+	}
+}
+
+func TestCacheHandlerShowTrash(t *testing.T) {
+	h, _, cleanup := setupCacheHandlerTest(t)
+	defer cleanup()
+
+	if _, err := h.TrashFile("notes.txt", false); err != nil {
+		t.Fatalf("TrashFile failed: %v", err)
+	}
+
+	entries, err := h.ShowTrash()
+	if err != nil {
+		t.Fatalf("ShowTrash failed: %v", err)
+	}
+
+	found := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name, "notes.txt") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected trashed file in show trash output")
 	}
 }
 

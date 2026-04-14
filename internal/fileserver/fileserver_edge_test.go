@@ -102,3 +102,35 @@ func TestCheckStorageQuotaEdgeCases(t *testing.T) {
 		t.Fatalf("expected exceeded quota to fail")
 	}
 }
+
+func TestChangeDirToTrashIsRejected(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	if _, err := fs.ChangeDir(rootFID, ".trash", rootFID); err == nil {
+		t.Fatalf("expected cd to .trash to fail")
+	}
+}
+
+func TestChangeDirToTrashSubPathIsRejected(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	dirFID, err := fs.CreateFile(rootFID, "docs", "alice", domain.InodeTypeDirectory)
+	if err != nil {
+		t.Fatalf("CreateFile docs failed: %v", err)
+	}
+	if _, err := fs.TrashFile(dirFID, "alice", true); err != nil {
+		t.Fatalf("TrashFile docs failed: %v", err)
+	}
+
+	if _, err := fs.ChangeDir(rootFID, ".trash/docs", rootFID); err == nil {
+		t.Fatalf("expected cd to .trash/docs to fail")
+	}
+}

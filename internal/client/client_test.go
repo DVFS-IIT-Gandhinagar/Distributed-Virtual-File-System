@@ -185,6 +185,51 @@ func TestClientDeleteTrashRestoreFlow(t *testing.T) {
 	}
 }
 
+func TestClientShowTrash(t *testing.T) {
+	fsAddr, _, cleanupFS := startTestFileServerGRPC(t, "")
+	defer cleanupFS()
+
+	c := connectTestClient(t, "alice", "alice", fsAddr)
+
+	if _, err := c.CreateFile("to-trash.txt"); err != nil {
+		t.Fatalf("CreateFile failed: %v", err)
+	}
+	if _, err := c.TrashFile("to-trash.txt", false); err != nil {
+		t.Fatalf("TrashFile failed: %v", err)
+	}
+
+	entries, err := c.ShowTrash()
+	if err != nil {
+		t.Fatalf("ShowTrash failed: %v", err)
+	}
+
+	found := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name, "to-trash.txt") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected trashed file to appear in show_trash output")
+	}
+}
+
+func TestClientRejectsTrashPathNavigation(t *testing.T) {
+	fsAddr, _, cleanupFS := startTestFileServerGRPC(t, "")
+	defer cleanupFS()
+
+	c := connectTestClient(t, "alice", "alice", fsAddr)
+
+	if _, err := c.GetFIDForPath(".trash"); err == nil {
+		t.Fatalf("expected GetFIDForPath to reject .trash path")
+	}
+
+	if err := c.Download(".trash/any.txt"); err == nil {
+		t.Fatalf("expected Download to reject .trash path")
+	}
+}
+
 func TestClientMetaServerRootsAndNavigation(t *testing.T) {
 	mdsAddr, _, cleanupMDS := startTestMetaServerGRPC(t)
 	defer cleanupMDS()

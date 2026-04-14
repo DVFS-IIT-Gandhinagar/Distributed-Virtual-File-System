@@ -122,6 +122,16 @@ message RestoreFileResponse {
   string restored_name = 3; // final restored name (may differ on collision)
 }
 
+message ShowTrashRequest {
+  string root_user = 1;
+}
+
+message ShowTrashResponse {
+  bool success = 1;
+  string error = 2;
+  repeated DirEntry entries = 3;
+}
+
 message GetAttrRequest {
   FID fid = 1;
 }
@@ -259,6 +269,7 @@ service FileServer {
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc TrashFile(TrashFileRequest) returns (TrashFileResponse);
   rpc RestoreFile(RestoreFileRequest) returns (RestoreFileResponse);
+  rpc ShowTrash(ShowTrashRequest) returns (ShowTrashResponse);
   rpc GetAttr(GetAttrRequest) returns (GetAttrResponse);
   rpc ListDir(ListDirRequest) returns (ListDirResponse);
   rpc Lookup(LookupRequest) returns (LookupResponse);
