@@ -21,12 +21,16 @@ func main() {
 	haslTLS := flag.Bool("hasl_tls", false, "Enable TLS (typo-compatible alias of -tls)")
 	haslTLSDash := flag.Bool("hasl-tls", false, "Enable TLS (typo-compatible alias of -tls)")
 	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate (overrides DVFS_CA_CERT_FILE)")
+	tlsCABundleFile := flag.String("tls_ca_bundle_file", "", "Path to additional CA bundle for trust rotation (overrides DVFS_CA_BUNDLE_FILE)")
 
 	flag.Parse()
 	tlsEnabled := *useTLS || *hasTLS || *hasTLSDash || *haslTLS || *haslTLSDash
 
 	if *tlsCAFile != "" {
 		_ = os.Setenv("DVFS_CA_CERT_FILE", *tlsCAFile)
+	}
+	if *tlsCABundleFile != "" {
+		_ = os.Setenv("DVFS_CA_BUNDLE_FILE", *tlsCABundleFile)
 	}
 
 	if *port == "" {

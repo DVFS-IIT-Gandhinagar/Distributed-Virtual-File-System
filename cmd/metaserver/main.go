@@ -31,6 +31,7 @@ func main() {
 	tlsKeyFile := flag.String("tls_key_file", "", "Path to TLS server key (overrides DVFS_SERVER_KEY_FILE)")
 	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate (overrides DVFS_CA_CERT_FILE)")
 	tlsCAKeyFile := flag.String("tls_ca_key_file", "", "Path to CA private key (overrides DVFS_CA_KEY_FILE)")
+	revokedFSFingerprintsFile := flag.String("revoked_fs_fingerprints_file", "", "Path to newline-separated revoked fileserver cert SHA-256 fingerprints")
 	flag.Parse()
 	tlsEnabled := *useTLS || *hasTLS || *hasTLSDash || *haslTLS || *haslTLSDash
 
@@ -62,6 +63,13 @@ func main() {
 	server, err := metaserver.NewMetaServer(*stateFile)
 	if err != nil {
 		log.Fatalf("Failed to create meta server: %v", err)
+	}
+	if *revokedFSFingerprintsFile != "" {
+		added, err := server.LoadRevokedFileServerFingerprintsFromFile(*revokedFSFingerprintsFile)
+		if err != nil {
+			log.Fatalf("Failed to load revoked fileserver fingerprints: %v", err)
+		}
+		log.Printf("Loaded %d revoked fileserver certificate fingerprint(s) from %s", added, *revokedFSFingerprintsFile)
 	}
 	server.SetHeartbeatConfig(*heartbeatTimeout, *heartbeatCheckInterval)
 	stopMonitor := server.StartHeartbeatMonitor()

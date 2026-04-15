@@ -33,6 +33,7 @@ func main() {
 	tlsCertFile := flag.String("tls_cert_file", "", "Path to TLS server certificate (overrides DVFS_SERVER_CERT_FILE)")
 	tlsKeyFile := flag.String("tls_key_file", "", "Path to TLS server key (overrides DVFS_SERVER_KEY_FILE)")
 	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate for outbound TLS to metaserver (overrides DVFS_CA_CERT_FILE)")
+	tlsCABundleFile := flag.String("tls_ca_bundle_file", "", "Path to additional CA bundle for trust rotation (overrides DVFS_CA_BUNDLE_FILE)")
 	flag.Parse()
 	tlsEnabled := *useTLS || *hasTLS || *hasTLSDash || *haslTLS || *haslTLSDash
 
@@ -44,6 +45,9 @@ func main() {
 	}
 	if *tlsCAFile != "" {
 		_ = os.Setenv("DVFS_CA_CERT_FILE", *tlsCAFile)
+	}
+	if *tlsCABundleFile != "" {
+		_ = os.Setenv("DVFS_CA_BUNDLE_FILE", *tlsCABundleFile)
 	}
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
