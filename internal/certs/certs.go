@@ -28,6 +28,10 @@ func CAPath() string {
 	return resolvePath("DVFS_CA_CERT_FILE", "ca.crt")
 }
 
+func CAKeyPath() string {
+	return resolvePath("DVFS_CA_KEY_FILE", "ca.key")
+}
+
 func ServerCertPath() string {
 	return resolvePath("DVFS_SERVER_CERT_FILE", "server.crt")
 }
