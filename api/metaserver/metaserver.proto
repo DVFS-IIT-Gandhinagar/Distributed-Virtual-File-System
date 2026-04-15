@@ -82,6 +82,31 @@ message HeartbeatResponse {
   string error = 2;
 }
 
+message GetTrustBundleRequest {}
+
+message GetTrustBundleResponse {
+  bool success = 1;
+  string error = 2;
+  bytes ca_cert_pem = 3;
+  bytes metaserver_cert_pem = 4;
+}
+
+message IssueFileServerCertificateRequest {
+  string fileserver_id = 1;
+  string address = 2;
+  bytes csr_pem = 3;
+  int64 valid_for_seconds = 4;
+}
+
+message IssueFileServerCertificateResponse {
+  bool success = 1;
+  string error = 2;
+  bytes certificate_pem = 3;
+  bytes ca_cert_pem = 4;
+  int64 not_after_unix = 5;
+  string serial_number = 6;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
@@ -90,4 +115,6 @@ service MetaServer {
   rpc GetRoots(GetRootsRequest) returns (GetRootsResponse);
   rpc RootShare(RootShareRequest) returns (RootShareResponse);
   rpc RootUnshare(RootUnshareRequest) returns (RootUnshareResponse);
+  rpc GetTrustBundle(GetTrustBundleRequest) returns (GetTrustBundleResponse);
+  rpc IssueFileServerCertificate(IssueFileServerCertificateRequest) returns (IssueFileServerCertificateResponse);
 }
