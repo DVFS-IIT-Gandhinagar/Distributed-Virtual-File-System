@@ -1,8 +1,10 @@
 package certs
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -264,14 +266,200 @@ func ensureServerCertForIP(serverIP string, caCert *x509.Certificate, caKey *rsa
 		return errors.New("failed to encode metaserver cert material")
 	}
 
-	if err := os.WriteFile(certPath, srvCertPEM, 0644); err != nil {
+	if err := writeFileAtomically(certPath, srvCertPEM, 0644); err != nil {
 		return fmt.Errorf("failed to write metaserver cert to %s: %w", certPath, err)
 	}
-	if err := os.WriteFile(keyPath, srvKeyPEM, 0600); err != nil {
+	if err := writeFileAtomically(keyPath, srvKeyPEM, 0600); err != nil {
 		return fmt.Errorf("failed to write metaserver key to %s: %w", keyPath, err)
 	}
 
 	return nil
+}
+
+func GenerateAndStoreServerCSR(commonName, address string) ([]byte, error) {
+	if commonName == "" {
+		return nil, errors.New("commonName is required")
+	}
+
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	if ip == nil {
+		return nil, fmt.Errorf("address must contain an IP host for strict IP identity: %s", address)
+	}
+
+	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate server private key: %w", err)
+	}
+
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject: pkix.Name{
+			CommonName:   commonName,
+			Organization: []string{"DVFS FileServer"},
+		},
+		IPAddresses: []net.IP{ip},
+	}, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate CSR: %w", err)
+	}
+
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
+	if keyPEM == nil || csrPEM == nil {
+		return nil, errors.New("failed to encode key or CSR PEM")
+	}
+
+	if err := ensureParentDir(ServerKeyPath()); err != nil {
+		return nil, err
+	}
+	if err := writeFileAtomically(ServerKeyPath(), keyPEM, 0600); err != nil {
+		return nil, fmt.Errorf("failed to write server private key to %s: %w", ServerKeyPath(), err)
+	}
+
+	return csrPEM, nil
+}
+
+func StoreServerCertificatePEM(certPEM []byte) error {
+	if len(certPEM) == 0 {
+		return errors.New("empty certificate PEM")
+	}
+
+	cert, err := parseCertPEM(certPEM)
+	if err != nil {
+		return fmt.Errorf("invalid certificate PEM: %w", err)
+	}
+	if time.Now().After(cert.NotAfter) {
+		return errors.New("refusing to store expired server certificate")
+	}
+
+	if err := ensureParentDir(ServerCertPath()); err != nil {
+		return err
+	}
+	if err := writeFileAtomically(ServerCertPath(), certPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write server certificate to %s: %w", ServerCertPath(), err)
+	}
+
+	return nil
+}
+
+func ServerCertNeedsRenewalForAddress(address string, renewBefore time.Duration) (bool, string, error) {
+	if renewBefore <= 0 {
+		renewBefore = 6 * time.Hour
+	}
+
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	host = strings.TrimSpace(host)
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return true, "invalid strict-IP host", nil
+	}
+
+	certPEM, err := os.ReadFile(ServerCertPath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, "server cert missing", nil
+		}
+		return false, "", fmt.Errorf("failed to read server certificate: %w", err)
+	}
+	keyPEM, err := os.ReadFile(ServerKeyPath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, "server key missing", nil
+		}
+		return false, "", fmt.Errorf("failed to read server key: %w", err)
+	}
+
+	if _, err := parseRSAPrivateKeyPEM(keyPEM); err != nil {
+		return true, "invalid server key", nil
+	}
+	cert, err := parseCertPEM(certPEM)
+	if err != nil {
+		return true, "invalid server cert", nil
+	}
+
+	now := time.Now()
+	if now.After(cert.NotAfter) {
+		return true, "server cert expired", nil
+	}
+	if cert.NotAfter.Sub(now) <= renewBefore {
+		return true, "server cert expiring soon", nil
+	}
+
+	if err := cert.VerifyHostname(host); err != nil {
+		return true, "server cert SAN mismatch", nil
+	}
+
+	caPEM, err := LoadCACertPEM()
+	if err != nil {
+		return true, "missing local CA", nil
+	}
+	caCert, err := parseCertPEM(caPEM)
+	if err != nil {
+		return true, "invalid local CA", nil
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(caCert)
+	if _, err := cert.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
+		return true, "server cert not signed by local CA", nil
+	}
+
+	return false, "", nil
+}
+
+func PersistCAIfMissing(caPEM []byte) error {
+	if len(caPEM) == 0 {
+		return nil
+	}
+
+	if _, err := os.Stat(CAPath()); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to stat local CA file: %w", err)
+	}
+
+	if err := ensureParentDir(CAPath()); err != nil {
+		return err
+	}
+	if err := writeFileAtomically(CAPath(), caPEM, 0644); err != nil {
+		return fmt.Errorf("failed to persist CA file at %s: %w", CAPath(), err)
+	}
+
+	return nil
+}
+
+func CertFingerprintSHA256(certPEM []byte) (string, error) {
+	cert, err := parseCertPEM(certPEM)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(cert.Raw)
+	return fmt.Sprintf("%x", sum[:]), nil
+}
+
+func CurrentServerCertFingerprintSHA256() (string, error) {
+	certPEM, err := os.ReadFile(ServerCertPath())
+	if err != nil {
+		return "", err
+	}
+	return CertFingerprintSHA256(certPEM)
+}
+
+func IsCertificateFingerprintMatch(certPEM []byte, expectedHex string) (bool, error) {
+	actual, err := CertFingerprintSHA256(certPEM)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(actual, strings.TrimSpace(expectedHex)), nil
+}
+
+func IsCAPemEqual(caA, caB []byte) bool {
+	return bytes.Equal(bytes.TrimSpace(caA), bytes.TrimSpace(caB))
 }
 
 func isCertValidForIPAndCA(cert *x509.Certificate, ip string, caCert *x509.Certificate) bool {
@@ -346,5 +534,37 @@ func ensureParentDir(path string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
+	return nil
+}
+
+func writeFileAtomically(path string, data []byte, perm os.FileMode) error {
+	if err := ensureParentDir(path); err != nil {
+		return err
+	}
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "dvfs-tls-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+
 	return nil
 }
