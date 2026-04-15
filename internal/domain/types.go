@@ -92,15 +92,15 @@ type Inode struct {
 	ACL      ACL
 	Children []*FID // for directories
 	Size     uint64 // for files
-	Parent	 *Inode
+	Parent   *Inode
 }
 
 // Access Control List
 type ACL struct {
-    Owner  string   // user who owns this root
+	Owner  string // user who owns this root
 	Shared []string
-    // Read  []string // users with read-only access
-    // Write []string // users with full access
+	// Read  []string // users with read-only access
+	// Write []string // users with full access
 }
 
 // func (a *ACL) CanRead(user string) bool {
@@ -123,8 +123,9 @@ const (
 )
 
 type FileServerInfo struct {
-	Address           string `json:"address"`
-	UserCount         int    `json:"user_count"`
-	LastHeartbeatUnix int64  `json:"last_heartbeat_unix,omitempty"`
-	Status            string `json:"status,omitempty"`
+	Address                     string `json:"address"`
+	UserCount                   int    `json:"user_count"`
+	LastHeartbeatUnix           int64  `json:"last_heartbeat_unix,omitempty"`
+	Status                      string `json:"status,omitempty"`
+	ServerCertFingerprintSHA256 string `json:"server_cert_fingerprint_sha256,omitempty"`
 }

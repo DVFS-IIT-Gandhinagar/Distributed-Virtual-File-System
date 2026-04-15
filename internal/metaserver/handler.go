@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/metaserver"
@@ -82,6 +83,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 	fsInfo.Address = req.Address
 	fsInfo.LastHeartbeatUnix = time.Now().Unix()
 	fsInfo.Status = domain.FileServerStatusHealthy
+	fsInfo.ServerCertFingerprintSHA256 = strings.TrimSpace(req.ServerCertFingerprintSha256)
 
 	incomingUsers := make(map[string]struct{}, len(req.Users))
 	for _, username := range req.Users {
@@ -296,8 +298,9 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 
 	log.Printf("[METASERVER] Routing user %s to FS %s", user, rootFS.Address)
 	return &pb.NavigateResponse{
-		Success: true,
-		Address: rootFS.Address,
+		Success:                         true,
+		Address:                         rootFS.Address,
+		FileserverCertFingerprintSha256: rootFS.ServerCertFingerprintSHA256,
 	}, nil
 }
 
