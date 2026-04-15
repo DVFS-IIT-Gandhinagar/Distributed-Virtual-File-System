@@ -26,10 +26,15 @@ func main() {
 	msRetry := flag.Duration("meta_retry_interval", 3*time.Second, "Retry interval for metaserver registration")
 	msHeartbeat := flag.Duration("meta_heartbeat_interval", 5*time.Second, "Heartbeat interval for metaserver liveness")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	hasTLS := flag.Bool("has_tls", false, "Enable TLS (alias of -tls)")
+	hasTLSDash := flag.Bool("has-tls", false, "Enable TLS (alias of -tls)")
+	haslTLS := flag.Bool("hasl_tls", false, "Enable TLS (typo-compatible alias of -tls)")
+	haslTLSDash := flag.Bool("hasl-tls", false, "Enable TLS (typo-compatible alias of -tls)")
 	tlsCertFile := flag.String("tls_cert_file", "", "Path to TLS server certificate (overrides DVFS_SERVER_CERT_FILE)")
 	tlsKeyFile := flag.String("tls_key_file", "", "Path to TLS server key (overrides DVFS_SERVER_KEY_FILE)")
 	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate for outbound TLS to metaserver (overrides DVFS_CA_CERT_FILE)")
 	flag.Parse()
+	tlsEnabled := *useTLS || *hasTLS || *hasTLSDash || *haslTLS || *haslTLSDash
 
 	if *tlsCertFile != "" {
 		_ = os.Setenv("DVFS_SERVER_CERT_FILE", *tlsCertFile)
@@ -44,7 +49,7 @@ func main() {
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
 	// Create file server
-	server, err := fileserver.NewFileServer(*serverID, *rootDir, *useTLS, *msAddr)
+	server, err := fileserver.NewFileServer(*serverID, *rootDir, tlsEnabled, *msAddr)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
@@ -54,7 +59,7 @@ func main() {
 
 	// TLS configuration
 	var opts []grpc.ServerOption
-	if *useTLS {
+	if tlsEnabled {
 		log.Println("TLS enabled")
 		tlsCert, err := certs.LoadServerTLSCert()
 		if err != nil {

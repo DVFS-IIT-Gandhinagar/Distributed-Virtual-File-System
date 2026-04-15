@@ -16,9 +16,14 @@ func main() {
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
 	port := flag.String("port", "", "enter port for mds/fs")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	hasTLS := flag.Bool("has_tls", false, "Enable TLS (alias of -tls)")
+	hasTLSDash := flag.Bool("has-tls", false, "Enable TLS (alias of -tls)")
+	haslTLS := flag.Bool("hasl_tls", false, "Enable TLS (typo-compatible alias of -tls)")
+	haslTLSDash := flag.Bool("hasl-tls", false, "Enable TLS (typo-compatible alias of -tls)")
 	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate (overrides DVFS_CA_CERT_FILE)")
 
 	flag.Parse()
+	tlsEnabled := *useTLS || *hasTLS || *hasTLSDash || *haslTLS || *haslTLSDash
 
 	if *tlsCAFile != "" {
 		_ = os.Setenv("DVFS_CA_CERT_FILE", *tlsCAFile)
@@ -33,7 +38,7 @@ func main() {
 	}
 
 	// Create client
-	c := client.NewClient(*username, *useTLS)
+	c := client.NewClient(*username, tlsEnabled)
 
 	// Main loop for metaserver navigation
 	for {

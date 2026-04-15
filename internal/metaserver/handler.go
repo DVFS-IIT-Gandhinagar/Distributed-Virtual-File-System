@@ -3,9 +3,11 @@ package metaserver
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/metaserver"
+	"github.com/umangshikarvar/dvfs/internal/certs"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 )
 
@@ -343,12 +345,12 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 		},
 	}
 	for _, sharedRoot := range h.MetaServer.shared[user] {
-	roots = append(roots, &pb.SharedRoot{
-		Owner:       sharedRoot.Owner,
-		Path:        sharedRoot.Path,
-		DisplayName: sharedRoot.DisplayName,
-	})
-}
+		roots = append(roots, &pb.SharedRoot{
+			Owner:       sharedRoot.Owner,
+			Path:        sharedRoot.Path,
+			DisplayName: sharedRoot.DisplayName,
+		})
+	}
 
 	return &pb.GetRootsResponse{
 		Success: true,
@@ -481,5 +483,50 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 	log.Printf("[METASERVER] Dir '%s' successfully unshared from '%s'", req.RootPath, req.UnshareWith)
 	return &pb.RootUnshareResponse{
 		Success: true,
+	}, nil
+}
+
+// GetTrustBundle returns the current CA certificate and active metaserver certificate.
+func (h *GRPCHandler) GetTrustBundle(_ context.Context, _ *pb.GetTrustBundleRequest) (*pb.GetTrustBundleResponse, error) {
+	caPEM, err := certs.LoadCACertPEM()
+	if err != nil {
+		log.Printf("[METASERVER] GetTrustBundle failed to load CA cert: %v", err)
+		return &pb.GetTrustBundleResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	serverPEM, err := os.ReadFile(certs.ServerCertPath())
+	if err != nil {
+		log.Printf("[METASERVER] GetTrustBundle failed to read metaserver cert: %v", err)
+		return &pb.GetTrustBundleResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	return &pb.GetTrustBundleResponse{
+		Success:           true,
+		CaCertPem:         caPEM,
+		MetaserverCertPem: serverPEM,
+	}, nil
+}
+
+// IssueFileServerCertificate signs a fileserver CSR using the metaserver CA.
+func (h *GRPCHandler) IssueFileServerCertificate(_ context.Context, req *pb.IssueFileServerCertificateRequest) (*pb.IssueFileServerCertificateResponse, error) {
+	validFor := time.Duration(req.ValidForSeconds) * time.Second
+	certPEM, serial, notAfter, err := certs.SignFileServerCSR(req.CsrPem, req.FileserverId, req.Address, validFor)
+	if err != nil {
+		log.Printf("[METASERVER] IssueFileServerCertificate rejected request for fs=%s addr=%s: %v", req.FileserverId, req.Address, err)
+		return &pb.IssueFileServerCertificateResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	caPEM, err := certs.LoadCACertPEM()
+	if err != nil {
+		log.Printf("[METASERVER] IssueFileServerCertificate failed to load CA cert after signing: %v", err)
+		return &pb.IssueFileServerCertificateResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	return &pb.IssueFileServerCertificateResponse{
+		Success:        true,
+		CertificatePem: certPEM,
+		CaCertPem:      caPEM,
+		NotAfterUnix:   notAfter.Unix(),
+		SerialNumber:   serial,
 	}, nil
 }
