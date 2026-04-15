@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -26,6 +27,10 @@ func resolvePath(envKey, defaultFile string) string {
 
 func CAPath() string {
 	return resolvePath("DVFS_CA_CERT_FILE", "ca.crt")
+}
+
+func CABundlePath() string {
+	return strings.TrimSpace(os.Getenv("DVFS_CA_BUNDLE_FILE"))
 }
 
 func CAKeyPath() string {
@@ -58,6 +63,16 @@ func NewCAPool() (*x509.CertPool, error) {
 	cp := x509.NewCertPool()
 	if !cp.AppendCertsFromPEM(caPEM) {
 		return nil, fmt.Errorf("failed to append CA certificate from %s", CAPath())
+	}
+
+	if bundlePath := CABundlePath(); bundlePath != "" {
+		bundlePEM, err := os.ReadFile(bundlePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA bundle from %s: %w", bundlePath, err)
+		}
+		if !cp.AppendCertsFromPEM(bundlePEM) {
+			return nil, fmt.Errorf("failed to append CA bundle certificate(s) from %s", bundlePath)
+		}
 	}
 
 	return cp, nil
