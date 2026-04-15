@@ -128,6 +128,15 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 		return nil
 	}
 
+	serverCertFingerprint := ""
+	if fs.useTLS {
+		fp, err := certs.CurrentServerCertFingerprintSHA256()
+		if err != nil {
+			return fmt.Errorf("failed to read local server certificate fingerprint: %w", err)
+		}
+		serverCertFingerprint = fp
+	}
+
 	// Build the same CA-backed TLS config the client uses when talking to FS.
 	var opts []grpc.DialOption
 	if fs.useTLS {
@@ -210,9 +219,10 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
-		Address: selfAddr,
-		Users:   users,
-		Shared:  acls,
+		Address:                     selfAddr,
+		Users:                       users,
+		Shared:                      acls,
+		ServerCertFingerprintSha256: serverCertFingerprint,
 	})
 	if err != nil {
 		return fmt.Errorf("RegisterFileServer RPC failed: %w", err)
