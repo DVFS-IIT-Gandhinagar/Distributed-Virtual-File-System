@@ -272,6 +272,14 @@ func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
 	return files, nil
 }
 
+// Refresh synchronizes the current directory cache with server state.
+func (c *CacheHandler) Refresh() error {
+	if c == nil || c.curr == nil {
+		return fmt.Errorf("cache handler is not initialized")
+	}
+	return c.populateCurrentDirCache()
+}
+
 func (c *CacheHandler) Path() (string, error) {
 	// If we're at root, return the display name (e.g., "proj" for shared dirs)
 	if c.curr == c.root {
