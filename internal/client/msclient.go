@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
 	"github.com/umangshikarvar/dvfs/internal/certs"
@@ -102,6 +103,15 @@ func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 	}
 	if !resp.Success {
 		return "", fmt.Errorf("meta server rejected navigation: %s", resp.Error)
+	}
+
+	client.SetExpectedServerCertFingerprintSHA256("")
+	if client.useTLS {
+		expected := strings.TrimSpace(resp.FileserverCertFingerprintSha256)
+		if expected == "" {
+			return "", fmt.Errorf("metaserver did not provide fileserver certificate fingerprint for %s", resp.Address)
+		}
+		client.SetExpectedServerCertFingerprintSHA256(expected)
 	}
 
 	return resp.Address, nil
