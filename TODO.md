@@ -14,7 +14,7 @@
 - [x] Implement trash and restore for recycle bin - @ShardulJunagade
 - [x] Client Side Caching - @Reckadon
 - [x] File Cache Invalidation via Callbacks - @Reckadon
-- [ ] Directory Cache Invalidation via Callbacks - @Reckadon
+- [x] Directory Cache Invalidation via Callbacks - @Reckadon
 - [x] TLS handshake @jsmaskeen
 - [x] Implement storage quotas - @Reckadon
 - [x] sharing phase-1 - @Umang-Shikarvar
