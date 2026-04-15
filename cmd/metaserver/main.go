@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/metaserver"
@@ -22,7 +22,16 @@ func main() {
 	heartbeatTimeout := flag.Duration("heartbeat_timeout", 30*time.Second, "Timeout after which fileserver is marked stale")
 	heartbeatCheckInterval := flag.Duration("heartbeat_check_interval", 5*time.Second, "Interval to evaluate fileserver liveness")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	tlsCertFile := flag.String("tls_cert_file", "", "Path to TLS server certificate (overrides DVFS_SERVER_CERT_FILE)")
+	tlsKeyFile := flag.String("tls_key_file", "", "Path to TLS server key (overrides DVFS_SERVER_KEY_FILE)")
 	flag.Parse()
+
+	if *tlsCertFile != "" {
+		_ = os.Setenv("DVFS_SERVER_CERT_FILE", *tlsCertFile)
+	}
+	if *tlsKeyFile != "" {
+		_ = os.Setenv("DVFS_SERVER_KEY_FILE", *tlsKeyFile)
+	}
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
@@ -42,7 +51,7 @@ func main() {
 	var opts []grpc.ServerOption
 	if *useTLS {
 		log.Println("TLS enabled")
-		tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
+		tlsCert, err := certs.LoadServerTLSCert()
 		if err != nil {
 			log.Fatalf("Failed to load key pair: %v", err)
 		}

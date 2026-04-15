@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/umangshikarvar/dvfs/internal/client"
 )
@@ -15,8 +16,13 @@ func main() {
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
 	port := flag.String("port", "", "enter port for mds/fs")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate (overrides DVFS_CA_CERT_FILE)")
 
 	flag.Parse()
+
+	if *tlsCAFile != "" {
+		_ = os.Setenv("DVFS_CA_CERT_FILE", *tlsCAFile)
+	}
 
 	if *port == "" {
 		if *metaserver {

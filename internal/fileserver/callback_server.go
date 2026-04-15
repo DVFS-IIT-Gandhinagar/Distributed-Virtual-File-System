@@ -2,7 +2,6 @@ package fileserver
 
 import (
 	"context"
-	"crypto/x509"
 	"log"
 	"net"
 	"time"
@@ -173,8 +172,8 @@ func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FI
 
 	var opts []grpc.DialOption
 	if fs.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		cp, err := certs.NewCAPool()
+		if err != nil {
 			log.Printf("Callback: failed to append CA cert for user=%s", target.username)
 			fs.recordCallbackResult(target.username, false)
 			return

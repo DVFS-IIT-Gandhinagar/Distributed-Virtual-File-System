@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net"
 
@@ -21,9 +20,9 @@ func (client *Client) GetRoots(msAddr string) ([]SharedRoot, error) {
 	// Build the same CA-backed TLS config the client uses when talking to FS.
 	var opts []grpc.DialOption
 	if client.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return []SharedRoot{}, fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return []SharedRoot{}, err
 		}
 
 		host, _, err := net.SplitHostPort(msAddr)
@@ -72,9 +71,9 @@ func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 	// Build the same CA-backed TLS config the client uses when talking to FS.
 	var opts []grpc.DialOption
 	if client.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return "", fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return "", err
 		}
 
 		host, _, err := net.SplitHostPort(msAddr)

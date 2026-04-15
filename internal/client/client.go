@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -84,9 +83,9 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	// TLS configuration
 	var opts []grpc.DialOption
 	if c.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return nil, fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return nil, err
 		}
 
 		// Extract host for TLS verification
@@ -293,7 +292,7 @@ func (c *Client) Upload(localPath string) (*domain.FID, error) {
 		return nil, err
 	}
 
-	if !info.IsDir() {  // file, will be handled by uploadFileInternal
+	if !info.IsDir() { // file, will be handled by uploadFileInternal
 		return c.uploadFileInternal(localPath, c.currentFID)
 	}
 

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
@@ -25,8 +25,21 @@ func main() {
 	ownIp := flag.String("own_ip", "127.0.0.1", "Own IP to advertise to meta server (e.g. 127.0.0.1)")
 	msRetry := flag.Duration("meta_retry_interval", 3*time.Second, "Retry interval for metaserver registration")
 	msHeartbeat := flag.Duration("meta_heartbeat_interval", 5*time.Second, "Heartbeat interval for metaserver liveness")
-	useTLS := flag.Bool("tls", false, "Enable TLS (default: true)")
+	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	tlsCertFile := flag.String("tls_cert_file", "", "Path to TLS server certificate (overrides DVFS_SERVER_CERT_FILE)")
+	tlsKeyFile := flag.String("tls_key_file", "", "Path to TLS server key (overrides DVFS_SERVER_KEY_FILE)")
+	tlsCAFile := flag.String("tls_ca_file", "", "Path to CA certificate for outbound TLS to metaserver (overrides DVFS_CA_CERT_FILE)")
 	flag.Parse()
+
+	if *tlsCertFile != "" {
+		_ = os.Setenv("DVFS_SERVER_CERT_FILE", *tlsCertFile)
+	}
+	if *tlsKeyFile != "" {
+		_ = os.Setenv("DVFS_SERVER_KEY_FILE", *tlsKeyFile)
+	}
+	if *tlsCAFile != "" {
+		_ = os.Setenv("DVFS_CA_CERT_FILE", *tlsCAFile)
+	}
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
@@ -43,7 +56,7 @@ func main() {
 	var opts []grpc.ServerOption
 	if *useTLS {
 		log.Println("TLS enabled")
-		tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
+		tlsCert, err := certs.LoadServerTLSCert()
 		if err != nil {
 			log.Fatalf("Failed to load key pair: %v", err)
 		}

@@ -2,7 +2,6 @@ package fileserver
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"log"
 	"net"
@@ -28,9 +27,9 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	// Build the same CA-backed TLS config the client uses when talking to FS.
 	var opts []grpc.DialOption
 	if fs.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return err
 		}
 
 		host, _, err := net.SplitHostPort(fs.msAddr)
@@ -129,9 +128,9 @@ func (fs *FileServer) RootShare(owner, name, path, share_with string) error {
 	// Build the same CA-backed TLS config the client uses when talking to FS.
 	var opts []grpc.DialOption
 	if fs.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return err
 		}
 
 		host, _, err := net.SplitHostPort(fs.msAddr)
@@ -175,9 +174,9 @@ func (fs *FileServer) RootUnshare(owner, name, path, unshare_with string) error 
 	// Build the same CA-backed TLS config the client uses when talking to FS.
 	var opts []grpc.DialOption
 	if fs.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return err
 		}
 
 		host, _, err := net.SplitHostPort(fs.msAddr)
@@ -221,9 +220,9 @@ func (fs *FileServer) HeartbeatWithMetaServer(selfAddr string) error {
 
 	var opts []grpc.DialOption
 	if fs.useTLS {
-		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
-			return fmt.Errorf("failed to append CA certificate")
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return err
 		}
 
 		host, _, err := net.SplitHostPort(fs.msAddr)
