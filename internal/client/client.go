@@ -2,6 +2,9 @@ package client
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -19,18 +22,19 @@ import (
 
 // Client provides basic VFS client functionality
 type Client struct {
-	username     string
-	root_user    string
-	root_path    string
-	display_name string
-	clientID     string
-	callbackAddr string
-	rootFID      *domain.FID
-	currentFID   *domain.FID
-	serverConn   pb.FileServerClient
-	useTLS       bool
-	cacheHandler *CacheHandler
-	stopCallback func() error
+	username                            string
+	root_user                           string
+	root_path                           string
+	display_name                        string
+	clientID                            string
+	callbackAddr                        string
+	rootFID                             *domain.FID
+	currentFID                          *domain.FID
+	serverConn                          pb.FileServerClient
+	useTLS                              bool
+	expectedServerCertFingerprintSHA256 string
+	cacheHandler                        *CacheHandler
+	stopCallback                        func() error
 }
 
 // Shared Roots with the user
@@ -69,6 +73,10 @@ func (c *Client) SetRootPath(display_name, path string) {
 	c.display_name = display_name
 }
 
+func (c *Client) SetExpectedServerCertFingerprintSHA256(fingerprint string) {
+	c.expectedServerCertFingerprintSHA256 = strings.TrimSpace(fingerprint)
+}
+
 // Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	if c.stopCallback == nil {
@@ -93,7 +101,28 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		if err != nil {
 			host = serverAddress // Fallback if no port specified
 		}
-		creds := credentials.NewClientTLSFromCert(cp, host)
+
+		tlsCfg := &tls.Config{
+			RootCAs:    cp,
+			ServerName: host,
+			MinVersion: tls.VersionTLS12,
+		}
+		if c.expectedServerCertFingerprintSHA256 != "" {
+			expected := c.expectedServerCertFingerprintSHA256
+			tlsCfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				if len(rawCerts) == 0 {
+					return fmt.Errorf("server presented no certificates")
+				}
+				sum := sha256.Sum256(rawCerts[0])
+				actual := fmt.Sprintf("%x", sum[:])
+				if !strings.EqualFold(actual, expected) {
+					return fmt.Errorf("fileserver certificate pin mismatch: expected=%s actual=%s", expected, actual)
+				}
+				return nil
+			}
+		}
+
+		creds := credentials.NewTLS(tlsCfg)
 		opts = append(opts, grpc.WithTransportCredentials(creds))
 	} else {
 		opts = append(opts, grpc.WithInsecure())
