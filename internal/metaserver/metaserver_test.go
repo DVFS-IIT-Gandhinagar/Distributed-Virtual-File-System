@@ -2,6 +2,7 @@ package metaserver
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -338,5 +339,105 @@ func TestHandlerRootShareAndUnshareLifecycle(t *testing.T) {
 
 	if got := len(ms.shared["bob"]); got != 0 {
 		t.Fatalf("shared list length after unshare mismatch: got=%d want=0", got)
+	}
+}
+
+func TestLoadRevokedFileServerFingerprintsFromFile(t *testing.T) {
+	ms := newTestMetaServer(t)
+
+	fp1 := strings.Repeat("ab", 32)
+	fp2 := strings.Repeat("cd", 32)
+	var fp1WithColonsBuilder strings.Builder
+	for i := 0; i < len(fp1); i += 2 {
+		if i > 0 {
+			fp1WithColonsBuilder.WriteString(":")
+		}
+		fp1WithColonsBuilder.WriteString(fp1[i : i+2])
+	}
+
+	revokedPath := filepath.Join(t.TempDir(), "revoked.txt")
+	content := "# one-per-line or comma-separated\n" + fp1WithColonsBuilder.String() + "\n" + strings.ToUpper(fp2) + "\n"
+	if err := os.WriteFile(revokedPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write revoked fingerprint file: %v", err)
+	}
+
+	added, err := ms.LoadRevokedFileServerFingerprintsFromFile(revokedPath)
+	if err != nil {
+		t.Fatalf("LoadRevokedFileServerFingerprintsFromFile failed: %v", err)
+	}
+	if added != 2 {
+		t.Fatalf("added revoked fingerprint count mismatch: got=%d want=2", added)
+	}
+
+	if _, ok := ms.revokedFileServerCertFingerprints[fp1]; !ok {
+		t.Fatalf("expected normalized fingerprint %s to be loaded", fp1)
+	}
+	if _, ok := ms.revokedFileServerCertFingerprints[fp2]; !ok {
+		t.Fatalf("expected normalized fingerprint %s to be loaded", fp2)
+	}
+
+	reloaded, err := NewMetaServer(ms.stateFile)
+	if err != nil {
+		t.Fatalf("reloading metaserver failed: %v", err)
+	}
+	if _, ok := reloaded.revokedFileServerCertFingerprints[fp1]; !ok {
+		t.Fatalf("expected fingerprint %s to persist in state", fp1)
+	}
+	if _, ok := reloaded.revokedFileServerCertFingerprints[fp2]; !ok {
+		t.Fatalf("expected fingerprint %s to persist in state", fp2)
+	}
+}
+
+func TestHandlerRegisterFileServerRejectsRevokedFingerprint(t *testing.T) {
+	ms := newTestMetaServer(t)
+	h := NewGRPCHandler(ms)
+
+	revoked := strings.Repeat("ef", 32)
+	ms.revokedFileServerCertFingerprints[revoked] = struct{}{}
+
+	resp, err := h.RegisterFileServer(context.Background(), &pb.RegisterFileServerRequest{
+		Address:                     "127.0.0.1:5001",
+		Users:                       []string{"alice"},
+		ServerCertFingerprintSha256: revoked,
+	})
+	if err != nil {
+		t.Fatalf("RegisterFileServer returned error: %v", err)
+	}
+	if resp.Success {
+		t.Fatalf("expected registration with revoked fingerprint to fail")
+	}
+	if !strings.Contains(resp.Error, "revoked") {
+		t.Fatalf("expected revoked error, got=%q", resp.Error)
+	}
+}
+
+func TestHandlerNavigateRejectsRevokedFileServerFingerprint(t *testing.T) {
+	ms := newTestMetaServer(t)
+	h := NewGRPCHandler(ms)
+
+	fp := strings.Repeat("aa", 32)
+	regResp, err := h.RegisterFileServer(context.Background(), &pb.RegisterFileServerRequest{
+		Address:                     "127.0.0.1:5001",
+		Users:                       []string{"alice"},
+		ServerCertFingerprintSha256: fp,
+	})
+	if err != nil {
+		t.Fatalf("RegisterFileServer returned error: %v", err)
+	}
+	if !regResp.Success {
+		t.Fatalf("registration failed unexpectedly: %s", regResp.Error)
+	}
+
+	ms.revokedFileServerCertFingerprints[fp] = struct{}{}
+
+	navResp, err := h.Navigate(context.Background(), &pb.NavigateRequest{Username: "alice", RootUser: "alice"})
+	if err != nil {
+		t.Fatalf("Navigate returned error: %v", err)
+	}
+	if navResp.Success {
+		t.Fatalf("expected navigate to fail for revoked fileserver fingerprint")
+	}
+	if !strings.Contains(strings.ToLower(navResp.Error), "revoked") {
+		t.Fatalf("expected revoked navigate error, got=%q", navResp.Error)
 	}
 }
