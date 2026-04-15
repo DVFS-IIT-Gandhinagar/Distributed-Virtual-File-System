@@ -7,6 +7,7 @@ This repo supports:
 - `restore` = **restore** from `.trash` back to original location (best-effort)
 - `show_trash` = **safe listing** of `.trash` contents without `cd`
 - `clear_trash` = **empty trash** permanently
+- `delete -t <name>` = **permanently delete one item from trash** (recursive implied)
 
 ## Prerequisites (one-time)
 
@@ -188,7 +189,19 @@ Expected:
 - `clear_trash` permanently deletes all entries currently listed in trash.
 - A follow-up `show_trash` prints `(trash is empty)`.
 
-### 7) Important limitation (current implementation)
+### 7) Permanently delete one trash item with `delete -t`
+
+```text
+show_trash
+delete -t same__123
+show_trash
+```
+
+Expected:
+- `delete -t <name>` removes that specific item from trash permanently.
+- For directories in trash, `-r` is not required when `-t` is used.
+
+### 8) Important limitation (current implementation)
 
 Restore requires server-side metadata that is stored **in-memory**.
 

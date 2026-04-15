@@ -260,6 +260,34 @@ func TestClientClearTrash(t *testing.T) {
 	}
 }
 
+func TestClientDeleteFromTrash(t *testing.T) {
+	fsAddr, _, cleanupFS := startTestFileServerGRPC(t, "")
+	defer cleanupFS()
+
+	c := connectTestClient(t, "alice", "alice", fsAddr)
+
+	if _, err := c.CreateDirectory("trash-dir"); err != nil {
+		t.Fatalf("CreateDirectory failed: %v", err)
+	}
+	if _, err := c.TrashFile("trash-dir", true); err != nil {
+		t.Fatalf("TrashFile failed: %v", err)
+	}
+
+	if err := c.DeleteFromTrash("trash-dir"); err != nil {
+		t.Fatalf("DeleteFromTrash failed: %v", err)
+	}
+
+	entries, err := c.ShowTrash()
+	if err != nil {
+		t.Fatalf("ShowTrash failed: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name == "trash-dir" {
+			t.Fatalf("expected trash-dir to be permanently removed from trash")
+		}
+	}
+}
+
 func TestClientMetaServerRootsAndNavigation(t *testing.T) {
 	mdsAddr, _, cleanupMDS := startTestMetaServerGRPC(t)
 	defer cleanupMDS()

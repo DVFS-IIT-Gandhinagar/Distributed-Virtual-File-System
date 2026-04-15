@@ -210,9 +210,18 @@ func (h *CobraHandler) setupCommands() {
 		Use:     "rm <name>",
 		Aliases: []string{"delete"},
 		Short:   "Delete a file or directory",
-		Long:    "Delete a file or empty directory. Use -r flag to delete directories with contents recursively.",
+		Long:    "Delete a file or empty directory. Use -r to delete non-empty directories recursively. Use -t to permanently delete an item from trash (recursive is implied).",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fromTrash, _ := cmd.Flags().GetBool("trash")
+			if fromTrash {
+				err := h.cacheHandler.DeleteFromTrash(args[0])
+				if err == nil {
+					fmt.Printf("Permanently deleted '%s' from trash\n", args[0])
+				}
+				return err
+			}
+
 			recursive, _ := cmd.Flags().GetBool("recursive")
 			fmt.Printf("[DEBUG] Deleting '%s' with recursive=%v\n", args[0], recursive)
 			err := h.cacheHandler.DeleteFile(args[0], recursive)
@@ -227,6 +236,7 @@ func (h *CobraHandler) setupCommands() {
 		},
 	}
 	rmCmd.Flags().BoolP("recursive", "r", false, "Delete directories recursively")
+	rmCmd.Flags().BoolP("trash", "t", false, "Permanently delete an item from trash")
 	h.rootCmd.AddCommand(rmCmd)
 
 	// trash (soft delete)

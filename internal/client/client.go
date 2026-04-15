@@ -785,6 +785,44 @@ func (c *Client) ClearTrash() (int, error) {
 	return deleted, nil
 }
 
+// DeleteFromTrash permanently deletes a single file/directory currently in trash.
+// Directories are always deleted recursively when deleting from trash.
+func (c *Client) DeleteFromTrash(name string) error {
+	if name == "" {
+		return fmt.Errorf("name is required")
+	}
+
+	entries, err := c.ShowTrash()
+	if err != nil {
+		return fmt.Errorf("failed to list trash directory: %w", err)
+	}
+
+	var targetFID *domain.FID
+	for _, entry := range entries {
+		if entry.Name == name {
+			targetFID = entry.FID
+			break
+		}
+	}
+	if targetFID == nil {
+		return fmt.Errorf("'%s' not found in trash", name)
+	}
+
+	resp, err := c.serverConn.DeleteFile(context.Background(), &pb.DeleteFileRequest{
+		Fid:       targetFID.ToProto(),
+		RootUser:  c.root_user,
+		Recursive: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete from trash: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	return nil
+}
+
 // WriteFile writes given data to a file
 func (c *Client) WriteFile(name string, data []byte) error {
 	resp, err := c.serverConn.WriteFile(context.Background(), &pb.WriteFileRequest{

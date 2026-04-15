@@ -203,6 +203,29 @@ func TestCacheHandlerClearTrash(t *testing.T) {
 	}
 }
 
+func TestCacheHandlerDeleteFromTrash(t *testing.T) {
+	h, _, cleanup := setupCacheHandlerTest(t)
+	defer cleanup()
+
+	if _, err := h.TrashFile("notes.txt", false); err != nil {
+		t.Fatalf("TrashFile failed: %v", err)
+	}
+
+	if err := h.DeleteFromTrash("notes.txt"); err != nil {
+		t.Fatalf("DeleteFromTrash failed: %v", err)
+	}
+
+	entries, err := h.ShowTrash()
+	if err != nil {
+		t.Fatalf("ShowTrash failed: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name == "notes.txt" {
+			t.Fatalf("expected notes.txt to be permanently removed from trash")
+		}
+	}
+}
+
 func TestCacheHandlerUploadTrashRestoreDeleteFlow(t *testing.T) {
 	restoreWD := withTempWorkingDir(t)
 	defer restoreWD()
