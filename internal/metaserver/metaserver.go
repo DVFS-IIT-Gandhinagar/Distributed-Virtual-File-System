@@ -1,11 +1,16 @@
 package metaserver
 
 import (
+	"bufio"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,17 +18,18 @@ import (
 )
 
 type SharedDirEntry struct {
-  Owner       string  // Directory owner username
-  Path        string  // Full path including username 
-  DisplayName string  // Directory name to display 
+	Owner       string // Directory owner username
+	Path        string // Full path including username
+	DisplayName string // Directory name to display
 }
 
 type MetaServer struct {
-	fileservers map[uint64]*domain.FileServerInfo // fs_id -> fs
-	users       map[string]uint64                 // username -> fs_id
-	shared      map[string][]SharedDirEntry       // username -> accessible root
-	nextFsID    uint64
-	stateFile   string
+	fileservers                       map[uint64]*domain.FileServerInfo // fs_id -> fs
+	users                             map[string]uint64                 // username -> fs_id
+	shared                            map[string][]SharedDirEntry       // username -> accessible root
+	revokedFileServerCertFingerprints map[string]struct{}               // sha256 fingerprint -> revoked
+	nextFsID                          uint64
+	stateFile                         string
 
 	heartbeatTimeout       time.Duration
 	heartbeatCheckInterval time.Duration
@@ -38,10 +44,11 @@ const (
 )
 
 type persistedState struct {
-	FileServers map[uint64]*domain.FileServerInfo `json:"fileservers"`
-	Users       map[string]uint64                 `json:"users"`
-	Shared      map[string][]SharedDirEntry       `json:"shared"`
-	NextFsID    uint64                            `json:"next_fs_id"`
+	FileServers                       map[uint64]*domain.FileServerInfo `json:"fileservers"`
+	Users                             map[string]uint64                 `json:"users"`
+	Shared                            map[string][]SharedDirEntry       `json:"shared"`
+	RevokedFileServerCertFingerprints []string                          `json:"revoked_fileserver_cert_fingerprints,omitempty"`
+	NextFsID                          uint64                            `json:"next_fs_id"`
 }
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
@@ -51,11 +58,12 @@ func NewMetaServer(stateFile string) (*MetaServer, error) {
 	}
 
 	ms := &MetaServer{
-		fileservers: make(map[uint64]*domain.FileServerInfo),
-		users:       make(map[string]uint64),
-		shared:      make(map[string][]SharedDirEntry),
-		nextFsID:    0,
-		stateFile:   stateFile,
+		fileservers:                       make(map[uint64]*domain.FileServerInfo),
+		users:                             make(map[string]uint64),
+		shared:                            make(map[string][]SharedDirEntry),
+		revokedFileServerCertFingerprints: make(map[string]struct{}),
+		nextFsID:                          0,
+		stateFile:                         stateFile,
 
 		heartbeatTimeout:       defaultHeartbeatTimeout,
 		heartbeatCheckInterval: defaultHeartbeatCheckInterval,
@@ -158,10 +166,11 @@ func (ms *MetaServer) saveStateLocked() error {
 	}
 
 	state := persistedState{
-		FileServers: ms.fileservers,
-		Users:       ms.users,
-		Shared:      ms.shared,
-		NextFsID:    ms.nextFsID,
+		FileServers:                       ms.fileservers,
+		Users:                             ms.users,
+		Shared:                            ms.shared,
+		RevokedFileServerCertFingerprints: ms.revokedFileServerFingerprintSliceLocked(),
+		NextFsID:                          ms.nextFsID,
 	}
 
 	dir := filepath.Dir(ms.stateFile)
@@ -226,6 +235,14 @@ func (ms *MetaServer) loadState() error {
 	ms.fileservers = state.FileServers
 	ms.users = state.Users
 	ms.shared = state.Shared
+	ms.revokedFileServerCertFingerprints = make(map[string]struct{})
+	for _, fp := range state.RevokedFileServerCertFingerprints {
+		normalized := normalizeFingerprint(fp)
+		if normalized == "" || !isValidSHA256Fingerprint(normalized) {
+			continue
+		}
+		ms.revokedFileServerCertFingerprints[normalized] = struct{}{}
+	}
 	ms.nextFsID = state.NextFsID
 
 	now := time.Now().Unix()
@@ -305,4 +322,108 @@ func (ms *MetaServer) getLeastLoadedHealthyFileServerLocked(nowUnix int64) (uint
 	}
 
 	return minFS, true
+}
+
+func normalizeFingerprint(fingerprint string) string {
+	fingerprint = strings.TrimSpace(strings.ToLower(fingerprint))
+	fingerprint = strings.ReplaceAll(fingerprint, ":", "")
+	return fingerprint
+}
+
+func isValidSHA256Fingerprint(fingerprint string) bool {
+	if len(fingerprint) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(fingerprint)
+	return err == nil
+}
+
+func (ms *MetaServer) isFileServerFingerprintRevokedLocked(fingerprint string) bool {
+	normalized := normalizeFingerprint(fingerprint)
+	if normalized == "" {
+		return false
+	}
+	_, exists := ms.revokedFileServerCertFingerprints[normalized]
+	return exists
+}
+
+func (ms *MetaServer) revokedFileServerFingerprintSliceLocked() []string {
+	out := make([]string, 0, len(ms.revokedFileServerCertFingerprints))
+	for fp := range ms.revokedFileServerCertFingerprints {
+		out = append(out, fp)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func parseRevokedFingerprintFile(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var out []string
+	scanner := bufio.NewScanner(file)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := scanner.Text()
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		tokens := strings.FieldsFunc(line, func(r rune) bool {
+			return r == ',' || r == ';' || r == ' ' || r == '\t'
+		})
+		for _, token := range tokens {
+			normalized := normalizeFingerprint(token)
+			if !isValidSHA256Fingerprint(normalized) {
+				return nil, fmt.Errorf("invalid fingerprint at %s:%d: %q", path, lineNo, token)
+			}
+			out = append(out, normalized)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (ms *MetaServer) LoadRevokedFileServerFingerprintsFromFile(path string) (int, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return 0, nil
+	}
+
+	fingerprints, err := parseRevokedFingerprintFile(path)
+	if err != nil {
+		return 0, err
+	}
+
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	added := 0
+	for _, fp := range fingerprints {
+		if _, exists := ms.revokedFileServerCertFingerprints[fp]; exists {
+			continue
+		}
+		ms.revokedFileServerCertFingerprints[fp] = struct{}{}
+		added++
+	}
+
+	if added > 0 {
+		if err := ms.saveStateLocked(); err != nil {
+			return 0, err
+		}
+	}
+
+	return added, nil
 }

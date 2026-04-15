@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/metaserver"
@@ -62,8 +61,18 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		}, nil
 	}
 
+	incomingFingerprint := normalizeFingerprint(req.ServerCertFingerprintSha256)
+	if incomingFingerprint != "" && !isValidSHA256Fingerprint(incomingFingerprint) {
+		return &pb.RegisterFileServerResponse{Success: false, Error: "invalid fileserver certificate fingerprint"}, nil
+	}
+
 	h.MetaServer.mu.Lock()
 	defer h.MetaServer.mu.Unlock()
+
+	if incomingFingerprint != "" && h.MetaServer.isFileServerFingerprintRevokedLocked(incomingFingerprint) {
+		log.Printf("[METASERVER] Rejecting FS registration due to revoked cert fingerprint: addr=%s fingerprint=%s", req.Address, incomingFingerprint)
+		return &pb.RegisterFileServerResponse{Success: false, Error: "fileserver certificate fingerprint is revoked"}, nil
+	}
 
 	fsID, exists := h.MetaServer.findFileServerByAddressLocked(req.Address)
 	if !exists {
@@ -83,7 +92,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 	fsInfo.Address = req.Address
 	fsInfo.LastHeartbeatUnix = time.Now().Unix()
 	fsInfo.Status = domain.FileServerStatusHealthy
-	fsInfo.ServerCertFingerprintSHA256 = strings.TrimSpace(req.ServerCertFingerprintSha256)
+	fsInfo.ServerCertFingerprintSHA256 = incomingFingerprint
 
 	incomingUsers := make(map[string]struct{}, len(req.Users))
 	for _, username := range req.Users {
@@ -275,6 +284,11 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 			Success: false,
 			Error:   "root user '" + rootUser + "' is currently unavailable",
 		}, nil
+	}
+
+	if h.MetaServer.isFileServerFingerprintRevokedLocked(rootFS.ServerCertFingerprintSHA256) {
+		log.Printf("[METASERVER] Navigate blocked: root user '%s' currently maps to revoked fileserver cert fingerprint", rootUser)
+		return &pb.NavigateResponse{Success: false, Error: "root user '" + rootUser + "' is currently unavailable (revoked fileserver certificate)"}, nil
 	}
 
 	allowed := false
