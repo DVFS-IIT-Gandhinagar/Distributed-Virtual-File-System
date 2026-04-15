@@ -36,7 +36,7 @@ type trashEntry struct {
 }
 
 const trashDirName = ".trash"
-const storageQuota uint64 = 10 * 1024 // 1 MB per user, for demonstration
+const storageQuota uint64 = 1024 * 1024 * 1024 // 1 GB per user, for demonstration
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
 func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string) (*FileServer, error) {
