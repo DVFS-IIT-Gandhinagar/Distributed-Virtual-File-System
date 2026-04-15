@@ -1,5 +1,17 @@
 # Commands To Run the Whole Setup
 
+
+---
+
+New-NetFirewallRule -DisplayName "DVFS MetaServer 3003" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3003
+
+New-NetFirewallRule -DisplayName "DVFS FileServer 3004" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3004
+
+Get-NetFirewallRule -DisplayName "DVFS MetaServer 3003","DVFS FileServer 3004" | Format-Table DisplayName,Enabled,Direction,Action
+
+---
+
+
 ## Compile Once, Then Run Binaries
 
 Build binaries (from project root):

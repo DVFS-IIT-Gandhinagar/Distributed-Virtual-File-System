@@ -2,9 +2,15 @@
 
 # Variables
 BINARY_DIR=bin
-FILESERVER_BINARY=$(BINARY_DIR)/fileserver
-CLIENT_BINARY=$(BINARY_DIR)/client
-METASERVER_BINARY=$(BINARY_DIR)/metaserver
+ifeq ($(OS),Windows_NT)
+EXE_EXT=.exe
+else
+EXE_EXT=
+endif
+
+FILESERVER_BINARY=$(BINARY_DIR)/fileserver$(EXE_EXT)
+CLIENT_BINARY=$(BINARY_DIR)/client$(EXE_EXT)
+METASERVER_BINARY=$(BINARY_DIR)/metaserver$(EXE_EXT)
 API_DIR=api
 GO=go
 PROTOC=protoc
@@ -137,6 +143,7 @@ test-cover: certs
 help:
 	@echo "Available targets:"
 	@echo "  make build        - Build all binaries"
+	@echo "  (Windows outputs .exe, Unix-like outputs extensionless binaries)"
 	@echo "  make proto        - Generate protobuf code"
 	@echo "  make certs        - Generate TLS certificates under $(CERT_DIR)"
 	@echo "  make certs MDS_IP=192.168.1.10 - Generate certs with SAN for given MetaServer IP"
