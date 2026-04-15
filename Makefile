@@ -8,6 +8,8 @@ METASERVER_BINARY=$(BINARY_DIR)/metaserver
 API_DIR=api
 GO=go
 PROTOC=protoc
+CERT_DIR=internal/certs
+MDS_IP ?= 127.0.0.1
 
 all: build
 
@@ -127,7 +129,8 @@ help:
 	@echo "Available targets:"
 	@echo "  make build        - Build all binaries"
 	@echo "  make proto        - Generate protobuf code"
-	@echo "  make certs        - Generate TLS certificates"
+	@echo "  make certs        - Generate TLS certificates under $(CERT_DIR)"
+	@echo "  make certs MDS_IP=192.168.1.10 - Generate certs with SAN for given MetaServer IP"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make run-server   - Build and run file server"
 	@echo "  make run-client   - Build and run client (default user: alice)"
@@ -143,8 +146,12 @@ help:
 	@echo "  make help         - Show this help message"
 
 # Generate TLS certificates
-SERVER ?= localhost
 certs:
-	@echo "Generating TLS certificates..."
-	@go run scripts/gen-certs/main.go $(SERVER)
-	@echo "Certificates generated!"
+	@echo "Generating CA and base server certificate for host $(MDS_IP)..."
+	@go run scripts/gen-certs/main.go $(MDS_IP)
+	@powershell -NoProfile -Command "Copy-Item -Force '$(CERT_DIR)/server.crt' '$(CERT_DIR)/metaserver.crt'; Copy-Item -Force '$(CERT_DIR)/server.key' '$(CERT_DIR)/metaserver.key'; Copy-Item -Force '$(CERT_DIR)/server.crt' '$(CERT_DIR)/fileserver.crt'; Copy-Item -Force '$(CERT_DIR)/server.key' '$(CERT_DIR)/fileserver.key'"
+	@echo "Certificates generated in $(CERT_DIR):"
+	@echo "  ca.crt, ca.key"
+	@echo "  metaserver.crt, metaserver.key"
+	@echo "  fileserver.crt, fileserver.key"
+	@echo "Note: fileserver cert/key are bootstrap material; in TLS mode, FileServer auto-requests/renews its serving cert from MetaServer."
