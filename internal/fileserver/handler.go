@@ -331,6 +331,9 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	}
 
 	log.Printf("CreateFile: success - created %s with FID %s", req.Name, newFID.String())
+	if fileType == domain.InodeTypeFile {
+		h.fileServer.NotifyNewFileInDir(parentFID, req.Name, "")
+	}
 	return &pb.CreateFileResponse{
 		Success: true,
 		Fid:     newFID.ToProto(),
@@ -558,6 +561,22 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 
 	fid := domain.FIDFromProto(req.Fid)
 
+	// Capture parent directory and name before deletion for callbacks.
+	var parentFIDForNotify *domain.FID
+	var deletedName string
+	h.fileServer.mu.RLock()
+	if inode, inodeErr := h.fileServer.GetInode(fid); inodeErr == nil {
+		deletedName = inode.Name
+		if inode.Parent != nil && inode.Parent.FID != nil {
+			parentFIDForNotify = &domain.FID{
+				FileServerID:     inode.Parent.FID.FileServerID,
+				InodeID:          inode.Parent.FID.InodeID,
+				GenerationNumber: inode.Parent.FID.GenerationNumber,
+			}
+		}
+	}
+	h.fileServer.mu.RUnlock()
+
 	// Get recursive flag from request (defaults to false for safety)
 	recursive := req.Recursive
 
@@ -570,6 +589,8 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 			Error:   err.Error(),
 		}, nil
 	}
+
+	h.fileServer.NotifyFileDeletedInDir(parentFIDForNotify, deletedName, req.RootUser)
 
 	log.Printf("DeleteFile: success for FID %s", fid.String())
 	return &pb.DeleteFileResponse{
