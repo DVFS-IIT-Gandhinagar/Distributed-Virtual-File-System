@@ -48,7 +48,7 @@ func TestNewCobraHandlerRegistersCoreCommands(t *testing.T) {
 
 	required := []string{
 		"ls", "cd", "pwd", "upload", "download", "create", "mkdir", "read",
-		"rm", "trash", "restore", "show_trash", "clear_trash", "info", "sharewith", "unsharewith", "viscache", "clear", "exit",
+		"delete", "trash", "restore", "show_trash", "clear_trash", "info", "sharewith", "unsharewith", "viscache", "clear", "exit",
 	}
 
 	for _, cmd := range required {

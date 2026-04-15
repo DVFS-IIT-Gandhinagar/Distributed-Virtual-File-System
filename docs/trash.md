@@ -2,7 +2,7 @@
 
 This repo supports:
 
-- `rm` = **permanent delete** (server-side DFS post-order delete + inode map cleanup)
+- `delete` = **permanent delete** (server-side DFS post-order delete + inode map cleanup)
 - `trash` = **soft delete** (moves item into `.trash`)
 - `restore` = **restore** from `.trash` back to original location (best-effort)
 - `show_trash` = **safe listing** of `.trash` contents without `cd`
@@ -126,14 +126,14 @@ trash -r d
 Expected:
 - Directory is moved to `.trash`.
 
-### 3) `rm` is permanent (does NOT go to trash)
+### 3) `delete` is permanent (does NOT go to trash)
 
 ```text
 mkdir p
 cd p
 create x
 cd ..
-rm -r p
+delete -r p
 ```
 
 Expected:
