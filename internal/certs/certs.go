@@ -73,3 +73,21 @@ func LoadServerTLSCert() (tls.Certificate, error) {
 
 	return tlsCert, nil
 }
+
+func NewDynamicServerTLSConfig() (*tls.Config, error) {
+	// Validate once up front to fail fast on startup.
+	if _, err := LoadServerTLSCert(); err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			cert, err := LoadServerTLSCert()
+			if err != nil {
+				return nil, err
+			}
+			return &cert, nil
+		},
+	}, nil
+}
