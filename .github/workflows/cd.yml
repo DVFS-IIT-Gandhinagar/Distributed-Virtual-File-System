@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [ "tls" ]
+    branches: [ "main" ]
     tags: [ "v*" ]
   workflow_dispatch:
 
