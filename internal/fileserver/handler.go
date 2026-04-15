@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
 	"github.com/umangshikarvar/dvfs/internal/domain"
+	"google.golang.org/grpc/peer"
 )
 
 // GRPCHandler implements the gRPC file server interface
@@ -26,6 +28,38 @@ func NewGRPCHandler(fileServer *FileServer) *GRPCHandler {
 	return &GRPCHandler{
 		fileServer: fileServer,
 	}
+}
+
+func normalizeCallbackAddress(ctx context.Context, callbackAddress string) string {
+	if callbackAddress == "" {
+		return ""
+	}
+
+	host, port, err := net.SplitHostPort(callbackAddress)
+	if err != nil {
+		return callbackAddress
+	}
+
+	peerInfo, ok := peer.FromContext(ctx)
+	if !ok || peerInfo == nil || peerInfo.Addr == nil {
+		return callbackAddress
+	}
+
+	remoteHost, _, err := net.SplitHostPort(peerInfo.Addr.String())
+	if err != nil {
+		remoteHost = peerInfo.Addr.String()
+	}
+
+	if remoteHost == "" {
+		return callbackAddress
+	}
+
+	parsedHost := net.ParseIP(host)
+	if host == "" || strings.EqualFold(host, "localhost") || host == "0.0.0.0" || host == "::" || host == "::1" || (parsedHost != nil && parsedHost.IsLoopback()) {
+		return net.JoinHostPort(remoteHost, port)
+	}
+
+	return callbackAddress
 }
 
 // RegisterClient handles client registration and returns user root FID
@@ -95,7 +129,11 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 	}
 	h.fileServer.mu.RUnlock()
 
-	h.fileServer.UpsertClientSession(req.Username, req.CallbackAddress, rootFID)
+	normalizedCallbackAddress := normalizeCallbackAddress(ctx, req.CallbackAddress)
+	if normalizedCallbackAddress != req.CallbackAddress {
+		log.Printf("RegisterClient: normalized callback address for user=%s from %s to %s", req.Username, req.CallbackAddress, normalizedCallbackAddress)
+	}
+	h.fileServer.UpsertClientSession(req.Username, normalizedCallbackAddress, rootFID)
 
 	log.Printf("RegisterClient: success for user %s for the user root %s", req.Username, req.RootPath)
 	return &pb.RegisterClientResponse{
