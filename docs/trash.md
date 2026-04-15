@@ -221,3 +221,12 @@ This includes `internal/fileserver/trash_restore_test.go` which validates:
 - trash + restore path updates
 - recursive requirement for non-empty directories
 - you cannot delete the `.trash` directory
+
+
+
+
+# doubt - heirarcchal trash or independent trash
+trash folder B from inside folder A and then trash folder A. 
+- When we restore folder B, should it be restored to its original location, or in trash inside A or smwhere else?
+- On removing folder A from trash, should folder B also be removed from trash or not?
+- On restoring folder A, should folder B also be restored or not?
