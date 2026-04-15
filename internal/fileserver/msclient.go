@@ -2,6 +2,7 @@ package fileserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -14,6 +15,109 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+const (
+	defaultFSCertLifetime = 24 * time.Hour
+	defaultFSCertRenewBy  = 6 * time.Hour
+	defaultFSCertCheck    = 5 * time.Minute
+)
+
+// EnsureServingCertificate ensures this fileserver has a valid serving cert for selfAddr.
+// It can request or renew certs from metaserver when TLS is enabled.
+func (fs *FileServer) EnsureServingCertificate(selfAddr string, renewBefore time.Duration) (bool, error) {
+	if !fs.useTLS {
+		return false, nil
+	}
+
+	needsRenew, reason, err := certs.ServerCertNeedsRenewalForAddress(selfAddr, renewBefore)
+	if err != nil {
+		return false, err
+	}
+	if !needsRenew {
+		return false, nil
+	}
+
+	if fs.msAddr == "" {
+		return false, fmt.Errorf("tls enabled but metaserver unavailable for certificate issue; reason=%s", reason)
+	}
+
+	log.Printf("[FILESERVER] Requesting serving cert from metaserver: reason=%s addr=%s", reason, selfAddr)
+	if err := fs.issueServingCertificate(selfAddr, defaultFSCertLifetime); err != nil {
+		return false, err
+	}
+
+	log.Printf("[FILESERVER] Serving certificate issued/renewed for addr=%s", selfAddr)
+	return true, nil
+}
+
+func (fs *FileServer) issueServingCertificate(selfAddr string, validFor time.Duration) error {
+	if fs.msAddr == "" {
+		return nil
+	}
+
+	csrPEM, err := certs.GenerateAndStoreServerCSR(fs.serverID, selfAddr)
+	if err != nil {
+		return fmt.Errorf("failed to generate fileserver CSR: %w", err)
+	}
+
+	var opts []grpc.DialOption
+	if fs.useTLS {
+		cp, err := certs.NewCAPool()
+		if err != nil {
+			return err
+		}
+
+		host, _, err := net.SplitHostPort(fs.msAddr)
+		if err != nil {
+			host = fs.msAddr
+		}
+		creds := credentials.NewClientTLSFromCert(cp, host)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to connect to meta server: %w", err)
+	}
+	defer conn.Close()
+
+	client := mspb.NewMetaServerClient(conn)
+	resp, err := client.IssueFileServerCertificate(context.Background(), &mspb.IssueFileServerCertificateRequest{
+		FileserverId:    fs.serverID,
+		Address:         selfAddr,
+		CsrPem:          csrPEM,
+		ValidForSeconds: int64(validFor / time.Second),
+	})
+	if err != nil {
+		return fmt.Errorf("IssueFileServerCertificate RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("metaserver rejected cert issuance: %s", resp.Error)
+	}
+
+	if err := certs.StoreServerCertificatePEM(resp.CertificatePem); err != nil {
+		return err
+	}
+
+	localCA, caErr := certs.LoadCACertPEM()
+	if caErr == nil {
+		if !certs.IsCAPemEqual(localCA, resp.CaCertPem) {
+			return errors.New("metaserver returned CA cert that does not match local trust root")
+		}
+	} else {
+		if err := certs.PersistCAIfMissing(resp.CaCertPem); err != nil {
+			return err
+		}
+	}
+
+	if fp, err := certs.CurrentServerCertFingerprintSHA256(); err == nil {
+		log.Printf("[FILESERVER] Installed serving certificate serial=%s expires=%d fingerprint=%s", resp.SerialNumber, resp.NotAfterUnix, fp)
+	}
+
+	return nil
+}
 
 // RegisterWithMetaServer dials the meta server over TLS and registers this file
 // server along with all users it currently knows about.
@@ -272,8 +376,17 @@ func (fs *FileServer) StartMetaServerSync(msAddr, selfAddr string, retryInterval
 	go func() {
 		registered := false
 		lastHeartbeatAt := time.Time{}
+		lastCertCheckAt := time.Time{}
 
 		attemptRegister := func(reason string) {
+			if fs.useTLS {
+				if _, err := fs.EnsureServingCertificate(selfAddr, defaultFSCertRenewBy); err != nil {
+					registered = false
+					log.Printf("[FILESERVER] TLS cert ensure (%s) failed: %v", reason, err)
+					return
+				}
+			}
+
 			err := fs.RegisterWithMetaServer(selfAddr)
 			if err != nil {
 				registered = false
@@ -307,6 +420,15 @@ func (fs *FileServer) StartMetaServerSync(msAddr, selfAddr string, retryInterval
 			case <-stopCh:
 				return
 			case <-ticker.C:
+				if fs.useTLS && (lastCertCheckAt.IsZero() || time.Since(lastCertCheckAt) >= defaultFSCertCheck) {
+					if renewed, err := fs.EnsureServingCertificate(selfAddr, defaultFSCertRenewBy); err != nil {
+						log.Printf("[FILESERVER] TLS cert periodic check failed: %v", err)
+					} else if renewed {
+						log.Printf("[FILESERVER] TLS serving certificate renewed")
+					}
+					lastCertCheckAt = time.Now()
+				}
+
 				if !registered {
 					attemptRegister("retry")
 					continue

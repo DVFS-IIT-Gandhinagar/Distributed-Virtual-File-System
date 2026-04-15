@@ -47,11 +47,18 @@ func main() {
 	}
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
+	selfAddr := fmt.Sprintf("%s:%d", *ownIp, *port)
 
 	// Create file server
 	server, err := fileserver.NewFileServer(*serverID, *rootDir, tlsEnabled, *msAddr)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
+	}
+
+	if tlsEnabled {
+		if _, err := server.EnsureServingCertificate(selfAddr, 6*time.Hour); err != nil {
+			log.Fatalf("Failed to ensure fileserver TLS certificate: %v", err)
+		}
 	}
 
 	// Create gRPC handler
@@ -61,11 +68,11 @@ func main() {
 	var opts []grpc.ServerOption
 	if tlsEnabled {
 		log.Println("TLS enabled")
-		tlsCert, err := certs.LoadServerTLSCert()
+		tlsConfig, err := certs.NewDynamicServerTLSConfig()
 		if err != nil {
-			log.Fatalf("Failed to load key pair: %v", err)
+			log.Fatalf("Failed to build dynamic TLS config: %v", err)
 		}
-		creds := credentials.NewServerTLSFromCert(&tlsCert)
+		creds := credentials.NewTLS(tlsConfig)
 		opts = append(opts, grpc.Creds(creds))
 	}
 
@@ -79,7 +86,6 @@ func main() {
 	}
 
 	// Start background sync with metaserver if an address was provided.
-	selfAddr := fmt.Sprintf("%s:%d", *ownIp, *port)
 	stopSync := server.StartMetaServerSync(*msAddr, selfAddr, *msRetry, *msHeartbeat)
 	defer stopSync()
 	if *msAddr != "" {
