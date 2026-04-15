@@ -1,4 +1,4 @@
-.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help
+.PHONY: all build proto clean clean-stale certs-clean run-server run-client test test-client test-edge test-integration test-cover help
 
 # Variables
 BINARY_DIR=bin
@@ -25,7 +25,7 @@ build: certs $(BINARY_DIR)
 
 # Create binary directory
 $(BINARY_DIR):
-	@mkdir -p $(BINARY_DIR)
+	@powershell -NoProfile -Command "New-Item -ItemType Directory -Force '$(BINARY_DIR)' | Out-Null"
 
 # Generate protobuf code
 proto:
@@ -44,25 +44,34 @@ proto:
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -rf $(BINARY_DIR)
-	@rm -rf fileserver_data
+	@powershell -NoProfile -Command "if (Test-Path '$(BINARY_DIR)') { Remove-Item -Recurse -Force '$(BINARY_DIR)' }; if (Test-Path 'fileserver_data') { Remove-Item -Recurse -Force 'fileserver_data' }; if (Test-Path 'coverage.out') { Remove-Item -Force 'coverage.out' }"
 	@echo "Clean complete!"
+
+clean-stale:
+	@echo "Cleaning stale runtime state..."
+	@powershell -NoProfile -Command "@('metaserver_state.json','$(CERT_DIR)/metaserver.crt','$(CERT_DIR)/metaserver.key','$(CERT_DIR)/fileserver.crt','$(CERT_DIR)/fileserver.key','$(CERT_DIR)/server.crt','$(CERT_DIR)/server.key') | ForEach-Object { if (Test-Path $$_) { Remove-Item -Force $$_ } }"
+	@echo "Stale runtime state cleaned."
+
+certs-clean:
+	@echo "Removing all generated certificates..."
+	@powershell -NoProfile -Command "@('$(CERT_DIR)/ca.crt','$(CERT_DIR)/ca.key','$(CERT_DIR)/server.crt','$(CERT_DIR)/server.key','$(CERT_DIR)/metaserver.crt','$(CERT_DIR)/metaserver.key','$(CERT_DIR)/fileserver.crt','$(CERT_DIR)/fileserver.key') | ForEach-Object { if (Test-Path $$_) { Remove-Item -Force $$_ } }"
+	@echo "Certificate files removed."
 
 # Run file server
 run-server: build
 	@echo "Starting file server..."
-	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
+	@./$(FILESERVER_BINARY) -id=fs1 -port=50052 -data=./fileserver_data
 
 exec-server:
-	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
+	@./$(FILESERVER_BINARY) -id=fs1 -port=50052 -data=./fileserver_data
 
 # Run meta server
 run-metaserver: build
 	@echo "Starting meta server..."
-	@./$(METASERVER_BINARY) -port=50052
+	@./$(METASERVER_BINARY) -port=50051
 
 exec-metaserver:
-	@./$(METASERVER_BINARY) -port=50052
+	@./$(METASERVER_BINARY) -port=50051
 
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice
@@ -131,6 +140,8 @@ help:
 	@echo "  make proto        - Generate protobuf code"
 	@echo "  make certs        - Generate TLS certificates under $(CERT_DIR)"
 	@echo "  make certs MDS_IP=192.168.1.10 - Generate certs with SAN for given MetaServer IP"
+	@echo "  make clean-stale  - Remove stale metaserver state and bootstrap server cert copies"
+	@echo "  make certs-clean  - Remove all generated certificate files"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make run-server   - Build and run file server"
 	@echo "  make run-client   - Build and run client (default user: alice)"

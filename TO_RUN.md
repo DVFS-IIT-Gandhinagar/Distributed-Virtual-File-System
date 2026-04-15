@@ -1,5 +1,53 @@
 # Commands To Run the Whole Setup
 
+## Compile Once, Then Run Binaries
+
+Build binaries (from project root):
+
+```
+make build MDS_IP=<MDS_LAN_IP>
+```
+
+This creates:
+
+- `bin/fileserver(.exe)`
+- `bin/metaserver(.exe)`
+- `bin/client(.exe)`
+
+Run compiled binaries (non-TLS):
+
+```
+.\bin\metaserver.exe --port=50051 --tls=false
+```
+
+```
+.\bin\fileserver.exe --meta_addr <MDS_LAN_IP>:50051 --own_ip=<FS_LAN_IP> --port=50052 --id=fs1 --data=fileserver_data --tls=false
+```
+
+```
+.\bin\client.exe --username <username> --ip_addr <MDS_LAN_IP> --port 50051 --meta=true --tls=false
+```
+
+Run compiled binaries (TLS):
+
+```
+.\bin\metaserver.exe --tls=true --public_ip=<MDS_LAN_IP> --port=50051 --tls_ca_file .\internal\certs\ca.crt --tls_ca_key_file .\internal\certs\ca.key --tls_cert_file .\internal\certs\metaserver.crt --tls_key_file .\internal\certs\metaserver.key
+```
+
+```
+.\bin\fileserver.exe --meta_addr <MDS_LAN_IP>:50051 --own_ip=<FS_LAN_IP> --port=50052 --tls=true --tls_ca_file .\internal\certs\ca.crt --tls_cert_file .\internal\certs\fileserver.crt --tls_key_file .\internal\certs\fileserver.key
+```
+
+```
+.\bin\client.exe --username <username> --ip_addr <MDS_LAN_IP> --port 50051 --meta=true --tls=true --tls_ca_file .\internal\certs\ca.crt
+```
+
+Tip for stale mappings between runs:
+
+```
+make clean-stale
+```
+
 ### For Fileserver (from project root)
 
 ```
@@ -91,8 +139,6 @@ Notes:
 ```
 go run .\cmd\fileserver\main.go --meta_addr <MDS_LAN_IP>:50051 --own_ip=<FS_LAN_IP> --tls=true --tls_ca_file .\internal\certs\ca.crt --tls_cert_file .\internal\certs\fileserver.crt --tls_key_file .\internal\certs\fileserver.key
 ```
-
-go run .\cmd\fileserver\main.go --meta_addr 10.7.63.138:50051 --own_ip=10.7.63.138 --tls=true --tls_ca_file .\internal\certs\ca.crt --tls_cert_file .\internal\certs\fileserver.crt --tls_key_file .\internal\certs\fileserver.key
 
 Notes:
 
