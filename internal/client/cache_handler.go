@@ -231,6 +231,9 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 
 	switch s {
 	case "/":
+		if _, err := c.client.ChangeDirectory("/"); err != nil {
+			return err
+		}
 		c.curr = c.root
 		c.client.ChangeCurrentFID(c.curr.fid)
 		return c.populateCurrentDirCache()
@@ -239,6 +242,10 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 		if c.curr == c.root {
 			// User is at root, return special error to trigger metaserver screen
 			return fmt.Errorf("RETURN_TO_METASERVER")
+		}
+
+		if _, err := c.client.ChangeDirectory(".."); err != nil {
+			return err
 		}
 
 		c.curr = c.curr.parent
@@ -251,6 +258,9 @@ func (c *CacheHandler) ChangeDirectory(s string) error {
 		// check if directory exists in cache of current directory
 		dirNode, exists := c.curr.children[s]
 		if exists && dirNode.Type == domain.InodeTypeDirectory {
+			if _, err := c.client.ChangeDirectory(s); err != nil {
+				return err
+			}
 			c.curr = dirNode
 			c.client.ChangeCurrentFID(c.curr.fid) // change FID in client to reflect new current directory
 			_ = c.populateCurrentDirCache()       // refresh cache each time you cd into dir
@@ -290,6 +300,14 @@ func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
 		})
 	}
 	return files, nil
+}
+
+// Refresh synchronizes the current directory cache with server state.
+func (c *CacheHandler) Refresh() error {
+	if c == nil || c.curr == nil {
+		return fmt.Errorf("cache handler is not initialized")
+	}
+	return c.populateCurrentDirCache()
 }
 
 func (c *CacheHandler) Path() (string, error) {

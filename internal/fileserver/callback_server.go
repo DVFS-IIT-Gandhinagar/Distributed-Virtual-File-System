@@ -26,6 +26,9 @@ type clientSession struct {
 const activeSessionTTL = 5 * time.Minute
 const callbackTimeout = 3 * time.Second
 const maxCallbackFailures = 3
+const callbackEventFileUpdated uint64 = 1
+const callbackEventDirNewFile uint64 = 2
+const callbackEventFileDeleted uint64 = 3
 
 // UpsertClientSession records callback address and activity metadata for a user.
 func (fs *FileServer) UpsertClientSession(username, callbackAddress string, rootFID *domain.FID) {
@@ -163,7 +166,7 @@ func (fs *FileServer) recordCallbackResult(username string, success bool) {
 	}
 }
 
-func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FID) {
+func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FID, eventType uint64) {
 	if target.callbackAddress == "" || changedFID == nil {
 		return
 	}
@@ -199,7 +202,10 @@ func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FI
 	ctx, cancel := context.WithTimeout(context.Background(), callbackTimeout)
 	defer cancel()
 
-	_, err = client.Invalidate(ctx, &cbpb.InvalidateRequest{Fid: changedFID.ToProto()})
+	_, err = client.Invalidate(ctx, &cbpb.InvalidateRequest{
+		Fid:        changedFID.ToProto(),
+		NewVersion: eventType,
+	})
 	if err != nil {
 		log.Printf("Callback: invalidate failed for user=%s addr=%s err=%v", target.username, target.callbackAddress, err)
 		fs.recordCallbackResult(target.username, false)
@@ -244,6 +250,50 @@ func (fs *FileServer) NotifyFileUpdated(parentFID *domain.FID, name, originUsern
 
 	for _, target := range targets {
 		targetCopy := target
-		go fs.sendInvalidate(targetCopy, changedFID)
+		go fs.sendInvalidate(targetCopy, changedFID, callbackEventFileUpdated)
+	}
+}
+
+// NotifyNewFileInDir notifies active users in the same directory that a new file was uploaded.
+func (fs *FileServer) NotifyNewFileInDir(parentFID *domain.FID, name, originUsername string) {
+	if parentFID == nil || name == "" {
+		return
+	}
+
+	parentFIDCopy := &domain.FID{
+		FileServerID:     parentFID.FileServerID,
+		InodeID:          parentFID.InodeID,
+		GenerationNumber: parentFID.GenerationNumber,
+	}
+
+	fs.mu.RLock()
+	targets := fs.snapshotNotifyTargetsForDirLocked(parentFID.String(), originUsername)
+	fs.mu.RUnlock()
+
+	for _, target := range targets {
+		targetCopy := target
+		go fs.sendInvalidate(targetCopy, parentFIDCopy, callbackEventDirNewFile)
+	}
+}
+
+// NotifyFileDeletedInDir notifies active users in the same directory that a file was deleted.
+func (fs *FileServer) NotifyFileDeletedInDir(parentFID *domain.FID, name, originUsername string) {
+	if parentFID == nil || name == "" {
+		return
+	}
+
+	parentFIDCopy := &domain.FID{
+		FileServerID:     parentFID.FileServerID,
+		InodeID:          parentFID.InodeID,
+		GenerationNumber: parentFID.GenerationNumber,
+	}
+
+	fs.mu.RLock()
+	targets := fs.snapshotNotifyTargetsForDirLocked(parentFID.String(), originUsername)
+	fs.mu.RUnlock()
+
+	for _, target := range targets {
+		targetCopy := target
+		go fs.sendInvalidate(targetCopy, parentFIDCopy, callbackEventFileDeleted)
 	}
 }

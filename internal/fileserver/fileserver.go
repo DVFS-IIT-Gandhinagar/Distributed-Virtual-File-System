@@ -44,7 +44,7 @@ type sharedDirSnapshot struct {
 }
 
 const trashDirName = ".trash"
-const storageQuota uint64 = 10 * 1024 // 1 MB per user, for demonstration
+const storageQuota uint64 = 1024 * 1024 * 1024 // 1 GB per user, for demonstration
 const trashNavigationDeniedMsg = "access denied: use show_trash to view trash contents"
 
 // NewFileServer creates a new file server object, either blank or loading from existing data

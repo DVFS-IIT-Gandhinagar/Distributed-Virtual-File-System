@@ -14,7 +14,8 @@
 - [x] Implement trash and restore for recycle bin - @ShardulJunagade
 - [x] Client Side Caching - @Reckadon
 - [x] File Cache Invalidation via Callbacks - @Reckadon
-- [ ] Directory Cache Invalidation via Callbacks - @Reckadon
+- [x] Directory Cache Invalidation via Callbacks - @Reckadon
+- [ ] CNode TTL
 - [x] TLS handshake @jsmaskeen
 - [x] Implement storage quotas - @Reckadon
 - [x] sharing phase-1 - @Umang-Shikarvar
@@ -26,4 +27,4 @@
 - [x] CI/CD - @jsmaskeen
 - [x] unittests - @jsmaskeen
 - [ ] Compression in Upload/Download - @jsmaskeen
-- [ ] Fix TLS, and use a standard key pattern: have separate vert rather than embedding in the binary file, [give client and mds the same root CS], then client will connect to MDS. and for files/etc mds will reply with fileserver's IP. during TLS handshake wiht fileserver, fs will present its own cert. and client will verify FS's cert using its root cert locally. 
+- [ ] Fix TLS, and use a standard key pattern: have separate vert rather than embedding in the binary file, [give client and mds the same root CS], then client will connect to MDS. and for files/etc mds will reply with fileserver's IP. during TLS handshake wiht fileserver, fs will present its own cert. and client will verify FS's cert using its root cert locally.

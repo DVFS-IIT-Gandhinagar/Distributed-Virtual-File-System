@@ -61,6 +61,19 @@ func (h *CobraHandler) setupCommands() {
 		},
 	})
 
+	// refresh
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "refresh",
+		Short: "Refresh current directory cache from server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := h.cacheHandler.Refresh()
+			if err == nil {
+				fmt.Println("Current directory cache refreshed.")
+			}
+			return err
+		},
+	})
+
 	// share
 	h.rootCmd.AddCommand(&cobra.Command{
 		Use:   "sharewith <username>",
