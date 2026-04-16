@@ -76,7 +76,7 @@ func TestTrashRootAndRestoreMetadataMissing(t *testing.T) {
 	}
 
 	delete(fs.trashMeta, fileFID.String())
-	if _, err := fs.RestoreFile(fileFID, "alice"); err == nil {
+	if _, err := fs.RestoreFile(fileFID, "alice", "alice"); err == nil {
 		t.Fatalf("expected restore without metadata to fail")
 	}
 }
@@ -100,5 +100,37 @@ func TestCheckStorageQuotaEdgeCases(t *testing.T) {
 	rootInode.Size = storageQuota + 1
 	if err := fs.checkStorageQuota("alice"); err == nil {
 		t.Fatalf("expected exceeded quota to fail")
+	}
+}
+
+func TestChangeDirToTrashIsRejected(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	if _, err := fs.ChangeDir(rootFID, ".trash", rootFID); err == nil {
+		t.Fatalf("expected cd to .trash to fail")
+	}
+}
+
+func TestChangeDirToTrashSubPathIsRejected(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	dirFID, err := fs.CreateFile(rootFID, "docs", "alice", domain.InodeTypeDirectory)
+	if err != nil {
+		t.Fatalf("CreateFile docs failed: %v", err)
+	}
+	if _, err := fs.TrashFile(dirFID, "alice", true); err != nil {
+		t.Fatalf("TrashFile docs failed: %v", err)
+	}
+
+	if _, err := fs.ChangeDir(rootFID, ".trash/docs", rootFID); err == nil {
+		t.Fatalf("expected cd to .trash/docs to fail")
 	}
 }

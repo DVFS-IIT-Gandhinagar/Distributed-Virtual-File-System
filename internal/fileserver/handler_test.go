@@ -162,6 +162,7 @@ func TestHandlerDeleteTrashRestoreLifecycle(t *testing.T) {
 	restoreResp, err := h.RestoreFile(context.Background(), &pb.RestoreFileRequest{
 		Fid:      createResp.Fid,
 		RootUser: "alice",
+		Username: "alice",
 	})
 	if err != nil || !restoreResp.Success {
 		t.Fatalf("RestoreFile failed: err=%v resp=%+v", err, restoreResp)
@@ -228,5 +229,68 @@ func TestHandlerCreateFileQuotaExceeded(t *testing.T) {
 	}
 	if resp.Success {
 		t.Fatalf("expected CreateFile to fail when quota is exceeded")
+	}
+}
+
+func TestHandlerRejectsChangeDirToTrash(t *testing.T) {
+	h, _ := setupHandlerTest(t)
+
+	rootResp, _ := h.RegisterClient(context.Background(), &pb.RegisterClientRequest{Username: "alice", RootUser: "alice", RootPath: "alice"})
+	if !rootResp.Success {
+		t.Fatalf("registration failed: %+v", rootResp)
+	}
+
+	resp, err := h.ChangeDir(context.Background(), &pb.ChangeDirRequest{
+		Fid:     rootResp.UserRootFid,
+		RootFid: rootResp.UserRootFid,
+		Path:    ".trash",
+	})
+	if err != nil {
+		t.Fatalf("ChangeDir returned rpc error: %v", err)
+	}
+	if resp.Success {
+		t.Fatalf("expected cd .trash to be rejected")
+	}
+}
+
+func TestHandlerShowTrashListsEntries(t *testing.T) {
+	h, _ := setupHandlerTest(t)
+
+	rootResp, _ := h.RegisterClient(context.Background(), &pb.RegisterClientRequest{Username: "alice", RootUser: "alice", RootPath: "alice"})
+	if !rootResp.Success {
+		t.Fatalf("registration failed: %+v", rootResp)
+	}
+
+	createResp, err := h.CreateFile(context.Background(), &pb.CreateFileRequest{
+		Name:     "temp.txt",
+		RootUser: "alice",
+		Fid:      rootResp.UserRootFid,
+		Type:     pb.InodeType_FILE,
+	})
+	if err != nil || !createResp.Success {
+		t.Fatalf("CreateFile failed: err=%v resp=%+v", err, createResp)
+	}
+
+	trashResp, err := h.TrashFile(context.Background(), &pb.TrashFileRequest{
+		Fid:      createResp.Fid,
+		RootUser: "alice",
+	})
+	if err != nil || !trashResp.Success {
+		t.Fatalf("TrashFile failed: err=%v resp=%+v", err, trashResp)
+	}
+
+	showResp, err := h.ShowTrash(context.Background(), &pb.ShowTrashRequest{RootUser: "alice", Username: "alice"})
+	if err != nil {
+		t.Fatalf("ShowTrash returned rpc error: %v", err)
+	}
+	if !showResp.Success {
+		t.Fatalf("ShowTrash failed: %+v", showResp)
+	}
+
+	if len(showResp.Entries) == 0 {
+		t.Fatalf("expected trash entries to be listed")
+	}
+	if showResp.Entries[0].Name == "" {
+		t.Fatalf("expected listed entry name to be set")
 	}
 }

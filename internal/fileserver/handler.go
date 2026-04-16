@@ -667,13 +667,44 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 	if req.RootUser == "" {
 		return &pb.RestoreFileResponse{Success: false, Error: "user is required"}, nil
 	}
+	if req.Username == "" {
+		return &pb.RestoreFileResponse{Success: false, Error: "username is required"}, nil
+	}
 
 	fid := domain.FIDFromProto(req.Fid)
-	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser)
+	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser, req.Username)
 	if err != nil {
 		log.Printf("RestoreFile: error - %v", err)
 		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
 	}
 
 	return &pb.RestoreFileResponse{Success: true, RestoredName: restoredName}, nil
+}
+
+// ShowTrash lists the current user's trash directory contents.
+func (h *GRPCHandler) ShowTrash(ctx context.Context, req *pb.ShowTrashRequest) (*pb.ShowTrashResponse, error) {
+	if req.RootUser == "" {
+		return &pb.ShowTrashResponse{Success: false, Error: "user is required"}, nil
+	}
+	if req.Username == "" {
+		return &pb.ShowTrashResponse{Success: false, Error: "username is required"}, nil
+	}
+
+	entries, err := h.fileServer.ShowTrash(req.RootUser, req.Username)
+	if err != nil {
+		log.Printf("ShowTrash: error - %v", err)
+		return &pb.ShowTrashResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	pbEntries := make([]*pb.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		pbEntries = append(pbEntries, &pb.DirEntry{
+			Fid:  entry.FID.ToProto(),
+			Name: entry.Name,
+			Type: entry.Type.ToProto(),
+			Size: entry.Size,
+		})
+	}
+
+	return &pb.ShowTrashResponse{Success: true, Entries: pbEntries}, nil
 }

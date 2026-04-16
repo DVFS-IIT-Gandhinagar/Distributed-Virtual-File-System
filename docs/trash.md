@@ -2,9 +2,13 @@
 
 This repo supports:
 
-- `rm` = **permanent delete** (server-side DFS post-order delete + inode map cleanup)
+- `delete` = **permanent delete** (server-side DFS post-order delete + inode map cleanup)
 - `trash` = **soft delete** (moves item into `.trash`)
 - `restore` = **restore** from `.trash` back to original location (best-effort)
+- `show_trash` = **safe listing** of `.trash` contents without `cd`
+- `clear_trash` = **empty trash** permanently
+- `delete -t <name>` = **permanently delete one item from trash** (recursive implied)
+- Shared users only see/restore trash entries they had ACL access to
 
 ## Prerequisites (one-time)
 
@@ -82,8 +86,7 @@ Now verify it exists in `.trash`:
 
 ```text
 cd ..
-cd .trash
-ls
+show_trash
 ```
 
 You should see `a.txt` (or a collision-safe name like `a.txt__<inodeID>`).
@@ -97,7 +100,6 @@ restore a.txt
 Then confirm it’s back:
 
 ```text
-cd ..
 cd t
 ls
 ```
@@ -125,14 +127,14 @@ trash -r d
 Expected:
 - Directory is moved to `.trash`.
 
-### 3) `rm` is permanent (does NOT go to trash)
+### 3) `delete` is permanent (does NOT go to trash)
 
 ```text
 mkdir p
 cd p
 create x
 cd ..
-rm -r p
+delete -r p
 ```
 
 Expected:
@@ -157,8 +159,7 @@ cd ..
 cd c2
 trash same
 cd ..
-cd .trash
-ls
+show_trash
 ```
 
 Expected:
@@ -167,21 +168,53 @@ Expected:
 ### 5) You cannot create inside `.trash`
 
 ```text
-cd .trash
 mkdir nope
-create nope.txt
+trash nope
+show_trash
 ```
 
 Expected:
-- Both operations fail (trash is treated as a protected area).
+- `show_trash` lists trashed entries.
+- Direct navigation into `.trash` and its subfolders is rejected.
+- Direct file creation inside `.trash` remains blocked.
 
-### 6) Important limitation (current implementation)
+### 6) Empty trash with `clear_trash`
+
+```text
+show_trash
+clear_trash
+show_trash
+```
+
+Expected:
+- `clear_trash` permanently deletes all entries currently listed in trash.
+- A follow-up `show_trash` prints `(trash is empty)`.
+
+### 7) Permanently delete one trash item with `delete -t`
+
+```text
+show_trash
+delete -t same__123
+show_trash
+```
+
+Expected:
+- `delete -t <name>` removes that specific item from trash permanently.
+- For directories in trash, `-r` is not required when `-t` is used.
+
+### 8) Important limitation (current implementation)
 
 Restore requires server-side metadata that is stored **in-memory**.
 
 That means:
 - If you restart the file server after trashing something, `restore` may fail with a message like “restore metadata not available”.
 - Workaround for now: restore before restarting the server.
+
+### 9) Shared-user trash visibility and restore rules
+
+- If `alice` shares a project with `bob`, `bob` does not get full visibility into `alice/.trash`.
+- `show_trash` for `bob` is ACL-filtered and only includes trashed items `bob` had access to.
+- `restore <name>` is also ACL-checked; `bob` cannot restore trashed items that were never shared with `bob`.
 
 ## Quick automated check
 
@@ -195,3 +228,12 @@ This includes `internal/fileserver/trash_restore_test.go` which validates:
 - trash + restore path updates
 - recursive requirement for non-empty directories
 - you cannot delete the `.trash` directory
+
+
+
+
+# doubt - heirarcchal trash or independent trash
+trash folder B from inside folder A and then trash folder A. 
+- When we restore folder B, should it be restored to its original location, or in trash inside A or smwhere else?
+- On removing folder A from trash, should folder B also be removed from trash or not?
+- On restoring folder A, should folder B also be restored or not?

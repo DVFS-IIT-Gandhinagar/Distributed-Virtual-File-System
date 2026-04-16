@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,6 +44,17 @@ type SharedRoot struct {
 
 const chunkSize = 1024 * 1024 * 4 // 4MB
 const DownloadDir = "./Download"
+const trashDirName = ".trash"
+
+func pathContainsTrashSegment(path string) bool {
+	normalized := strings.ReplaceAll(path, "\\", "/")
+	for _, part := range strings.Split(normalized, "/") {
+		if part == trashDirName {
+			return true
+		}
+	}
+	return false
+}
 
 // NewClient creates a new VFS client
 func NewClient(username string, useTLS bool) *Client {
@@ -293,7 +305,7 @@ func (c *Client) Upload(localPath string) (*domain.FID, error) {
 		return nil, err
 	}
 
-	if !info.IsDir() {  // file, will be handled by uploadFileInternal
+	if !info.IsDir() { // file, will be handled by uploadFileInternal
 		return c.uploadFileInternal(localPath, c.currentFID)
 	}
 
@@ -414,6 +426,10 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) (*domain
 
 // GetFIDForPath returns the FID of a path relative to current or root directory
 func (c *Client) GetFIDForPath(path string) (*domain.FID, error) {
+	if pathContainsTrashSegment(path) {
+		return nil, fmt.Errorf("access denied: use show_trash to view trash contents")
+	}
+
 	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
 		Fid:     c.currentFID.ToProto(),
 		RootFid: c.rootFID.ToProto(),
@@ -430,6 +446,10 @@ func (c *Client) GetFIDForPath(path string) (*domain.FID, error) {
 
 // Download downloads a file or a directory recursively
 func (c *Client) Download(path string) error {
+	if pathContainsTrashSegment(path) {
+		return fmt.Errorf("access denied: use show_trash to view trash contents")
+	}
+
 	// Handle path components
 	dirPath := filepath.Dir(path)
 	baseName := filepath.Base(path)
@@ -679,20 +699,7 @@ func (c *Client) RestoreFile(name string) (string, error) {
 		return "", fmt.Errorf("name is required")
 	}
 
-	cdResp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
-		Fid:     c.rootFID.ToProto(),
-		RootFid: c.rootFID.ToProto(),
-		Path:    ".trash",
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve trash directory: %w", err)
-	}
-	if !cdResp.Success {
-		return "", fmt.Errorf("failed to resolve trash directory: %s", cdResp.Error)
-	}
-	trashFID := domain.FIDFromProto(cdResp.NewFid)
-
-	entries, err := c.ListFilesAt(trashFID)
+	entries, err := c.ShowTrash()
 	if err != nil {
 		return "", fmt.Errorf("failed to list trash directory: %w", err)
 	}
@@ -711,6 +718,7 @@ func (c *Client) RestoreFile(name string) (string, error) {
 	resp, err := c.serverConn.RestoreFile(context.Background(), &pb.RestoreFileRequest{
 		Fid:      targetFID.ToProto(),
 		RootUser: c.root_user,
+		Username: c.username,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to restore: %w", err)
@@ -719,6 +727,101 @@ func (c *Client) RestoreFile(name string) (string, error) {
 		return "", fmt.Errorf("server error: %s", resp.Error)
 	}
 	return resp.RestoredName, nil
+}
+
+// ShowTrash lists the user's trash contents without navigating into .trash.
+func (c *Client) ShowTrash() ([]*FileInfo, error) {
+	resp, err := c.serverConn.ShowTrash(context.Background(), &pb.ShowTrashRequest{RootUser: c.root_user, Username: c.username})
+	if err != nil {
+		return nil, fmt.Errorf("failed to show trash: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	files := make([]*FileInfo, len(resp.Entries))
+	for i, child := range resp.Entries {
+		files[i] = &FileInfo{
+			FID:  domain.FIDFromProto(child.Fid),
+			Name: child.Name,
+			Type: domain.InodeTypeFromProto(child.Type),
+			Size: child.Size,
+		}
+	}
+
+	return files, nil
+}
+
+// ClearTrash permanently deletes every entry currently present in trash.
+func (c *Client) ClearTrash() (int, error) {
+	entries, err := c.ShowTrash()
+	if err != nil {
+		return 0, err
+	}
+	if len(entries) == 0 {
+		return 0, nil
+	}
+
+	failed := make([]string, 0)
+	deleted := 0
+
+	for _, entry := range entries {
+		resp, err := c.serverConn.DeleteFile(context.Background(), &pb.DeleteFileRequest{
+			Fid:       entry.FID.ToProto(),
+			RootUser:  c.root_user,
+			Recursive: true,
+		})
+		if err != nil || !resp.Success {
+			failed = append(failed, entry.Name)
+			continue
+		}
+		deleted++
+	}
+
+	if len(failed) > 0 {
+		sort.Strings(failed)
+		return deleted, fmt.Errorf("failed to delete trash entries: %s", strings.Join(failed, ", "))
+	}
+
+	return deleted, nil
+}
+
+// DeleteFromTrash permanently deletes a single file/directory currently in trash.
+// Directories are always deleted recursively when deleting from trash.
+func (c *Client) DeleteFromTrash(name string) error {
+	if name == "" {
+		return fmt.Errorf("name is required")
+	}
+
+	entries, err := c.ShowTrash()
+	if err != nil {
+		return fmt.Errorf("failed to list trash directory: %w", err)
+	}
+
+	var targetFID *domain.FID
+	for _, entry := range entries {
+		if entry.Name == name {
+			targetFID = entry.FID
+			break
+		}
+	}
+	if targetFID == nil {
+		return fmt.Errorf("'%s' not found in trash", name)
+	}
+
+	resp, err := c.serverConn.DeleteFile(context.Background(), &pb.DeleteFileRequest{
+		Fid:       targetFID.ToProto(),
+		RootUser:  c.root_user,
+		Recursive: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete from trash: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("server error: %s", resp.Error)
+	}
+
+	return nil
 }
 
 // WriteFile writes given data to a file

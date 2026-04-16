@@ -218,14 +218,22 @@ func (h *CobraHandler) setupCommands() {
 	// 	},
 	// })
 
-	// rm / delete
-	rmCmd := &cobra.Command{
-		Use:     "rm <name>",
-		Aliases: []string{"delete"},
-		Short:   "Delete a file or directory",
-		Long:    "Delete a file or empty directory. Use -r flag to delete directories with contents recursively.",
-		Args:    cobra.ExactArgs(1),
+	// delete
+	deleteCmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a file or directory",
+		Long:  "Delete a file or empty directory. Use -r to delete non-empty directories recursively. Use -t to permanently delete an item from trash (recursive is implied).",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fromTrash, _ := cmd.Flags().GetBool("trash")
+			if fromTrash {
+				err := h.cacheHandler.DeleteFromTrash(args[0])
+				if err == nil {
+					fmt.Printf("Permanently deleted '%s' from trash\n", args[0])
+				}
+				return err
+			}
+
 			recursive, _ := cmd.Flags().GetBool("recursive")
 			fmt.Printf("[DEBUG] Deleting '%s' with recursive=%v\n", args[0], recursive)
 			err := h.cacheHandler.DeleteFile(args[0], recursive)
@@ -239,8 +247,9 @@ func (h *CobraHandler) setupCommands() {
 			return err
 		},
 	}
-	rmCmd.Flags().BoolP("recursive", "r", false, "Delete directories recursively")
-	h.rootCmd.AddCommand(rmCmd)
+	deleteCmd.Flags().BoolP("recursive", "r", false, "Delete directories recursively")
+	deleteCmd.Flags().BoolP("trash", "t", false, "Permanently delete an item from trash")
+	h.rootCmd.AddCommand(deleteCmd)
 
 	// trash (soft delete)
 	trashCmd := &cobra.Command{
@@ -283,6 +292,55 @@ func (h *CobraHandler) setupCommands() {
 		},
 	}
 	h.rootCmd.AddCommand(restoreCmd)
+
+	// show_trash
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "show_trash",
+		Short: "List entries currently present in trash",
+		Long:  "Lists the contents of the user's .trash directory without navigating into it.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			files, err := h.cacheHandler.ShowTrash()
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				fmt.Println("(trash is empty)")
+				return nil
+			}
+
+			fmt.Printf("%-20s %-10s %10s\n", "Name", "Type", "Size")
+			fmt.Printf("%-20s %-10s %10s\n", "----", "----", "----")
+			for _, file := range files {
+				typeStr := "file"
+				if file.Type == domain.InodeTypeDirectory {
+					typeStr = "dir"
+				}
+				fmt.Printf("%-20s %-10s %10d\n", file.Name, typeStr, file.Size)
+			}
+			return nil
+		},
+	})
+
+	// clear_trash
+	h.rootCmd.AddCommand(&cobra.Command{
+		Use:   "clear_trash",
+		Short: "Permanently delete all entries from trash",
+		Long:  "Empties the user's .trash by permanently deleting all files and directories currently present.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deleted, err := h.cacheHandler.ClearTrash()
+			if err != nil {
+				return err
+			}
+			if deleted == 0 {
+				fmt.Println("Trash is already empty")
+				return nil
+			}
+			fmt.Printf("Permanently deleted %d entr(y/ies) from trash\n", deleted)
+			return nil
+		},
+	})
 
 	// info
 	h.rootCmd.AddCommand(&cobra.Command{
@@ -433,7 +491,6 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 		"read": true,
 		// "write":    true,
 		"download": true,
-		"rm":       true,
 		"delete":   true,
 		"trash":    true,
 		"restore":  true,
@@ -445,7 +502,15 @@ func (c *CobraCompleter) Do(line []rune, pos int) (newLine [][]rune, length int)
 			prefix = parts[len(parts)-1]
 		}
 
-		files, err := c.handler.cacheHandler.ListFiles()
+		var (
+			files []*FileInfo
+			err   error
+		)
+		if commandName == "restore" {
+			files, err = c.handler.cacheHandler.ShowTrash()
+		} else {
+			files, err = c.handler.cacheHandler.ListFiles()
+		}
 		if err != nil {
 			return nil, 0
 		}
