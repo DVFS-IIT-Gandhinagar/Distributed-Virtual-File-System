@@ -718,6 +718,7 @@ func (c *Client) RestoreFile(name string) (string, error) {
 	resp, err := c.serverConn.RestoreFile(context.Background(), &pb.RestoreFileRequest{
 		Fid:      targetFID.ToProto(),
 		RootUser: c.root_user,
+		Username: c.username,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to restore: %w", err)
@@ -730,7 +731,7 @@ func (c *Client) RestoreFile(name string) (string, error) {
 
 // ShowTrash lists the user's trash contents without navigating into .trash.
 func (c *Client) ShowTrash() ([]*FileInfo, error) {
-	resp, err := c.serverConn.ShowTrash(context.Background(), &pb.ShowTrashRequest{RootUser: c.root_user})
+	resp, err := c.serverConn.ShowTrash(context.Background(), &pb.ShowTrashRequest{RootUser: c.root_user, Username: c.username})
 	if err != nil {
 		return nil, fmt.Errorf("failed to show trash: %w", err)
 	}

@@ -114,6 +114,7 @@ message TrashFileResponse {
 message RestoreFileRequest {
   FID fid = 1;
   string root_user = 2;
+  string username = 3; // requester identity for ACL checks
 }
 
 message RestoreFileResponse {
@@ -124,6 +125,7 @@ message RestoreFileResponse {
 
 message ShowTrashRequest {
   string root_user = 1;
+  string username = 2; // requester identity for ACL-filtered listing
 }
 
 message ShowTrashResponse {

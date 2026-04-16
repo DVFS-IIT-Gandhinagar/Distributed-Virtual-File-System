@@ -34,6 +34,13 @@ type FileServer struct {
 type trashEntry struct {
 	originalParentFID string
 	originalName      string
+	originalRelPath   string
+	sharedSnapshots   []sharedDirSnapshot
+}
+
+type sharedDirSnapshot struct {
+	path  string
+	users []string
 }
 
 const trashDirName = ".trash"
@@ -336,10 +343,29 @@ func (fs *FileServer) isUnderRootTrashLocked(inode *domain.Inode, rootFID *domai
 	return false
 }
 
+func userCanAccessInode(inode *domain.Inode, username string) bool {
+	if inode == nil || username == "" {
+		return false
+	}
+	if inode.ACL.Owner == username {
+		return true
+	}
+	for _, sharedUser := range inode.ACL.Shared {
+		if sharedUser == username {
+			return true
+		}
+	}
+	return false
+}
+
 // ShowTrash returns all entries from the caller's trash directory.
-func (fs *FileServer) ShowTrash(root_user string) ([]*domain.Inode, error) {
+func (fs *FileServer) ShowTrash(root_user, requester string) ([]*domain.Inode, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+
+	if requester == "" {
+		requester = root_user
+	}
 
 	trashInode, err := fs.getOrCreateTrashDirLocked(root_user)
 	if err != nil {
@@ -349,7 +375,9 @@ func (fs *FileServer) ShowTrash(root_user string) ([]*domain.Inode, error) {
 	children := make([]*domain.Inode, 0, len(trashInode.Children))
 	for _, childFID := range trashInode.Children {
 		if childInode, err := fs.GetInode(childFID); err == nil {
-			children = append(children, childInode)
+			if userCanAccessInode(childInode, requester) {
+				children = append(children, childInode)
+			}
 		}
 	}
 
@@ -372,6 +400,94 @@ func (fs *FileServer) updateSubtreePathsLocked(inode *domain.Inode, newOSPath st
 		}
 		childNewPath := filepath.Join(newOSPath, childInode.Name)
 		fs.updateSubtreePathsLocked(childInode, childNewPath)
+	}
+}
+
+func (fs *FileServer) collectSharedSnapshotsForPathLocked(basePath string) []sharedDirSnapshot {
+	snapshots := make([]sharedDirSnapshot, 0)
+	if basePath == "" || fs.Shared == nil {
+		return snapshots
+	}
+
+	prefix := basePath + string(os.PathSeparator)
+	for sharedPath, users := range fs.Shared {
+		if sharedPath != basePath && !strings.HasPrefix(sharedPath, prefix) {
+			continue
+		}
+		usersCopy := make([]string, len(users))
+		copy(usersCopy, users)
+		snapshots = append(snapshots, sharedDirSnapshot{path: sharedPath, users: usersCopy})
+	}
+
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].path < snapshots[j].path
+	})
+
+	return snapshots
+}
+
+func (fs *FileServer) detachSharedSnapshotsLocked(owner string, snapshots []sharedDirSnapshot) {
+	if len(snapshots) == 0 {
+		return
+	}
+
+	for _, snap := range snapshots {
+		delete(fs.Shared, snap.path)
+		for _, user := range snap.users {
+			if err := fs.RootUnshare(owner, filepath.Base(snap.path), snap.path, user); err != nil {
+				log.Printf("Warning: failed to notify metaserver unshare for path=%s user=%s: %v", snap.path, user, err)
+			}
+		}
+	}
+
+	if err := fs.SaveDirShares(); err != nil {
+		log.Printf("Warning: failed to persist dirShares after detaching shared snapshots: %v", err)
+	}
+}
+
+func (fs *FileServer) reattachSharedSnapshotsLocked(owner, oldBasePath, newBasePath string, snapshots []sharedDirSnapshot) {
+	if len(snapshots) == 0 {
+		return
+	}
+
+	if fs.Shared == nil {
+		fs.Shared = make(map[string][]string)
+	}
+
+	oldPrefix := oldBasePath + string(os.PathSeparator)
+	for _, snap := range snapshots {
+		mappedPath := snap.path
+		if snap.path == oldBasePath {
+			mappedPath = newBasePath
+		} else if strings.HasPrefix(snap.path, oldPrefix) {
+			suffix := strings.TrimPrefix(snap.path, oldPrefix)
+			mappedPath = filepath.Join(newBasePath, suffix)
+		}
+
+		if fs.Shared[mappedPath] == nil {
+			fs.Shared[mappedPath] = []string{}
+		}
+
+		for _, user := range snap.users {
+			alreadyShared := false
+			for _, existing := range fs.Shared[mappedPath] {
+				if existing == user {
+					alreadyShared = true
+					break
+				}
+			}
+			if !alreadyShared {
+				fs.Shared[mappedPath] = append(fs.Shared[mappedPath], user)
+			}
+
+			if err := fs.RootShare(owner, filepath.Base(mappedPath), mappedPath, user); err != nil {
+				log.Printf("Warning: failed to notify metaserver share for path=%s user=%s: %v", mappedPath, user, err)
+			}
+		}
+	}
+
+	if err := fs.SaveDirShares(); err != nil {
+		log.Printf("Warning: failed to persist dirShares after reattaching shared snapshots: %v", err)
 	}
 }
 
@@ -412,10 +528,22 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 
 	finalName := fs.uniqueNameInDirLocked(trashInode, inode.Name, inode.FID.InodeID)
 	newPath := filepath.Join(trashInode.OSPath, finalName)
+	originalRelPath, relErr := filepath.Rel(fs.rootDir, inode.OSPath)
+	if relErr != nil {
+		originalRelPath = ""
+	}
+
+	sharedSnapshots := []sharedDirSnapshot{}
+	if originalRelPath != "" {
+		sharedSnapshots = fs.collectSharedSnapshotsForPathLocked(originalRelPath)
+	}
 
 	// OS move first; on failure, keep memory untouched.
 	if err := os.Rename(inode.OSPath, newPath); err != nil {
 		return "", fmt.Errorf("failed to move to trash: %w", err)
+	}
+	if len(sharedSnapshots) > 0 {
+		fs.detachSharedSnapshotsLocked(root_user, sharedSnapshots)
 	}
 
 	// Memory updates.
@@ -423,7 +551,12 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 	if inode.Parent != nil {
 		origParent = inode.Parent.FID.String()
 	}
-	fs.trashMeta[fid.String()] = trashEntry{originalParentFID: origParent, originalName: inode.Name}
+	fs.trashMeta[fid.String()] = trashEntry{
+		originalParentFID: origParent,
+		originalName:      inode.Name,
+		originalRelPath:   originalRelPath,
+		sharedSnapshots:   sharedSnapshots,
+	}
 
 	if err := fs.removeFromParent(inode); err != nil {
 		log.Printf("Warning: failed to unlink from parent during trash: %v", err)
@@ -438,9 +571,13 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 }
 
 // RestoreFile moves an inode out of trash back to its original parent (best-effort).
-func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, error) {
+func (fs *FileServer) RestoreFile(fid *domain.FID, root_user, requester string) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+
+	if requester == "" {
+		requester = root_user
+	}
 
 	if fid == nil {
 		return "", fmt.Errorf("invalid FID: cannot be nil")
@@ -450,8 +587,8 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("file not found: %s", fid.String())
 	}
-	if inode.ACL.Owner != root_user {
-		return "", fmt.Errorf("permission denied: user '%s' does not own '%s'", root_user, inode.Name)
+	if !userCanAccessInode(inode, requester) {
+		return "", fmt.Errorf("permission denied: user '%s' cannot restore '%s'", requester, inode.Name)
 	}
 
 	trashInode, err := fs.getOrCreateTrashDirLocked(root_user)
@@ -504,6 +641,14 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user string) (string, er
 	inode.Name = finalName
 	targetParent.Children = append(targetParent.Children, inode.FID)
 	fs.updateSubtreePathsLocked(inode, newPath)
+
+	if len(meta.sharedSnapshots) > 0 && meta.originalRelPath != "" {
+		newRelPath, relErr := filepath.Rel(fs.rootDir, inode.OSPath)
+		if relErr != nil {
+			newRelPath = meta.originalRelPath
+		}
+		fs.reattachSharedSnapshotsLocked(root_user, meta.originalRelPath, newRelPath, meta.sharedSnapshots)
+	}
 
 	delete(fs.trashMeta, fid.String())
 	return finalName, nil
@@ -1206,6 +1351,17 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, root_user string, recursive bo
 	for _, deletedInode := range toDelete {
 		delete(fs.inodes, deletedInode.FID.String())
 		delete(fs.trashMeta, deletedInode.FID.String())
+	}
+
+	targetRelPath := ""
+	if relPath, relErr := filepath.Rel(fs.rootDir, inode.OSPath); relErr == nil {
+		targetRelPath = relPath
+	}
+	if targetRelPath != "" {
+		sharedSnapshots := fs.collectSharedSnapshotsForPathLocked(targetRelPath)
+		if len(sharedSnapshots) > 0 {
+			fs.detachSharedSnapshotsLocked(root_user, sharedSnapshots)
+		}
 	}
 
 	// Remove main inode from parent's children list

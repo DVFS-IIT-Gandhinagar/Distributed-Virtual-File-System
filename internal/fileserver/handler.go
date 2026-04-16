@@ -608,9 +608,12 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 	if req.RootUser == "" {
 		return &pb.RestoreFileResponse{Success: false, Error: "user is required"}, nil
 	}
+	if req.Username == "" {
+		return &pb.RestoreFileResponse{Success: false, Error: "username is required"}, nil
+	}
 
 	fid := domain.FIDFromProto(req.Fid)
-	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser)
+	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser, req.Username)
 	if err != nil {
 		log.Printf("RestoreFile: error - %v", err)
 		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
@@ -624,8 +627,11 @@ func (h *GRPCHandler) ShowTrash(ctx context.Context, req *pb.ShowTrashRequest) (
 	if req.RootUser == "" {
 		return &pb.ShowTrashResponse{Success: false, Error: "user is required"}, nil
 	}
+	if req.Username == "" {
+		return &pb.ShowTrashResponse{Success: false, Error: "username is required"}, nil
+	}
 
-	entries, err := h.fileServer.ShowTrash(req.RootUser)
+	entries, err := h.fileServer.ShowTrash(req.RootUser, req.Username)
 	if err != nil {
 		log.Printf("ShowTrash: error - %v", err)
 		return &pb.ShowTrashResponse{Success: false, Error: err.Error()}, nil

@@ -162,6 +162,7 @@ func TestHandlerDeleteTrashRestoreLifecycle(t *testing.T) {
 	restoreResp, err := h.RestoreFile(context.Background(), &pb.RestoreFileRequest{
 		Fid:      createResp.Fid,
 		RootUser: "alice",
+		Username: "alice",
 	})
 	if err != nil || !restoreResp.Success {
 		t.Fatalf("RestoreFile failed: err=%v resp=%+v", err, restoreResp)
@@ -278,7 +279,7 @@ func TestHandlerShowTrashListsEntries(t *testing.T) {
 		t.Fatalf("TrashFile failed: err=%v resp=%+v", err, trashResp)
 	}
 
-	showResp, err := h.ShowTrash(context.Background(), &pb.ShowTrashRequest{RootUser: "alice"})
+	showResp, err := h.ShowTrash(context.Background(), &pb.ShowTrashRequest{RootUser: "alice", Username: "alice"})
 	if err != nil {
 		t.Fatalf("ShowTrash returned rpc error: %v", err)
 	}

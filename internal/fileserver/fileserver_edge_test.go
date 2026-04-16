@@ -76,7 +76,7 @@ func TestTrashRootAndRestoreMetadataMissing(t *testing.T) {
 	}
 
 	delete(fs.trashMeta, fileFID.String())
-	if _, err := fs.RestoreFile(fileFID, "alice"); err == nil {
+	if _, err := fs.RestoreFile(fileFID, "alice", "alice"); err == nil {
 		t.Fatalf("expected restore without metadata to fail")
 	}
 }

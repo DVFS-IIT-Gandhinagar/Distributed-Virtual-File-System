@@ -225,7 +225,7 @@ func TestTrashAndRestoreRoundTrip(t *testing.T) {
 		t.Fatalf("trashed file not found on disk at %s: %v", trashedInode.OSPath, err)
 	}
 
-	restoredName, err := fs.RestoreFile(fileFID, "alice")
+	restoredName, err := fs.RestoreFile(fileFID, "alice", "alice")
 	if err != nil {
 		t.Fatalf("RestoreFile failed: %v", err)
 	}
@@ -303,5 +303,137 @@ func TestShareAndUnsharePropagateACLAndTrackExplicitShare(t *testing.T) {
 
 	if users := fs.Shared[shareKey]; len(users) != 0 {
 		t.Fatalf("explicit dir share map not cleared after unshare: %v", users)
+	}
+}
+
+func TestTrashSharedDirectoryHidesAndRestoreReaddsShareEntry(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	projectFID, err := fs.CreateFile(rootFID, "project", "alice", domain.InodeTypeDirectory)
+	if err != nil {
+		t.Fatalf("CreateFile project failed: %v", err)
+	}
+
+	if err := fs.Share("alice", "bob", projectFID); err != nil {
+		t.Fatalf("Share failed: %v", err)
+	}
+
+	shareKey := filepath.Join("alice", "project")
+	if len(fs.Shared[shareKey]) == 0 {
+		t.Fatalf("expected explicit share entry to exist before trash")
+	}
+
+	if _, err := fs.TrashFile(projectFID, "alice", true); err != nil {
+		t.Fatalf("TrashFile failed: %v", err)
+	}
+	if _, ok := fs.Shared[shareKey]; ok {
+		t.Fatalf("expected explicit share entry to be removed when directory is trashed")
+	}
+
+	if _, err := fs.RestoreFile(projectFID, "alice", "alice"); err != nil {
+		t.Fatalf("RestoreFile failed: %v", err)
+	}
+	if len(fs.Shared[shareKey]) == 0 {
+		t.Fatalf("expected explicit share entry to be restored after directory restore")
+	}
+}
+
+func TestDeleteSharedDirectoryRemovesShareEntry(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	projectFID, err := fs.CreateFile(rootFID, "project", "alice", domain.InodeTypeDirectory)
+	if err != nil {
+		t.Fatalf("CreateFile project failed: %v", err)
+	}
+
+	if err := fs.Share("alice", "bob", projectFID); err != nil {
+		t.Fatalf("Share failed: %v", err)
+	}
+
+	shareKey := filepath.Join("alice", "project")
+	if len(fs.Shared[shareKey]) == 0 {
+		t.Fatalf("expected explicit share entry to exist before delete")
+	}
+
+	if err := fs.DeleteFile(projectFID, "alice", true); err != nil {
+		t.Fatalf("DeleteFile failed: %v", err)
+	}
+	if _, ok := fs.Shared[shareKey]; ok {
+		t.Fatalf("expected explicit share entry to be removed when directory is permanently deleted")
+	}
+}
+
+func TestShowTrashFiltersEntriesByRequesterACL(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	privateFID, err := fs.CreateFile(rootFID, "private.txt", "alice", domain.InodeTypeFile)
+	if err != nil {
+		t.Fatalf("CreateFile private.txt failed: %v", err)
+	}
+
+	sharedFID, err := fs.CreateFile(rootFID, "shared", "alice", domain.InodeTypeDirectory)
+	if err != nil {
+		t.Fatalf("CreateFile shared failed: %v", err)
+	}
+	if err := fs.Share("alice", "bob", sharedFID); err != nil {
+		t.Fatalf("Share failed: %v", err)
+	}
+
+	if _, err := fs.TrashFile(privateFID, "alice", false); err != nil {
+		t.Fatalf("TrashFile private failed: %v", err)
+	}
+	if _, err := fs.TrashFile(sharedFID, "alice", true); err != nil {
+		t.Fatalf("TrashFile shared failed: %v", err)
+	}
+
+	bobEntries, err := fs.ShowTrash("alice", "bob")
+	if err != nil {
+		t.Fatalf("ShowTrash for bob failed: %v", err)
+	}
+	if len(bobEntries) != 1 {
+		t.Fatalf("expected bob to see exactly one trashed entry, got=%d", len(bobEntries))
+	}
+	if bobEntries[0].Name != "shared" {
+		t.Fatalf("expected bob to only see shared entry, got=%s", bobEntries[0].Name)
+	}
+
+	aliceEntries, err := fs.ShowTrash("alice", "alice")
+	if err != nil {
+		t.Fatalf("ShowTrash for alice failed: %v", err)
+	}
+	if len(aliceEntries) != 2 {
+		t.Fatalf("expected alice to see all trashed entries, got=%d", len(aliceEntries))
+	}
+}
+
+func TestRestoreFromTrashDeniedWhenRequesterLacksACL(t *testing.T) {
+	fs := newTestFileServer(t)
+	rootFID, err := fs.GetUserRoot("alice", "alice")
+	if err != nil {
+		t.Fatalf("GetUserRoot failed: %v", err)
+	}
+
+	privateFID, err := fs.CreateFile(rootFID, "private.txt", "alice", domain.InodeTypeFile)
+	if err != nil {
+		t.Fatalf("CreateFile failed: %v", err)
+	}
+	if _, err := fs.TrashFile(privateFID, "alice", false); err != nil {
+		t.Fatalf("TrashFile failed: %v", err)
+	}
+
+	if _, err := fs.RestoreFile(privateFID, "alice", "bob"); err == nil {
+		t.Fatalf("expected restore by unauthorized requester to fail")
 	}
 }

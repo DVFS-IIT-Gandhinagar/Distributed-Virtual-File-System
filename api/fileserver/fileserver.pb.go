@@ -1029,6 +1029,7 @@ type RestoreFileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Fid           *FID                   `protobuf:"bytes,1,opt,name=fid,proto3" json:"fid,omitempty"`
 	RootUser      string                 `protobuf:"bytes,2,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
+	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"` // requester identity for ACL checks
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1073,6 +1074,13 @@ func (x *RestoreFileRequest) GetFid() *FID {
 func (x *RestoreFileRequest) GetRootUser() string {
 	if x != nil {
 		return x.RootUser
+	}
+	return ""
+}
+
+func (x *RestoreFileRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
 	}
 	return ""
 }
@@ -1140,6 +1148,7 @@ func (x *RestoreFileResponse) GetRestoredName() string {
 type ShowTrashRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RootUser      string                 `protobuf:"bytes,1,opt,name=root_user,json=rootUser,proto3" json:"root_user,omitempty"`
+	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"` // requester identity for ACL-filtered listing
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1177,6 +1186,13 @@ func (*ShowTrashRequest) Descriptor() ([]byte, []int) {
 func (x *ShowTrashRequest) GetRootUser() string {
 	if x != nil {
 		return x.RootUser
+	}
+	return ""
+}
+
+func (x *ShowTrashRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
 	}
 	return ""
 }
@@ -2571,16 +2587,18 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\x11TrashFileResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
-	"\ftrashed_name\x18\x03 \x01(\tR\vtrashedName\"T\n" +
+	"\ftrashed_name\x18\x03 \x01(\tR\vtrashedName\"p\n" +
 	"\x12RestoreFileRequest\x12!\n" +
 	"\x03fid\x18\x01 \x01(\v2\x0f.fileserver.FIDR\x03fid\x12\x1b\n" +
-	"\troot_user\x18\x02 \x01(\tR\brootUser\"j\n" +
+	"\troot_user\x18\x02 \x01(\tR\brootUser\x12\x1a\n" +
+	"\busername\x18\x03 \x01(\tR\busername\"j\n" +
 	"\x13RestoreFileResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12#\n" +
-	"\rrestored_name\x18\x03 \x01(\tR\frestoredName\"/\n" +
+	"\rrestored_name\x18\x03 \x01(\tR\frestoredName\"K\n" +
 	"\x10ShowTrashRequest\x12\x1b\n" +
-	"\troot_user\x18\x01 \x01(\tR\brootUser\"s\n" +
+	"\troot_user\x18\x01 \x01(\tR\brootUser\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\"s\n" +
 	"\x11ShowTrashResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12.\n" +

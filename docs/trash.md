@@ -8,6 +8,7 @@ This repo supports:
 - `show_trash` = **safe listing** of `.trash` contents without `cd`
 - `clear_trash` = **empty trash** permanently
 - `delete -t <name>` = **permanently delete one item from trash** (recursive implied)
+- Shared users only see/restore trash entries they had ACL access to
 
 ## Prerequisites (one-time)
 
@@ -208,6 +209,12 @@ Restore requires server-side metadata that is stored **in-memory**.
 That means:
 - If you restart the file server after trashing something, `restore` may fail with a message like “restore metadata not available”.
 - Workaround for now: restore before restarting the server.
+
+### 9) Shared-user trash visibility and restore rules
+
+- If `alice` shares a project with `bob`, `bob` does not get full visibility into `alice/.trash`.
+- `show_trash` for `bob` is ACL-filtered and only includes trashed items `bob` had access to.
+- `restore <name>` is also ACL-checked; `bob` cannot restore trashed items that were never shared with `bob`.
 
 ## Quick automated check
 
