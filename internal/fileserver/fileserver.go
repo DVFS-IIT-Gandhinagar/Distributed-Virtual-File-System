@@ -1353,14 +1353,23 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, root_user string, recursive bo
 		delete(fs.trashMeta, deletedInode.FID.String())
 	}
 
+	// Collect shared snapshots and remove them from fs.Shared *under the lock*,
+	// then notify the metaserver *after* releasing it (network calls must not
+	// be made while holding the mutex).
 	targetRelPath := ""
 	if relPath, relErr := filepath.Rel(fs.rootDir, inode.OSPath); relErr == nil {
 		targetRelPath = relPath
 	}
+	var sharedSnapshots []sharedDirSnapshot
 	if targetRelPath != "" {
-		sharedSnapshots := fs.collectSharedSnapshotsForPathLocked(targetRelPath)
+		sharedSnapshots = fs.collectSharedSnapshotsForPathLocked(targetRelPath)
+		for _, snap := range sharedSnapshots {
+			delete(fs.Shared, snap.path)
+		}
 		if len(sharedSnapshots) > 0 {
-			fs.detachSharedSnapshotsLocked(root_user, sharedSnapshots)
+			if err := fs.SaveDirShares(); err != nil {
+				log.Printf("Warning: failed to persist dirShares after delete: %v", err)
+			}
 		}
 	}
 
@@ -1371,8 +1380,24 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, root_user string, recursive bo
 
 	log.Printf("Successfully deleted %s: %s (FID: %s) with %d total items",
 		inode.Type.String(), inode.Name, fid.String(), len(toDelete))
+
+	// Release the lock before making outbound network calls to the metaserver.
+	fs.mu.Unlock()
+
+	// Notify metaserver to remove shared root entries for the deleted directory.
+	for _, snap := range sharedSnapshots {
+		for _, user := range snap.users {
+			if err := fs.RootUnshare(root_user, filepath.Base(snap.path), snap.path, user); err != nil {
+				log.Printf("Warning: failed to notify metaserver unshare for path=%s user=%s: %v", snap.path, user, err)
+			}
+		}
+	}
+
+	// Re-acquire so the deferred Unlock() doesn't double-unlock.
+	fs.mu.Lock()
 	return nil
 }
+
 
 // validateDeletePermissions validates that user can delete the inode and all its children
 func (fs *FileServer) validateDeletePermissions(inode *domain.Inode, root_user string, recursive bool) error {
