@@ -21,18 +21,19 @@ import (
 
 // Client provides basic VFS client functionality
 type Client struct {
-	username     string
-	root_user    string
-	root_path    string
-	display_name string
-	clientID     string
-	callbackAddr string
-	rootFID      *domain.FID
-	currentFID   *domain.FID
-	serverConn   pb.FileServerClient
-	useTLS       bool
-	cacheHandler *CacheHandler
-	stopCallback func() error
+	username      string
+	root_user     string
+	root_path     string
+	display_name  string
+	clientID      string
+	callbackAddr  string
+	rootFID       *domain.FID
+	currentFID    *domain.FID
+	serverConn    pb.FileServerClient
+	useTLS        bool
+	cacheHandler  *CacheHandler
+	stopCallback  func() error
+	notifyWriter  io.Writer // readline-aware writer for notification messages
 }
 
 // Shared Roots with the user
@@ -69,6 +70,23 @@ func NewClient(username string, useTLS bool) *Client {
 func (c *Client) AttachCacheHandler(cacheHandler *CacheHandler) {
 	c.cacheHandler = cacheHandler
 }
+
+// SetNotifyWriter provides a readline-aware writer so notifications correctly
+// redraw the prompt instead of overwriting it.
+func (c *Client) SetNotifyWriter(w io.Writer) {
+	c.notifyWriter = w
+}
+
+// Notify prints a notification message. If a readline-aware writer is set it
+// uses that (which redraws the prompt); otherwise it falls back to os.Stdout.
+func (c *Client) Notify(format string, args ...interface{}) {
+	w := c.notifyWriter
+	if w == nil {
+		w = os.Stdout
+	}
+	fmt.Fprintf(w, format, args...)
+}
+
 
 // Set user root
 func (c *Client) SetRootUser(root_user string) {

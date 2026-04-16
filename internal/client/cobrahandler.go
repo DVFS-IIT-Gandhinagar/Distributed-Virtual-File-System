@@ -408,6 +408,11 @@ func (h *CobraHandler) Start() bool {
 	defer rl.Close()
 	h.rl = rl
 
+	// Route all notification output through readline's stdout so the prompt
+	// is correctly redrawn after each background notification message.
+	h.cacheHandler.client.SetNotifyWriter(rl.Stdout())
+	defer h.cacheHandler.client.SetNotifyWriter(nil)
+
 	fmt.Println("=== Distributed VFS Client ===")
 	fmt.Println("Type 'help' for available commands")
 	fmt.Println()

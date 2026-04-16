@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net"
 
 	cbpb "github.com/umangshikarvar/dvfs/api/callback"
@@ -55,12 +54,12 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 	if eventType == callbackEventDirNewFile {
 		if s.client != nil && s.client.cacheHandler != nil {
 			if path, ok := s.client.cacheHandler.InvalidateFileByFID(fid); ok {
-				fmt.Printf("\n[NOTIFY] New file uploaded in directory %s. Please run refresh.\n", path)
+				s.client.Notify("\n[NOTIFY] New file uploaded in directory %s. Please run refresh.\n", path)
 			} else {
-				fmt.Printf("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
+				s.client.Notify("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
 			}
 		} else {
-			fmt.Printf("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
+			s.client.Notify("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
 		}
 		return &cbpb.InvalidateResponse{Success: true}, nil
 	}
@@ -68,12 +67,12 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 	if eventType == callbackEventFileDeleted {
 		if s.client != nil && s.client.cacheHandler != nil {
 			if path, ok := s.client.cacheHandler.InvalidateFileByFID(fid); ok {
-				fmt.Printf("\n[NOTIFY] A file was deleted in directory %s. Please run refresh.\n", path)
+				s.client.Notify("\n[NOTIFY] A file was deleted in directory %s. Please run refresh.\n", path)
 			} else {
-				fmt.Printf("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
+				s.client.Notify("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
 			}
 		} else {
-			fmt.Printf("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
+			s.client.Notify("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
 		}
 		return &cbpb.InvalidateResponse{Success: true}, nil
 	}
@@ -81,12 +80,12 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 	if s.client != nil && s.client.cacheHandler != nil {
 		path, ok := s.client.cacheHandler.InvalidateFileByFID(fid)
 		if ok {
-			fmt.Printf("\n[NOTIFY] File updated by another user. Cache invalidated: %s\n", path)
+			s.client.Notify("\n[NOTIFY] File updated by another user. Cache invalidated: %s\n", path)
 		} else {
-			fmt.Printf("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
+			s.client.Notify("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
 		}
 	} else {
-		fmt.Printf("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
+		s.client.Notify("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
 	}
 
 	return &cbpb.InvalidateResponse{Success: true}, nil
