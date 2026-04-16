@@ -41,6 +41,9 @@ func main() {
 
 	// TLS configuration
 	var opts []grpc.ServerOption
+	// Increase max receive message size to 64MB to support file upload chunks
+	// The default 4MB limit is too small once proto field overhead is added to a 4MB chunk.
+	opts = append(opts, grpc.MaxRecvMsgSize(64*1024*1024))
 	if *useTLS {
 		log.Println("TLS enabled")
 		tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
