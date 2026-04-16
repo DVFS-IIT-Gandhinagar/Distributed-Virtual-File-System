@@ -343,12 +343,12 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 		},
 	}
 	for _, sharedRoot := range h.MetaServer.shared[user] {
-	roots = append(roots, &pb.SharedRoot{
-		Owner:       sharedRoot.Owner,
-		Path:        sharedRoot.Path,
-		DisplayName: sharedRoot.DisplayName,
-	})
-}
+		roots = append(roots, &pb.SharedRoot{
+			Owner:       sharedRoot.Owner,
+			Path:        sharedRoot.Path,
+			DisplayName: sharedRoot.DisplayName,
+		})
+	}
 
 	return &pb.GetRootsResponse{
 		Success: true,
