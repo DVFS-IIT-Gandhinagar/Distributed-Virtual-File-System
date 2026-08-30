@@ -113,8 +113,11 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 
 	// TLS configuration
 	var opts []grpc.DialOption
-	// Allow sending messages up to 64MB (default 4MB is too small for 4MB chunk + proto overhead)
-	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(64*1024*1024)))
+	// Allow sending and receiving messages up to 64MB (default 4MB is too small for 4MB chunk + proto overhead)
+	opts = append(opts, grpc.WithDefaultCallOptions(
+		grpc.MaxCallSendMsgSize(64*1024*1024),
+		grpc.MaxCallRecvMsgSize(64*1024*1024),
+	))
 	if c.useTLS {
 		cp := x509.NewCertPool()
 		if !cp.AppendCertsFromPEM(certs.CACert) {
