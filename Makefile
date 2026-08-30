@@ -2,9 +2,16 @@
 
 # Variables
 BINARY_DIR=bin
-FILESERVER_BINARY=$(BINARY_DIR)/fileserver
-CLIENT_BINARY=$(BINARY_DIR)/client
-METASERVER_BINARY=$(BINARY_DIR)/metaserver
+ifeq ($(OS),Windows_NT)
+    BINARY_EXT=.exe
+    CLEAN_CMD=powershell -Command "Remove-Item -Recurse -Force bin -ErrorAction Ignore; Remove-Item -Recurse -Force fileserver_data -ErrorAction Ignore"
+else
+    BINARY_EXT=
+    CLEAN_CMD=rm -rf bin fileserver_data
+endif
+FILESERVER_BINARY=$(BINARY_DIR)/fileserver$(BINARY_EXT)
+CLIENT_BINARY=$(BINARY_DIR)/client$(BINARY_EXT)
+METASERVER_BINARY=$(BINARY_DIR)/metaserver$(BINARY_EXT)
 API_DIR=api
 GO=go
 PROTOC=protoc
@@ -12,7 +19,7 @@ PROTOC=protoc
 all: build
 
 # Build all binaries
-build: certs $(BINARY_DIR)
+build: certs
 	@echo "Building file server..."
 	@$(GO) build -o $(FILESERVER_BINARY) cmd/fileserver/main.go
 	@echo "Building client..."
@@ -21,9 +28,6 @@ build: certs $(BINARY_DIR)
 	@$(GO) build -o $(METASERVER_BINARY) cmd/metaserver/main.go
 	@echo "Build complete!"
 
-# Create binary directory
-$(BINARY_DIR):
-	@mkdir -p $(BINARY_DIR)
 
 # Generate protobuf code
 proto:
@@ -42,8 +46,7 @@ proto:
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -rf $(BINARY_DIR)
-	@rm -rf fileserver_data
+	-@$(CLEAN_CMD)
 	@echo "Clean complete!"
 
 # Run file server
