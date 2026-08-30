@@ -83,7 +83,7 @@ ls shared
 
 ## 3. High-Level Architecture
 
-![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](./architecture.png)
+![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](./docs/assets/architecture.png)
 
 ---
 
@@ -329,25 +329,64 @@ On restart:
 
 ## 15. Security (TLS)
 
-The system uses gRPC over TLS for secure communication between clients and servers.
+The system uses gRPC over TLS for secure communication between clients and servers. By default, TLS is disabled (`--tls=false`) for easy local testing.
 
-### 15.1 Out-of-the-box Security
-For ease of use, a default set of certificates is generated and **embedded** into the binaries using Go's `embed` package. This means:
-- You don't need to manually manage `.crt` or `.key` files to run the system.
-- The client automatically trusts the server using an embedded CA certificate.
+### 15.1 Managing Certificates
+We use standard filesystem-based certificates. The system looks for certificates in a root `certs/` directory.
 
-### 15.2 Regenerating Certificates
-For production or private deployments, you should regenerate the certificates:
+- **File Server & Meta Server**: Require `--tls_cert` (default: `./certs/server.crt`) and `--tls_key` (default: `./certs/server.key`).
+- **Client**: Requires `--ca_cert` (default: `./certs/ca.crt`) to verify the server's identity.
+
+To enable TLS, pass the `--tls=true` flag when running the servers and the client.
+
+### 15.2 Generating Certificates
+You can generate or regenerate local certificates using the provided script:
 ```bash
 make certs
 ```
-This will run the generation script and update the files in `internal/certs/`. You must then rebuild the project:
-```bash
-make build
-```
+This will run the generation script and output the files (`ca.crt`, `ca.key`, `server.crt`, `server.key`) directly into the `certs/` directory. 
+
+*Note: If you run a client on a different laptop with TLS enabled, you **must** copy the `ca.crt` file to that laptop so it can trust the server.*
 
 ---
 
 ## 16. Summary
 
 Each user interacts with exactly two namespaces—`mydrive` for private data and `shared` for shared data. File servers maintain authoritative metadata and enforce ACLs, while the metadata server maintains a denormalized shared index to optimize listing without participating in access control.
+# Commands To Run the Whole Setup
+
+### For Fileserver (from project root)
+
+```
+go run .\cmd\fileserver\main.go --meta_addr <full ip + port of mds> --own_ip=<this fileservers ip to send to mds>
+```
+
+Other flags and defaults:
+
+- port = 50052
+- id = fs1
+- data = fileserver_data
+- tls = false
+
+### For Metadata Server (from project root)
+
+```
+go run .\cmd\metaserver\main.go
+```
+
+Other flags and defaults:
+
+- port = 50051
+- tls = false
+
+### For Client (from root)
+
+```
+go run .\cmd\client\main.go --username <username> --ip_addr <mds/fs ip address>
+```
+
+Other flags and defaults
+
+- port = 50051
+- tls = false
+- meta = true (whether to go to mds or not)
