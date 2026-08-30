@@ -41,9 +41,9 @@ Download/
 *.log
 
 # TLS Certificates
-internal/certs/*.crt
-internal/certs/*.key
-internal/certs/*.srl
+certs/*.crt
+certs/*.key
+certs/*.srl
 
 # Personal notes
 jaskirat/

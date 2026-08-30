@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"path/filepath"
 	"time"
 
 	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/certs"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -29,7 +29,11 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 	var opts []grpc.DialOption
 	if fs.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(fs.caCertPath)
+		if err != nil {
+			return fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return fmt.Errorf("failed to append CA certificate")
 		}
 
@@ -130,7 +134,11 @@ func (fs *FileServer) RootShare(owner, name, path, share_with string) error {
 	var opts []grpc.DialOption
 	if fs.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(fs.caCertPath)
+		if err != nil {
+			return fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return fmt.Errorf("failed to append CA certificate")
 		}
 
@@ -176,7 +184,11 @@ func (fs *FileServer) RootUnshare(owner, name, path, unshare_with string) error 
 	var opts []grpc.DialOption
 	if fs.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(fs.caCertPath)
+		if err != nil {
+			return fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return fmt.Errorf("failed to append CA certificate")
 		}
 
@@ -222,7 +234,11 @@ func (fs *FileServer) HeartbeatWithMetaServer(selfAddr string) error {
 	var opts []grpc.DialOption
 	if fs.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(fs.caCertPath)
+		if err != nil {
+			return fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return fmt.Errorf("failed to append CA certificate")
 		}
 

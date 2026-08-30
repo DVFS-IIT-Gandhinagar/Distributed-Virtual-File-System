@@ -13,7 +13,6 @@ import (
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/fileserver"
-	"github.com/umangshikarvar/dvfs/internal/certs"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -31,6 +30,7 @@ type Client struct {
 	currentFID    *domain.FID
 	serverConn    pb.FileServerClient
 	useTLS        bool
+	caCertPath    string
 	cacheHandler  *CacheHandler
 	stopCallback  func() error
 	notifyWriter  io.Writer // readline-aware writer for notification messages
@@ -58,11 +58,12 @@ func pathContainsTrashSegment(path string) bool {
 }
 
 // NewClient creates a new VFS client
-func NewClient(username string, useTLS bool) *Client {
+func NewClient(username string, useTLS bool, caCertPath string) *Client {
 	return &Client{
-		username: username,
-		useTLS:   useTLS,
-		clientID: fmt.Sprintf("%s-%d", username, time.Now().UnixNano()),
+		username:   username,
+		useTLS:     useTLS,
+		caCertPath: caCertPath,
+		clientID:   fmt.Sprintf("%s-%d", username, time.Now().UnixNano()),
 	}
 }
 
@@ -120,7 +121,11 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	))
 	if c.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(c.caCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return nil, fmt.Errorf("failed to append CA certificate")
 		}
 

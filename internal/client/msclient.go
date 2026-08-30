@@ -5,9 +5,9 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"os"
 
 	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/certs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -22,7 +22,11 @@ func (client *Client) GetRoots(msAddr string) ([]SharedRoot, error) {
 	var opts []grpc.DialOption
 	if client.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(client.caCertPath)
+		if err != nil {
+			return []SharedRoot{}, fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return []SharedRoot{}, fmt.Errorf("failed to append CA certificate")
 		}
 
@@ -73,7 +77,11 @@ func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 	var opts []grpc.DialOption
 	if client.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(client.caCertPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read CA cert file: %v", err)
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			return "", fmt.Errorf("failed to append CA certificate")
 		}
 

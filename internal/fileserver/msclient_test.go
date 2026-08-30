@@ -73,7 +73,7 @@ func TestRegisterWithMetaServerAndHeartbeat(t *testing.T) {
 	msAddr, cleanupMDS := startTestMetaServerForFS(t)
 	defer cleanupMDS()
 
-	fs, err := NewFileServer("fs-ms", t.TempDir(), false, msAddr)
+	fs, err := NewFileServer("fs-ms", t.TempDir(), false, msAddr, "")
 	if err != nil {
 		t.Fatalf("NewFileServer failed: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestRootShareAndUnshareNotifyMetaServer(t *testing.T) {
 	msAddr, cleanupMDS := startTestMetaServerForFS(t)
 	defer cleanupMDS()
 
-	fs, err := NewFileServer("fs-ms", t.TempDir(), false, msAddr)
+	fs, err := NewFileServer("fs-ms", t.TempDir(), false, msAddr, "")
 	if err != nil {
 		t.Fatalf("NewFileServer failed: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestStartMetaServerSyncRegistersEventually(t *testing.T) {
 	msAddr, cleanupMDS := startTestMetaServerForFS(t)
 	defer cleanupMDS()
 
-	fs, err := NewFileServer("fs-ms", t.TempDir(), false, msAddr)
+	fs, err := NewFileServer("fs-ms", t.TempDir(), false, msAddr, "")
 	if err != nil {
 		t.Fatalf("NewFileServer failed: %v", err)
 	}

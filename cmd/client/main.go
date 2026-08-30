@@ -15,6 +15,7 @@ func main() {
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
 	port := flag.String("port", "", "enter port for mds/fs")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to CA certificate")
 
 	flag.Parse()
 
@@ -27,7 +28,7 @@ func main() {
 	}
 
 	// Create client
-	c := client.NewClient(*username, *useTLS)
+	c := client.NewClient(*username, *useTLS, *caCertPath)
 
 	// Main loop for metaserver navigation
 	for {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	pb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/certs"
 	"github.com/umangshikarvar/dvfs/internal/metaserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -22,6 +21,8 @@ func main() {
 	heartbeatTimeout := flag.Duration("heartbeat_timeout", 30*time.Second, "Timeout after which fileserver is marked stale")
 	heartbeatCheckInterval := flag.Duration("heartbeat_check_interval", 5*time.Second, "Interval to evaluate fileserver liveness")
 	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
+	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
+	tlsKeyPath := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -42,7 +43,7 @@ func main() {
 	var opts []grpc.ServerOption
 	if *useTLS {
 		log.Println("TLS enabled")
-		tlsCert, err := tls.X509KeyPair(certs.ServerCert, certs.ServerKey)
+		tlsCert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsKeyPath)
 		if err != nil {
 			log.Fatalf("Failed to load key pair: %v", err)
 		}

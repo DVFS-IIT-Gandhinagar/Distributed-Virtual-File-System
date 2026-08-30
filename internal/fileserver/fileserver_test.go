@@ -13,7 +13,7 @@ func newTestFileServer(t *testing.T) *FileServer {
 	t.Helper()
 
 	root := t.TempDir()
-	fs, err := NewFileServer("fs-test", root, false, "")
+	fs, err := NewFileServer("fs-test", root, false, "", "")
 	if err != nil {
 		t.Fatalf("NewFileServer failed: %v", err)
 	}

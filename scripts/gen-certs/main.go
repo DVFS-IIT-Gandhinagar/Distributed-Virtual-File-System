@@ -102,10 +102,10 @@ func main() {
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
 
-	_ = os.WriteFile("internal/certs/ca.crt", caPEM, 0644)
-	_ = os.WriteFile("internal/certs/ca.key", caPrivKeyPEM, 0644)
-	_ = os.WriteFile("internal/certs/server.crt", certPEM, 0644)
-	_ = os.WriteFile("internal/certs/server.key", certPrivKeyPEM, 0644)
+	_ = os.WriteFile("certs/ca.crt", caPEM, 0644)
+	_ = os.WriteFile("certs/ca.key", caPrivKeyPEM, 0644)
+	_ = os.WriteFile("certs/server.crt", certPEM, 0644)
+	_ = os.WriteFile("certs/server.key", certPrivKeyPEM, 0644)
 
 	log.Printf("Certificates generated successfully for %s (including 'server' and 'localhost')\n", hostName)
 }

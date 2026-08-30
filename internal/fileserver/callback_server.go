@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	cbpb "github.com/umangshikarvar/dvfs/api/callback"
-	"github.com/umangshikarvar/dvfs/internal/certs"
 	"github.com/umangshikarvar/dvfs/internal/domain"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -174,7 +174,13 @@ func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FI
 	var opts []grpc.DialOption
 	if fs.useTLS {
 		cp := x509.NewCertPool()
-		if !cp.AppendCertsFromPEM(certs.CACert) {
+		caBytes, err := os.ReadFile(fs.caCertPath)
+		if err != nil {
+			log.Printf("Callback: failed to read CA cert file: %v", err)
+			fs.recordCallbackResult(target.username, false)
+			return
+		}
+		if !cp.AppendCertsFromPEM(caBytes) {
 			log.Printf("Callback: failed to append CA cert for user=%s", target.username)
 			fs.recordCallbackResult(target.username, false)
 			return

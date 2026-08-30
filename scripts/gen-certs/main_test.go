@@ -23,7 +23,7 @@ func TestMainGeneratesCertificateArtifacts(t *testing.T) {
 	originalArgs := os.Args
 
 	tempWD := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tempWD, "internal", "certs"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tempWD, "certs"), 0755); err != nil {
 		t.Fatalf("failed to create temp cert dir: %v", err)
 	}
 
@@ -39,10 +39,10 @@ func TestMainGeneratesCertificateArtifacts(t *testing.T) {
 	main()
 
 	paths := []string{
-		filepath.Join("internal", "certs", "ca.crt"),
-		filepath.Join("internal", "certs", "ca.key"),
-		filepath.Join("internal", "certs", "server.crt"),
-		filepath.Join("internal", "certs", "server.key"),
+		filepath.Join("certs", "ca.crt"),
+		filepath.Join("certs", "ca.key"),
+		filepath.Join("certs", "server.crt"),
+		filepath.Join("certs", "server.key"),
 	}
 
 	for _, p := range paths {
@@ -55,7 +55,7 @@ func TestMainGeneratesCertificateArtifacts(t *testing.T) {
 		}
 	}
 
-	serverCertPEM, err := os.ReadFile(filepath.Join("internal", "certs", "server.crt"))
+	serverCertPEM, err := os.ReadFile(filepath.Join("certs", "server.crt"))
 	if err != nil {
 		t.Fatalf("failed to read server cert: %v", err)
 	}
