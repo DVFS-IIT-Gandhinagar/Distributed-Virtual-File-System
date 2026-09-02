@@ -3,7 +3,7 @@ package domain
 import (
 	"fmt"
 
-	pb "github.com/umangshikarvar/dvfs/api/fileserver"
+	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 )
 
 // FID represents a File Identifier

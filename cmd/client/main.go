@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/umangshikarvar/dvfs/internal/client"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
 )
 
 func main() {

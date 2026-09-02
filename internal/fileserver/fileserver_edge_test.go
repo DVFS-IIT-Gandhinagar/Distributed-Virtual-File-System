@@ -3,7 +3,7 @@ package fileserver
 import (
 	"testing"
 
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 func TestCreateFileRejectsReservedTrashName(t *testing.T) {

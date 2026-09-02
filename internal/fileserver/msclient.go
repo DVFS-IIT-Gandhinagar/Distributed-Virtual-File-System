@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

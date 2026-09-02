@@ -8,8 +8,8 @@ import (
 	"net"
 	"time"
 
-	pb "github.com/umangshikarvar/dvfs/api/fileserver"
-	"github.com/umangshikarvar/dvfs/internal/fileserver"
+	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 func TestLoadACLReturnsDefaultWhenMissing(t *testing.T) {

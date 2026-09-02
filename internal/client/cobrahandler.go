@@ -8,7 +8,7 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/spf13/cobra"
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 // CobraHandler handles commands using Cobra

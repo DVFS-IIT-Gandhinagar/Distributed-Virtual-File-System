@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	pb "github.com/umangshikarvar/dvfs/api/fileserver"
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 func setupHandlerTest(t *testing.T) (*GRPCHandler, *FileServer) {

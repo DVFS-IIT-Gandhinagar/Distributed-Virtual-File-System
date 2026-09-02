@@ -3,7 +3,7 @@ package domain
 import (
 	"testing"
 
-	pb "github.com/umangshikarvar/dvfs/api/fileserver"
+	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 )
 
 func TestFIDStringAndProtoRoundTrip(t *testing.T) {

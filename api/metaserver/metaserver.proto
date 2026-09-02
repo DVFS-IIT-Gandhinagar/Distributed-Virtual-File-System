@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package metaserver;
 
-option go_package = "github.com/umangshikarvar/dvfs/api/metaserver";
+option go_package = "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver";
 
 message SharedDir {
   string path = 1;           // Full path including username (e.g., "/umang", "/umang/proj")

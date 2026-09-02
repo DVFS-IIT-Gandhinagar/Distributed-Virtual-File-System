@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 func TestFileScannerLoadExistingDataScansNestedTree(t *testing.T) {

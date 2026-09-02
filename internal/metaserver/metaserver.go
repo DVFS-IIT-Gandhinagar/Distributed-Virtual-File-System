@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 type SharedDirEntry struct {

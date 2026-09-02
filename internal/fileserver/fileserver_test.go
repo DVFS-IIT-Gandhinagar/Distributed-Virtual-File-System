@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 func newTestFileServer(t *testing.T) *FileServer {

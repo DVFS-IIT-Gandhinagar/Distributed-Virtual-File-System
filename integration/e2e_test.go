@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	fspb "github.com/umangshikarvar/dvfs/api/fileserver"
-	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/client"
-	"github.com/umangshikarvar/dvfs/internal/fileserver"
-	"github.com/umangshikarvar/dvfs/internal/metaserver"
+	fspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
+	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
 	"google.golang.org/grpc"
 )
 

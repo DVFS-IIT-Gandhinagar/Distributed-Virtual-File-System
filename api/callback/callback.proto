@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package callback;
 
-option go_package = "github.com/umangshikarvar/dvfs/api/callback";
+option go_package = "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/callback";
 
 import "api/fileserver/fileserver.proto";
 

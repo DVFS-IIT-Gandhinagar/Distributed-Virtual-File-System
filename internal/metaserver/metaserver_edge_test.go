@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
 
 func TestGetRootsFailsWithoutHealthyFileServer(t *testing.T) {

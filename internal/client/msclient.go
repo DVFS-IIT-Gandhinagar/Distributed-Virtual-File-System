@@ -7,7 +7,7 @@ import (
 	"net"
 	"os"
 
-	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
+	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

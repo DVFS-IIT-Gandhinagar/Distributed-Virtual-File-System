@@ -4,8 +4,8 @@ import (
 	"context"
 	"net"
 
-	cbpb "github.com/umangshikarvar/dvfs/api/callback"
-	"github.com/umangshikarvar/dvfs/internal/domain"
+	cbpb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/callback"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"google.golang.org/grpc"
 )
 

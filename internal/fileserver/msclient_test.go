@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	mspb "github.com/umangshikarvar/dvfs/api/metaserver"
-	"github.com/umangshikarvar/dvfs/internal/metaserver"
+	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
 	"google.golang.org/grpc"
 )
 
