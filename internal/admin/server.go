@@ -29,18 +29,20 @@ type NodeState struct {
 
 // AdminServer coordinates fileserver discovery, metrics polling, and serves the REST API + UI.
 type AdminServer struct {
-	stateFile  string
-	staticDir  string
-	nodes      map[string]*NodeState // fsID -> NodeState
-	users      map[string]string     // username -> fsID string
-	mu         sync.RWMutex
-	httpClient *http.Client
-	stopCh     chan struct{}
+	stateFile    string
+	staticDir    string
+	nodes        map[string]*NodeState // fsID -> NodeState
+	users        map[string]string     // username -> fsID string
+	mu           sync.RWMutex
+	httpClient   *http.Client
+	stopCh       chan struct{}
+	history      *CommandHistory
+	orchestrator *Orchestrator
 }
 
 // NewAdminServer creates a new AdminServer instance.
 func NewAdminServer(stateFile, staticDir string) *AdminServer {
-	return &AdminServer{
+	srv := &AdminServer{
 		stateFile: stateFile,
 		staticDir: staticDir,
 		nodes:     make(map[string]*NodeState),
@@ -50,6 +52,31 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 		},
 		stopCh: make(chan struct{}),
 	}
+	history := NewCommandHistory(100, "./command_history.json")
+	ssh := NewRemoteSSHExecutor()
+	srv.history = history
+	srv.orchestrator = NewOrchestrator(srv, ssh, history, "", "", "")
+	return srv
+}
+
+// SetOrchestrator configures the orchestration engine (useful for injecting mock SSH executors in tests).
+func (a *AdminServer) SetOrchestrator(o *Orchestrator) {
+	a.orchestrator = o
+}
+
+// Orchestrator returns the orchestration engine.
+func (a *AdminServer) Orchestrator() *Orchestrator {
+	return a.orchestrator
+}
+
+// SetHistory configures the command history storage.
+func (a *AdminServer) SetHistory(h *CommandHistory) {
+	a.history = h
+}
+
+// History returns the command history storage.
+func (a *AdminServer) History() *CommandHistory {
+	return a.history
 }
 
 // computeNodeStatus evaluates the health of a node given its metrics and last seen timestamp.

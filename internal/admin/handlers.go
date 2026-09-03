@@ -281,6 +281,67 @@ func (a *AdminServer) handleUserQuota(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleActionPresets returns pre-filled restart parameters for all cluster nodes.
+func (a *AdminServer) handleActionPresets(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if a.orchestrator == nil {
+		http.Error(w, `{"error":"orchestrator not initialized"}`, http.StatusInternalServerError)
+		return
+	}
+	presets := a.orchestrator.GetPresets()
+	_ = json.NewEncoder(w).Encode(presets)
+}
+
+// handleActionHistory returns the recent bounded command execution records.
+func (a *AdminServer) handleActionHistory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if a.history == nil {
+		_ = json.NewEncoder(w).Encode([]CommandRecord{})
+		return
+	}
+	history := a.history.GetAll()
+	_ = json.NewEncoder(w).Encode(history)
+}
+
+// handleActionExecute allows headless REST invocation of orchestration commands.
+func (a *AdminServer) handleActionExecute(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	if a.orchestrator == nil {
+		http.Error(w, `{"error":"orchestrator not initialized"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var req ActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"invalid request: %s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	record, err := a.orchestrator.Execute(r.Context(), req, nil)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"execution error: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(record)
+}
+
 // Run starts the background pollers and the HTTP API/UI server.
 func (a *AdminServer) Run(port int) error {
 	a.refreshNodes()
@@ -306,9 +367,16 @@ func (a *AdminServer) Run(port int) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/cluster", a.handleCluster)
+	mux.HandleFunc("/api/cluster/summary", a.handleCluster)
 	mux.HandleFunc("/api/history/", a.handleHistory)
 	mux.HandleFunc("/api/users", a.handleUsers)
 	mux.HandleFunc("/api/users/", a.handleUserQuota)
+	mux.HandleFunc("/api/actions/presets", a.handleActionPresets)
+	mux.HandleFunc("/api/actions/history", a.handleActionHistory)
+	mux.HandleFunc("/api/actions/execute", a.handleActionExecute)
+	if a.orchestrator != nil {
+		mux.Handle("/ws/actions", NewWebSocketHandler(a.orchestrator))
+	}
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok"}`)
