@@ -45,7 +45,7 @@ func (fs *FileServer) CollectMetrics() Metrics {
 			size = inode.Size
 		}
 		perUserStorage[username] = size
-		perUserQuota[username] = storageQuota
+		perUserQuota[username] = fs.getUserQuotaLocked(username)
 	}
 
 	// Count file inodes (chunks)

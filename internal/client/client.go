@@ -390,6 +390,11 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) (*domain
 	}
 	defer file.Close()
 
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
 	name := filepath.Base(path)
 
 	resp, err := c.serverConn.CreateFile(context.Background(), &pb.CreateFileRequest{
@@ -397,6 +402,7 @@ func (c *Client) uploadFileInternal(path string, parentFID *domain.FID) (*domain
 		RootUser: c.root_user,
 		Fid:      parentFID.ToProto(),
 		Type:     pb.InodeType_FILE,
+		Size:     uint64(info.Size()),
 	})
 
 	if err != nil {

@@ -69,16 +69,16 @@ func TestComputeNodeStatus(t *testing.T) {
 		t.Errorf("expected StatusDegraded for temp > 75, got %s", st)
 	}
 
-	// Warning: Disk > 70%
-	mWarnDisk := &FileserverMetrics{DiskUsagePercent: 75.0, CPUTempCelsius: 50.0}
+	// Warning: Disk > 80%
+	mWarnDisk := &FileserverMetrics{DiskUsagePercent: 85.0, CPUTempCelsius: 50.0}
 	if st := computeNodeStatus(mWarnDisk, now); st != StatusWarning {
-		t.Errorf("expected StatusWarning for disk > 70%%, got %s", st)
+		t.Errorf("expected StatusWarning for disk > 80%%, got %s", st)
 	}
 
-	// Warning: Temp > 60
-	mWarnTemp := &FileserverMetrics{DiskUsagePercent: 50.0, CPUTempCelsius: 62.0}
+	// Warning: Temp > 65
+	mWarnTemp := &FileserverMetrics{DiskUsagePercent: 50.0, CPUTempCelsius: 68.0}
 	if st := computeNodeStatus(mWarnTemp, now); st != StatusWarning {
-		t.Errorf("expected StatusWarning for temp > 60, got %s", st)
+		t.Errorf("expected StatusWarning for temp > 65, got %s", st)
 	}
 
 	// Online: Normal

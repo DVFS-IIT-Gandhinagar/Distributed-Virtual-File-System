@@ -67,7 +67,7 @@ func computeNodeStatus(m *FileserverMetrics, lastSeen int64) NodeStatus {
 	if m.DiskUsagePercent > 90 || m.CPUTempCelsius > 75 {
 		return StatusDegraded
 	}
-	if m.DiskUsagePercent > 70 || m.CPUTempCelsius > 60 {
+	if m.DiskUsagePercent > 80 || m.CPUTempCelsius > 65 {
 		return StatusWarning
 	}
 	return StatusOnline

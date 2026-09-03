@@ -32,6 +32,7 @@ type FileServer struct {
 	Shared      map[string][]string       // directory path -> users map (e.g., "umang/proj" -> ["romit"])
 	sessions    map[string]*clientSession // username -> last known session metadata
 	startTime   time.Time
+	quotas      map[string]uint64 // username -> quota in bytes
 }
 
 type trashEntry struct {
@@ -47,7 +48,7 @@ type sharedDirSnapshot struct {
 }
 
 const trashDirName = ".trash"
-const storageQuota uint64 = 1024 * 1024 * 1024 // 1 GB per user, for demonstration
+const storageQuota uint64 = defaultStorageQuota // backwards-compatibility alias for tests
 const trashNavigationDeniedMsg = "access denied: use show_trash to view trash contents"
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
@@ -65,7 +66,11 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertP
 		Shared:      make(map[string][]string),
 		sessions:    make(map[string]*clientSession),
 		startTime:   time.Now(),
+		quotas:      make(map[string]uint64),
 	}
+
+	// Load custom quota configuration if present
+	_ = fs.loadQuotas()
 
 	// Check if rootDir already exists
 	if _, err := os.Stat(rootDir); err == nil {
@@ -677,8 +682,11 @@ func (fs *FileServer) GetInode(fid *domain.FID) (*domain.Inode, error) {
 	return inode, nil
 }
 
-// checkStorageQuota checks if the user has exceeded their storage quota and returns an error if so. This is a best-effort check that is called before allowing uploads, but it does not roll back uploads that have already happened.
-func (fs *FileServer) checkStorageQuota(username string) error {
+// checkStorageQuotaWithAdditional checks if the user's storage plus additionalBytes exceeds their quota.
+func (fs *FileServer) checkStorageQuotaWithAdditional(username string, additionalBytes uint64) error {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
 	rootFID, exists := fs.users[username]
 	if !exists {
 		return fmt.Errorf("user not found: %s", username)
@@ -687,11 +695,22 @@ func (fs *FileServer) checkStorageQuota(username string) error {
 	if !exists {
 		return fmt.Errorf("internal error: root inode not found for user %s", username)
 	}
-	if rootInode.Size > storageQuota {
-		return fmt.Errorf("storage quota exceeded: user '%s' has used %d bytes, exceeding the quota of %d bytes", username, rootInode.Size, storageQuota)
+	quota := fs.getUserQuotaLocked(username)
+	if rootInode.Size+additionalBytes > quota {
+		freeSpace := uint64(0)
+		if quota > rootInode.Size {
+			freeSpace = quota - rootInode.Size
+		}
+		return fmt.Errorf("storage quota exceeded: user '%s' has %d bytes remaining, but requested %d bytes (quota: %d bytes)",
+			username, freeSpace, additionalBytes, quota)
 	}
 
 	return nil
+}
+
+// checkStorageQuota checks if the user has exceeded their storage quota.
+func (fs *FileServer) checkStorageQuota(username string) error {
+	return fs.checkStorageQuotaWithAdditional(username, 0)
 }
 
 // find the inode in parent's children (should be existing)
@@ -1265,12 +1284,29 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 		newSize = inode.Size
 	}
 
+	sizeDiff := int64(newSize) - int64(inode.Size)
+	if sizeDiff > 0 {
+		// Pre-flight quota check: find user's root inode and verify write will not exceed quota
+		root := inode
+		for root.Parent != nil && root.Parent != root {
+			root = root.Parent
+		}
+		quota := fs.getUserQuotaLocked(root.Name)
+		if root.Size+uint64(sizeDiff) > quota {
+			freeSpace := uint64(0)
+			if quota > root.Size {
+				freeSpace = quota - root.Size
+			}
+			return fmt.Errorf("storage quota exceeded: write of %d bytes exceeds available free space (%d bytes remaining of %d quota)",
+				len(data), freeSpace, quota)
+		}
+	}
+
 	_, err = f.WriteAt(data, int64(offset))
 	if err != nil {
 		return fmt.Errorf("write failed: %w", err)
 	}
 
-	sizeDiff := int64(newSize) - int64(inode.Size)
 	if sizeDiff != 0 {
 		node := inode
 		for {
@@ -1278,11 +1314,6 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 			if node.Parent != nil && node.Parent != node {
 				node = node.Parent
 			} else {
-				// Reached root
-				if node.Size > storageQuota {
-					// throw error and prevent any more writes that would exceed quota. Note: this is a best-effort check and does not roll back the write that just happened, but prevents future writes.
-					return fmt.Errorf("storage quota exceeded: cannot write data")
-				}
 				break
 			}
 		}
@@ -1353,6 +1384,23 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, root_user string, recursive bo
 	}
 
 	// Phase 4: Update in-memory structures (only after successful OS deletions)
+	// Deduct deleted inode's size from parent directories up to root
+	if inode.Size > 0 {
+		deletedSize := inode.Size
+		p := inode.Parent
+		for p != nil && p != inode {
+			if p.Size >= deletedSize {
+				p.Size -= deletedSize
+			} else {
+				p.Size = 0
+			}
+			if p.Parent == nil || p.Parent == p {
+				break
+			}
+			p = p.Parent
+		}
+	}
+
 	// Remove all deleted inodes from the map
 	for _, deletedInode := range toDelete {
 		delete(fs.inodes, deletedInode.FID.String())

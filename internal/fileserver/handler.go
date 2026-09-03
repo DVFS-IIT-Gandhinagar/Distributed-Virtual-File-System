@@ -338,7 +338,7 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 		}, nil
 	}
 
-	err := h.fileServer.checkStorageQuota(req.RootUser) // check if user has exceeded storage quota before allowing upload
+	err := h.fileServer.checkStorageQuotaWithAdditional(req.RootUser, req.Size) // check if user has exceeded storage quota before allowing upload
 	if err != nil {
 		log.Println(err)
 		return &pb.CreateFileResponse{
@@ -358,29 +358,51 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	// get parent FID
 	parentFID := domain.FIDFromProto(req.Fid)
 
+	// create file
 	fileType := domain.InodeTypeFromProto(req.Type)
-	newFID, err := h.fileServer.CreateFile(parentFID, req.Name, req.RootUser, fileType)
+	fid, err := h.fileServer.CreateFile(parentFID, req.Name, req.RootUser, fileType)
 	if err != nil {
-		log.Printf("CreateFile: error creating file - %v", err)
+		log.Printf("CreateFile: error - %v", err)
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
-	log.Printf("CreateFile: success - created %s with FID %s", req.Name, newFID.String())
+	log.Printf("CreateFile: success - created %s with FID %s", req.Name, fid.String())
 	if fileType == domain.InodeTypeFile {
 		h.fileServer.NotifyNewFileInDir(parentFID, req.Name, "")
 	}
+
 	return &pb.CreateFileResponse{
 		Success: true,
-		Fid:     newFID.ToProto(),
+		Fid:     fid.ToProto(),
 	}, nil
 }
 
-// UploadFile uploads a file in the working directory (should exist already) with the given name and content
-func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
+// cleanupFailedUpload removes a partially uploaded file if an upload fails mid-stream or exceeds quota.
+func (h *GRPCHandler) cleanupFailedUpload(parentFID *domain.FID, name string, user string) {
+	if parentFID == nil || name == "" {
+		return
+	}
+	h.fileServer.mu.RLock()
+	parentInode, pErr := h.fileServer.GetInode(parentFID)
+	if pErr != nil {
+		h.fileServer.mu.RUnlock()
+		return
+	}
+	childInode, cErr := h.fileServer.GetChildInodeByName(parentInode, name)
+	h.fileServer.mu.RUnlock()
+	if cErr != nil || childInode == nil {
+		return
+	}
 
+	log.Printf("[FILESERVER] Scrapping partially uploaded file '%s' (FID: %s) for user '%s'", name, childInode.FID.String(), user)
+	_ = h.fileServer.DeleteFile(childInode.FID, user, false)
+}
+
+// UploadFile uploads the file chunk by chunk
+func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 	var name string
 	first := true
 	var parentFID *domain.FID
@@ -416,6 +438,10 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 			})
 		}
 		if err != nil {
+			if !first && name != "" && parentFID != nil {
+				log.Printf("UploadFile: stream error on file %s: %v. Scrapping partial file.", name, err)
+				h.cleanupFailedUpload(parentFID, name, uploadUser)
+			}
 			return err
 		}
 
@@ -447,6 +473,8 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 
 		err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
 		if err != nil {
+			log.Printf("UploadFile: write error on file %s: %v. Scrapping partial file.", name, err)
+			h.cleanupFailedUpload(parentFID, name, uploadUser)
 			return stream.SendAndClose(&pb.UploadFileResponse{
 				Success: false,
 				Error:   err.Error(),
@@ -708,3 +736,22 @@ func (h *GRPCHandler) ShowTrash(ctx context.Context, req *pb.ShowTrashRequest) (
 
 	return &pb.ShowTrashResponse{Success: true, Entries: pbEntries}, nil
 }
+
+// SetQuota updates the storage quota for a user in bytes.
+func (h *GRPCHandler) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) (*pb.SetQuotaResponse, error) {
+	if req == nil || req.Username == "" {
+		return &pb.SetQuotaResponse{Success: false, Error: "username is required"}, nil
+	}
+	if req.QuotaBytes == 0 {
+		return &pb.SetQuotaResponse{Success: false, Error: "quota must be greater than 0"}, nil
+	}
+
+	err := h.fileServer.SetUserQuota(req.Username, req.QuotaBytes)
+	if err != nil {
+		log.Printf("SetQuota: error - %v", err)
+		return &pb.SetQuotaResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	return &pb.SetQuotaResponse{Success: true}, nil
+}
+

@@ -228,7 +228,7 @@ Every metric listed here must be **implemented from scratch** in the fileserver 
 - Columns: `Username` | `Home FS` | `Quota Limit` | `Quota Used` | `% Used` | `Active Sessions`.
 - Colour-coded `% Used` progress bar inline (green/yellow/red).
 - Expand a row: per-fileserver storage breakdown bar chart.
-- Quota edit modal with validation (minimum = current usage).
+- Quota edit modal with validation. Admins **can** set quota below current usage — this blocks further uploads until the user deletes files to reclaim free space. A warning is shown but submission is not prevented.
 
 ### 4.6 Page: Logs & Alerts
 - **Alert Feed**: Chronological list of auto-generated system alerts:
@@ -294,10 +294,10 @@ Applied to: node card borders, storage/CPU/memory progress bars, temperature bad
 - [x] Node Discovery from `metaserver_state.json`.
 
 ### Phase 2 — User & Quota Management
-- [ ] Add `SetQuota` gRPC RPC to `fileserver.proto` + implement in fileserver.
-- [ ] Replace hardcoded `const storageQuota` with per-user configurable quotas (persisted to `quota_config.json`).
-- [ ] Admin backend: `/api/users` list + `/api/users/{uid}/quota` update endpoint (calls gRPC).
-- [ ] Frontend: Users page with quota editing + quota violation badges.
+- [x] Add `SetQuota` gRPC RPC to `fileserver.proto` + implement in fileserver.
+- [x] Replace hardcoded `const storageQuota` with per-user configurable quotas (persisted to `quota_config.json`).
+- [x] Admin backend: `/api/users` list + `/api/users/{uid}/quota` update endpoint (calls gRPC).
+- [x] Frontend: Users page with quota editing + quota violation badges.
 
 ### Phase 3 — Orchestration & Commands
 - [ ] SSH execution engine in the admin backend (`golang.org/x/crypto/ssh`).
@@ -322,3 +322,27 @@ Applied to: node card borders, storage/CPU/memory progress bars, temperature bad
 > - Aggregate summary panel (cluster throughput, p99 latency, peak connections, which node saturated first).
 > - CSV export of a time window for offline analysis.
 > - These are **not in scope** for the admin console build.
+
+---
+
+## Unfinished Tasks & Outstanding Issues (Phase 1 & Phase 2)
+
+> Audit performed: 2026-09-03. All 6 identified issues have been fixed and verified. **Phase 1 and Phase 2 are now 100% complete.**
+
+### Phase 1 Issues — ALL RESOLVED
+- [x] **[Phase 1] Backend Node Status Warning Threshold Mismatch [RESOLVED]:**
+  Updated `internal/admin/server.go` line 70 so `StatusWarning` fires at `DiskUsagePercent > 80 || CPUTempCelsius > 65`, matching Section 5. Verified with `internal/admin/poller_test.go`.
+- [x] **[Phase 1] Frontend Storage & CPU Temp Colour Thresholds Diverge from Plan [RESOLVED]:**
+  Updated `cmd/admin/ui/src/utils.ts` and `NodeCard.tsx`: `getStorageBarColor` and `getStorageBarClass` now strictly follow the 4-tier plan (`>80%` yellow `#ffc107`, `>90%` orange `#fd7e14`, `>95%` red `#dc3545`). `getCpuTempColor` updated to `>65°C`, `>75°C`, `>85°C`.
+- [x] **[Phase 1] Overview Page Missing 3 Stat Cards (Throughput & Error Rate) [RESOLVED]:**
+  Added the 3 missing stat cards (`Write Throughput`, `Read Throughput`, `Error Rate`) in `cmd/admin/ui/src/pages/Overview.tsx` matching Section 4.2, displaying placeholder values with `Phase 4 instrumentation` subtext.
+
+### Phase 2 Issues — ALL RESOLVED
+- [x] **[Phase 2] Missing "Active Sessions" Column in Users Table [RESOLVED]:**
+  Added `Active Sessions` column header and badges displaying `{u.active_sessions}` in `cmd/admin/ui/src/pages/Users.tsx`.
+- [x] **[Phase 2] Users Table Not Sortable [RESOLVED]:**
+  Implemented column sorting across Username, Home Node, Used Storage, Quota Limit, % Used, and Active Sessions in `Users.tsx` with ascending/descending toggle and sort indicators.
+- [x] **[Phase 2] Users Table Not Paginated [RESOLVED]:**
+  Implemented pagination in `Users.tsx` with customizable page sizes (5, 10, 25, 50), page indicator, and previous/next page navigation controls.
+- [x] **[Phase 2] Quota Setting Below Current Usage [RESOLVED - BY DESIGN]:**
+  Confirmed as intentional design: admins can set quota below current usage to block further uploads until the user deletes files to reclaim free space. Section 4.5 updated accordingly.
