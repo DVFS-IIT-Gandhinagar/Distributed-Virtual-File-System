@@ -1,0 +1,324 @@
+# DVFS Admin Console — Architecture & Plan
+
+> **Design Philosophy**: Tautulli-inspired monitoring dashboard. Real-time, graph-heavy, colour-coded. Purpose-built for operating a distributed file system cluster. The telemetry infrastructure also lays the groundwork for future stress-testing and performance analysis.
+
+---
+
+## 0. Current System — What Exists Today
+
+Before defining what the admin console adds, here is what the codebase already provides:
+
+| Component | How it runs | Communication | State |
+|---|---|---|---|
+| **Metaserver** | `./metaserver -port=50051 -state_file=./metaserver_state.json` | gRPC only (no HTTP) | `metaserver_state.json` — maps `username → fsID`, `fsID → {address, user_count, status, last_heartbeat}`, `shared → [{Owner, Path, DisplayName}]` |
+| **Fileserver** | `./fileserver -id=fs1 -port=50052 -data=./fileserver_data -meta_addr=<MDS_IP>:50051 -own_ip=<OWN_IP>` | gRPC only (no HTTP) | On-disk user directories under `-data`, in-memory inode tree with sizes, ACLs, trash |
+| **Client** | `./client -username=alice -ip_addr=<MDS_IP>` | gRPC to metaserver + fileserver | In-memory cache, local downloads |
+
+**Key facts the plan must respect:**
+- All communication is **gRPC** (protobuf). Zero HTTP endpoints exist.
+- Quotas are **hardcoded** to 1 GB per user (`const storageQuota = 1024*1024*1024` in `internal/fileserver/fileserver.go`).
+- Fileservers **self-register** with the metaserver via `RegisterFileServer` RPC and send periodic `Heartbeat` RPCs. You cannot "add a node" from the outside — the fileserver must be running and must register itself.
+- The metaserver does **not** track per-user storage consumption. That data lives on each fileserver's in-memory inode tree (`rootInode.Size` per user).
+- No telemetry, latency tracking, throughput counters, or IOPS metrics exist yet. All instrumentation must be **built from scratch**.
+
+---
+
+## 1. Core Architecture
+
+### 1.1 Admin API Backend (Runs on the Metaserver Machine)
+- A **Go HTTP server** (Gin or net/http) running on a dedicated port (e.g., `:8080`), colocated with the metaserver process.
+- Acts as a **proxy + aggregator**:
+  1. Reads `metaserver_state.json` for node discovery (list of fileserver addresses).
+  2. Polls each fileserver's new `/metrics` HTTP endpoint (see 1.2) every 5 seconds.
+  3. Stores time-series history in an in-memory ring-buffer.
+  4. Exposes aggregated REST/JSON API endpoints consumed by the frontend.
+- **No authentication** for this phase. All routes are open.
+- Can also make **gRPC calls** to fileservers for admin actions (e.g., the new `SetQuota` RPC — see Section 3.1).
+
+### 1.2 Metrics HTTP Endpoint (New — Added to Each Fileserver)
+- Each fileserver binary is **modified** to start a second listener: a lightweight HTTP server alongside its existing gRPC server.
+- **Port derivation**: Metrics HTTP port = `gRPC port - 41000`. Example: gRPC `:50052` → Metrics HTTP `:9052`. The admin backend computes this from the gRPC address already stored in `metaserver_state.json`. No state schema changes needed.
+- Serves a single endpoint: `GET /metrics` → returns a **plain JSON** object containing all telemetry data (see Section 2).
+- This is the only change needed on the fileserver's network surface.
+
+### 1.3 Time-Series Storage (In-Memory, No External Dependencies)
+- The admin backend maintains a **rolling in-memory ring-buffer** per node: last 60 minutes at 5-second resolution (~720 data points per node).
+- Zero external dependencies — no Prometheus, no Grafana, no external TSDB.
+- The ring-buffer is **periodically flushed** to a simple JSON snapshot file on disk (e.g., `admin_metrics_snapshot.json`), so a backend restart doesn't wipe graph history.
+- Graphs in the UI read directly from this buffer via the admin REST API.
+
+### 1.4 Node Discovery
+- Backend reads `metaserver_state.json` on startup and re-reads it periodically (every 10s) or via `fsnotify` file watch.
+- Each `fsID → address` mapping auto-builds the metrics scrape target list. The metrics HTTP port is derived from the gRPC port in the address.
+- Nodes whose `/metrics` endpoint hasn't responded for > 30s → automatically marked **OFFLINE** in the UI (this is a UI-level status, separate from the metaserver's own `"stale"` status based on heartbeat timeout).
+
+### 1.5 Frontend (React SPA)
+- **React + TypeScript** (Vite), with **Bootstrap CSS** for layout and components.
+- **Recharts** for time-series graphs (lightweight, React-native, good defaults).
+- **React Query** for background data polling (auto-refetch every 5s).
+- Served as static files from the Go admin backend (embedded via `embed.FS` or served from a `static/` directory).
+- WebSocket connection for streaming live command output (SSH terminal).
+
+---
+
+## 2. Telemetry Metrics Catalogue
+
+Every metric listed here must be **implemented from scratch** in the fileserver Go code. The `/metrics` endpoint returns a single JSON object containing all of these.
+
+### 2.1 Storage Metrics
+| Metric | Description | Source |
+|---|---|---|
+| `disk_total_bytes` | Total disk capacity of the volume containing `-data` dir | `syscall.Statfs` on the data directory |
+| `disk_used_bytes` | Bytes used on that volume | `syscall.Statfs` |
+| `disk_free_bytes` | Bytes free on that volume | `syscall.Statfs` |
+| `disk_usage_percent` | `used / total * 100` | Derived |
+| `per_user_storage` | Map of `username → bytes_used` | Walk `fs.users` → `rootInode.Size` for each user |
+| `per_user_quota` | Map of `username → quota_limit_bytes` | From new per-user quota config (see 3.1) |
+| `chunk_count` | Total number of file inodes across all users | Count inodes of type `FILE` in `fs.inodes` |
+
+### 2.2 Throughput & I/O Metrics
+| Metric | Description | Source |
+|---|---|---|
+| `bytes_written_total` | Cumulative bytes written since process start (counter) | Increment in `WriteChunk` / `UploadFile` handler |
+| `bytes_read_total` | Cumulative bytes read since process start (counter) | Increment in `ReadFile` / `DownloadFile` handler |
+| `write_ops_total` | Total write operations completed (counter) | Increment on each `WriteChunk` / `UploadFile` completion |
+| `read_ops_total` | Total read operations completed (counter) | Increment on each `ReadFile` / `DownloadFile` completion |
+| `active_connections` | Currently registered client sessions | `len(fs.sessions)` |
+
+> **Note**: Derived rates like `write_throughput_bps` and `iops` are **computed by the admin backend** from the delta of counters between scrapes, not by the fileserver itself. This keeps the fileserver instrumentation simple (just counters).
+
+### 2.3 Latency Metrics
+| Metric | Description | Source |
+|---|---|---|
+| `op_latency_write_ms_p50` | Median write latency | Sliding-window histogram in fileserver, computed on scrape |
+| `op_latency_write_ms_p95` | p95 write latency | Same histogram |
+| `op_latency_write_ms_p99` | p99 write latency (tail latency) | Same histogram |
+| `op_latency_read_ms_p50` | Median read latency | Same approach |
+| `op_latency_read_ms_p95` | p95 read latency | Same |
+| `op_latency_read_ms_p99` | p99 read latency | Same |
+
+> **Implementation**: Wrap each gRPC handler with `time.Since(start)` and feed the duration into a simple sliding-window percentile tracker (e.g., a fixed-size sorted ring or Go port of HDR histogram). Export computed percentiles on each `/metrics` GET.
+
+### 2.4 Error & Reliability Metrics
+| Metric | Description | Source |
+|---|---|---|
+| `errors_total` | Total errors since start | Increment on any handler returning an error |
+| `failed_writes_total` | Failed write operations | Increment on `WriteChunk`/`UploadFile` error |
+| `failed_reads_total` | Failed read operations | Increment on `ReadFile`/`DownloadFile` error |
+| `uptime_seconds` | Seconds since process start | `time.Since(startTime)` |
+| `last_restart_unix` | Unix timestamp of process start | `startTime.Unix()` |
+
+### 2.5 Hardware & System Metrics (Ubuntu/Linux)
+| Metric | Description | Source |
+|---|---|---|
+| `cpu_temp_celsius` | CPU temperature | Read `/sys/class/thermal/thermal_zone0/temp`, divide by 1000 |
+| `cpu_usage_percent` | CPU utilisation (1s avg) | Parse `/proc/stat` deltas or use `runtime` package |
+| `mem_used_bytes` | RAM used | Parse `/proc/meminfo` |
+| `mem_total_bytes` | Total RAM | Parse `/proc/meminfo` |
+| `mem_usage_percent` | RAM % | Derived |
+| `load_avg_1m` | System 1-min load average | Parse `/proc/loadavg` |
+| `load_avg_5m` | System 5-min load average | Parse `/proc/loadavg` |
+
+### 2.6 Session & User Activity Metrics
+| Metric | Description | Source |
+|---|---|---|
+| `active_users` | Users with at least one registered session | Distinct usernames in `fs.sessions` |
+| `users_assigned_count` | Users whose home directory is on this node | `len(fs.users)` |
+| `files_open_count` | Currently open file sessions | Count active sessions with open files |
+
+---
+
+## 3. Admin Console Capabilities
+
+### 3.1 User & Quota Management
+
+**Required Code Changes:**
+- **New gRPC RPC**: Add `SetQuota(SetQuotaRequest) returns (SetQuotaResponse)` to `fileserver.proto`. The request contains `{username, quota_bytes}`. The fileserver stores per-user quotas in a map (persisted to a `quota_config.json` alongside `fileserver_shares.json`), replacing the current hardcoded `const storageQuota`.
+- The admin backend calls `SetQuota` via gRPC when a user updates a quota in the UI.
+
+**UI:**
+- **User Listing Table**: Paginated table with columns: `Username` | `Home FS` | `Quota Limit` | `Quota Used` | `% Used` (colour-coded progress bar) | `Active Sessions`.
+  - Data source: `metaserver_state.json` for username→fsID mapping + each fileserver's `/metrics` for `per_user_storage` and `per_user_quota`.
+- **Quota Editing**: Inline editable quota field per user. Save triggers `SetQuota` gRPC call to the relevant fileserver.
+- **Quota Violation Badges**: Yellow badge at >80%, red badge at >95%.
+- **Per-User Storage Breakdown**: Expand a user row to see a horizontal bar chart of storage used vs. quota on each fileserver they have data on.
+
+### 3.2 Fileserver Node Monitoring
+- **Status Badges** (colour rules — see Section 5):
+  - 🟢 **ONLINE** — responding to `/metrics` and all metrics nominal
+  - 🟡 **WARNING** — responding but storage >80% or temp >65°C
+  - 🟠 **DEGRADED** — storage >90% or temp >75°C
+  - 🔴 **CRITICAL** — storage >95% or temp >85°C or error spike
+  - ⚫ **OFFLINE** — `/metrics` not responding for >30s
+- **Node Detail Drawer**: Click any node card → right-side slide panel with full 1-hour time-series graphs for all metrics for that node.
+- **Note on Registration**: Fileservers self-register with the metaserver. The admin console **observes** them, it cannot add/remove nodes. If a node is offline, the admin can use the Actions panel to SSH in and restart it.
+
+### 3.3 Operational Commands & Orchestration
+- **Supported Actions** (per-node or broadcast to all):
+  - **Pull Repo**: `git -C /path/to/repo pull origin main`
+  - **Build Binary**: `make -C /path/to/repo`
+  - **Restart Fileserver**: Kill existing process + relaunch with correct flags:
+    ```
+    ./bin/fileserver -id=<FS_ID> -port=<PORT> -data=./fileserver_data \
+      -meta_addr=<MDS_IP>:50051 -own_ip=<NODE_OWN_IP>
+    ```
+    The `MDS_IP`, `FS_ID`, `PORT`, and `NODE_OWN_IP` are **pre-filled** from `metaserver_state.json` (address field parsed for IP:port) but editable before execution.
+  - **View Logs**: Tail last N lines of the fileserver's stdout/stderr (requires the service to be run with output redirected to a log file, e.g., via `systemd` or `nohup ./fileserver ... > /var/log/dvfs-fileserver.log 2>&1`).
+  - **Custom SSH Command**: Free-text escape hatch for any raw command.
+- **Execution Mechanism**: Go's `golang.org/x/crypto/ssh` package (needs to be added to `go.mod`). SSH key-based auth assumed — the metaserver machine must have SSH key access to all fileserver machines.
+- **Targeting**: "All Nodes" / "Healthy Only" / "Select Specific Nodes" (per-node checkboxes).
+- **Live Output Terminal**: Scrolling monospace `<pre>` pane. stdout/stderr streamed in real time via WebSocket from the admin backend to the browser (using `coder/websocket` or Go 1.22+ `net/http` upgrade).
+- **Command History Log**: Persistent log of every action: timestamp, target nodes, command, exit code, duration.
+
+---
+
+## 4. Web Dashboard UI — Tautulli-Style Layout
+
+### 4.1 Top Navigation Bar
+- DVFS logo + cluster name.
+- **Global health pill** (green/yellow/orange/red) — reflects worst status across all nodes.
+- Live clock + "Last updated Xs ago" indicator.
+- Navigation tabs: **Overview** | **Nodes** | **Performance** | **Users** | **Logs & Alerts** | **Actions**.
+
+### 4.2 Page: Overview (Home)
+**Stat Card Row:**
+| Card | Example |
+|---|---|
+| 🖥️ Active Nodes | `4 / 5 Online` |
+| 💾 Cluster Storage | `3.2 GB / 5 GB Used` |
+| 👥 Total Users | `12` |
+| ⚡ Write Throughput | `45 MB/s` |
+| 📖 Read Throughput | `120 MB/s` |
+| ❌ Error Rate | `0.01%` |
+
+**Graphs:**
+- **Cluster Throughput (Read vs Write)**: Dual-line chart, last 30 min. Computed by the admin backend as `Σ(delta(bytes_written_total)) / interval` across all nodes.
+- **Active Connections**: Area chart — total client sessions across all nodes, last 30 min.
+- **Cluster Storage by Node**: Stacked bar chart — one segment per node, colour-coded by fill %.
+- **Error Rate**: Line chart of cluster-wide errors/sec.
+- **Node Health Mini-Map**: A compact grid of coloured dots (one per node) for at-a-glance status.
+
+### 4.3 Page: Nodes
+- Responsive card grid (3–4 columns).
+- **Each Node Card shows:**
+  - Node name / `fsID` + IP address
+  - Status badge (colour-coded border/glow on the card — see Section 5)
+  - Storage progress bar (colour shifts green→yellow→red by fill %)
+  - CPU temperature badge (colour-coded by °C)
+  - CPU % + RAM % usage
+  - Read/Write throughput sparkline (inline 5-min mini line graph)
+  - Active users count + connection count
+  - Uptime
+- **Node Detail Drawer** (click to open, right-side slide panel):
+  - Full 1-hour time-series graphs for all Section 2 metrics.
+  - Per-user storage usage on this node (horizontal bar chart).
+  - Action buttons scoped to this node (Restart, Pull, Logs).
+
+### 4.4 Page: Performance
+> Shows real-time throughput, latency, and I/O across the cluster. This same page will be invaluable for observing future stress tests, but it is useful in normal operation too — it's how you spot bottlenecks, uneven load distribution, and degradation.
+
+- **Per-Node Throughput Grid**: Side-by-side line charts (one per node) for read MB/s and write MB/s. Instantly reveals uneven load.
+- **Latency Panel**: Live p50/p95/p99 table (read + write) per node. Grouped bar chart to compare nodes.
+- **IOPS Timeline**: Read IOPS + Write IOPS over time (derived from op counters).
+- **Active Connections Timeline**: Total + per-node stacked area chart.
+- **Export CSV**: Download all metrics for the current time window for offline analysis.
+
+### 4.5 Page: Users
+- Searchable, sortable, paginated table.
+- Columns: `Username` | `Home FS` | `Quota Limit` | `Quota Used` | `% Used` | `Active Sessions`.
+- Colour-coded `% Used` progress bar inline (green/yellow/red).
+- Expand a row: per-fileserver storage breakdown bar chart.
+- Quota edit modal with validation (minimum = current usage).
+
+### 4.6 Page: Logs & Alerts
+- **Alert Feed**: Chronological list of auto-generated system alerts:
+  - Node went offline / came back online
+  - Node storage crossed 80% / 90% / 95%
+  - CPU temperature exceeded threshold
+  - User exceeded quota
+  - Error rate spike
+  - Service restart detected (detected via `uptime_seconds` reset)
+- Each alert: severity badge (Info / Warning / Critical), timestamp, affected node/user, link to relevant detail page.
+- **Command History**: Filterable log of every action executed from the Actions panel.
+- **Live Log Tail**: Node selector dropdown + live streaming log view (WebSocket).
+
+### 4.7 Page: Actions (Orchestration)
+- Node multi-selector (checkboxes) + "Select All" / "Healthy Only" shortcuts.
+- Action buttons: **Pull**, **Build**, **Restart**, **Custom Command**.
+- **Restart Action** pre-fills per-node: `FS_ID`, `Meta Addr`, `Own IP`, `Port`, `Data Dir` — all sourced from `metaserver_state.json`, all editable before execution.
+- **Custom Command**: Free-text SSH command input.
+- **Live Output Terminal**: Scrolling monospace output pane streamed via WebSocket.
+- Each action shows per-node status: Pending → Running → ✅ Success / ❌ Failed, with collapsible per-node output.
+
+---
+
+## 5. Colour-Coding & Visual Health System
+
+| Condition | Colour | Meaning |
+|---|---|---|
+| All metrics nominal | 🟢 Green | Healthy |
+| Storage > 80% OR Temp > 65°C | 🟡 Yellow | Warning — monitor |
+| Storage > 90% OR Temp > 75°C | 🟠 Orange | Degraded — action advised |
+| Storage > 95%, Temp > 85°C, or error spike | 🔴 Red | Critical — act now |
+| `/metrics` not responding > 30s | ⚫ Grey | Offline |
+
+Applied to: node card borders, storage/CPU/memory progress bars, temperature badges, global nav health pill, user quota bars in the Users table.
+
+---
+
+## 6. Implementation Stack
+
+| Component | Technology |
+|---|---|
+| Admin API Backend | Go (Gin or net/http), port `:8080` on metaserver machine |
+| Metrics Endpoint (per fileserver) | Go `net/http` handler on derived port (`gRPC_port - 41000`) |
+| Quota Management | New `SetQuota` gRPC RPC in `fileserver.proto` |
+| Time-Series Storage | In-memory ring-buffer (60 min @ 5s), snapshot-persisted to disk |
+| Frontend | React + TypeScript (Vite) |
+| UI Framework | Bootstrap CSS |
+| Charts | Recharts |
+| Data Fetching | React Query (5s poll interval) |
+| SSH Execution | `golang.org/x/crypto/ssh` (new `go.mod` dependency) |
+| Command Streaming | WebSocket (`coder/websocket`) |
+| Node Discovery | Periodic re-read of `metaserver_state.json` |
+
+---
+
+## 7. Implementation Phases
+
+### Phase 1 — Core Monitoring (MVP)
+**Goal**: Get the dashboard running with live node status and storage visibility.
+- [x] Add `/metrics` HTTP endpoint to the fileserver binary (storage metrics + hardware metrics + uptime).
+- [x] Build the admin backend: poll `/metrics`, store in ring-buffer, serve REST API.
+- [x] Frontend: Overview page (stat cards + storage bar chart) + Nodes page (colour-coded cards).
+- [x] Node Discovery from `metaserver_state.json`.
+
+### Phase 2 — User & Quota Management
+- [ ] Add `SetQuota` gRPC RPC to `fileserver.proto` + implement in fileserver.
+- [ ] Replace hardcoded `const storageQuota` with per-user configurable quotas (persisted to `quota_config.json`).
+- [ ] Admin backend: `/api/users` list + `/api/users/{uid}/quota` update endpoint (calls gRPC).
+- [ ] Frontend: Users page with quota editing + quota violation badges.
+
+### Phase 3 — Orchestration & Commands
+- [ ] SSH execution engine in the admin backend (`golang.org/x/crypto/ssh`).
+- [ ] WebSocket endpoint for streaming command output.
+- [ ] Frontend: Actions page with Pull/Build/Restart buttons, node targeting, live terminal.
+- [ ] Command history log (persisted to disk).
+
+### Phase 4 — Throughput & Latency Instrumentation
+- [ ] Add I/O counters (`bytes_written_total`, `read_ops_total`, etc.) to the fileserver gRPC handlers.
+- [ ] Add latency histogram tracking (wrap handlers with timing).
+- [ ] Admin backend: compute derived rates (throughput bps, IOPS) from counter deltas.
+- [ ] Frontend: Performance page with per-node throughput grids, latency tables, IOPS charts.
+
+### Phase 5 — Alerts & Logs
+- [ ] Alert engine in the admin backend (threshold-based, fires on metric crosses).
+- [ ] Frontend: Logs & Alerts page with alert feed + live log tail.
+- [ ] Ring-buffer snapshot persistence to disk for restart resilience.
+
+### Future — Stress Test Tooling
+> When stress tests are written, the Performance page (Phase 4) will be the primary observation tool. Future additions could include:
+> - "Mark Test Start / End" annotation buttons on graphs.
+> - Aggregate summary panel (cluster throughput, p99 latency, peak connections, which node saturated first).
+> - CSV export of a time window for offline analysis.
+> - These are **not in scope** for the admin console build.
