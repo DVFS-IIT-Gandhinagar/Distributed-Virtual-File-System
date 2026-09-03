@@ -61,3 +61,69 @@ export interface UserSummary {
   nodes: NodeUserStorage[];
 }
 
+export type ActionType = 'pull' | 'build' | 'restart' | 'logs' | 'custom';
+
+export interface NodeRestartParams {
+  fs_id: string;
+  address: string;
+  host: string;
+  port: number;
+  ssh_port?: number;
+  meta_addr: string;
+  own_ip: string;
+  data_dir: string;
+}
+
+export interface ActionRequest {
+  action_type: ActionType;
+  target_node_ids: string[];
+  custom_command?: string;
+  repo_path?: string;
+  git_branch?: string;
+  make_target?: string;
+  timeout_seconds?: number;
+  ssh_port?: number;
+  log_lines?: number;
+  log_path?: string;
+  restart_mode?: 'systemctl' | 'binary';
+  log_mode?: 'journalctl' | 'tail';
+  restart_params?: Record<string, NodeRestartParams>;
+  ssh_user?: string;
+  ssh_key_path?: string;
+}
+
+export interface NodeResult {
+  node_id: string;
+  address: string;
+  exit_code: number;
+  output: string;
+  error?: string;
+  duration_ms: number;
+}
+
+export interface CommandRecord {
+  id: string;
+  timestamp: number;
+  action_type: ActionType;
+  command: string;
+  target_nodes: string[];
+  status: 'running' | 'success' | 'failed';
+  duration_ms: number;
+  node_results: Record<string, NodeResult>;
+}
+
+export interface ActionEvent {
+  type: 'action_started' | 'node_started' | 'node_output' | 'node_finished' | 'action_finished' | 'error';
+  action_id: string;
+  command?: string;
+  node_id?: string;
+  address?: string;
+  stream?: 'stdout' | 'stderr';
+  chunk?: string;
+  exit_code?: number;
+  duration_ms?: number;
+  status?: string;
+  error?: string;
+}
+
+

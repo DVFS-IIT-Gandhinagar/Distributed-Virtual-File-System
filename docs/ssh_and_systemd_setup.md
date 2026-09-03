@@ -1,0 +1,105 @@
+# Passwordless SSH & systemd Setup Guide for DVFS Cluster Nodes
+
+This guide documents the setup required on Ubuntu Live Server / Linux machines hosting the DVFS Metaserver, Admin Console, and Fileserver nodes to enable Phase 3 remote orchestration.
+
+---
+
+## 1. Passwordless SSH Setup
+
+The Admin Console runs on the machine hosting the Metaserver (or any management host) and connects to each Fileserver node over SSH to execute commands (`git pull`, `make`, `systemctl restart`, `journalctl`, etc.).
+
+### Step 1: Generate an SSH Key Pair on the Admin / Metaserver Machine
+On the machine running `./bin/admin`:
+```bash
+# Generate an ed25519 key (recommended) without a passphrase:
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
+```
+*(Or if using RSA: `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""`)*
+
+### Step 2: Distribute the Public Key to Each Fileserver Node
+Run this command for each fileserver node IP address:
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub <ssh_user>@<node_ip>
+```
+*Example:*
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub ubuntu@10.7.52.85
+ssh-copy-id -i ~/.ssh/id_ed25519.pub ubuntu@10.7.52.86
+```
+
+### Step 3: Test Passwordless Login
+Verify that you can log in without entering a password:
+```bash
+ssh -i ~/.ssh/id_ed25519 <ssh_user>@<node_ip> "echo 'SSH connection successful!'"
+```
+
+---
+
+## 2. Passwordless `systemctl` & `journalctl` for Sudo
+
+The Admin Console executes `sudo systemctl restart dvfs-fileserver` and `journalctl -u dvfs-fileserver` to restart nodes and read logs. To allow the SSH user to execute these service commands without a password prompt:
+
+On **each Fileserver node**, create `/etc/sudoers.d/dvfs`:
+```bash
+sudo bash -c 'cat <<EOF > /etc/sudoers.d/dvfs
+# Allow dvfs service management without password prompt
+<ssh_user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dvfs-fileserver, /usr/bin/systemctl status dvfs-fileserver, /usr/bin/journalctl
+EOF'
+
+# Secure permissions
+sudo chmod 0440 /etc/sudoers.d/dvfs
+```
+*(Replace `<ssh_user>` with your actual username, e.g., `ubuntu` or `jsm`)*
+
+---
+
+## 3. Installing the systemd Fileserver Service
+
+To have fileservers launch automatically on node boot and be manageable via `systemctl`:
+
+### Step 1: Copy Service File
+On each Fileserver node:
+```bash
+sudo cp scripts/dvfs-fileserver.service /etc/systemd/system/dvfs-fileserver.service
+```
+
+### Step 2: Adjust Paths and Environment Variables
+Edit `/etc/systemd/system/dvfs-fileserver.service`:
+- Set `User=` to your node's username (e.g. `ubuntu`).
+- Set `WorkingDirectory=` to the repository path on the node.
+- Update `META_ADDR=` to the Metaserver's `<IP>:50051`.
+- Set `FS_ID=` and `FS_PORT=` (e.g. `fs1` / `50052`).
+
+Ensure the startup script is executable:
+```bash
+chmod +x scripts/start-fileserver.sh
+```
+
+### Step 3: Enable & Start the Service
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable dvfs-fileserver
+sudo systemctl start dvfs-fileserver
+```
+
+### Step 4: Verify Status
+```bash
+sudo systemctl status dvfs-fileserver
+journalctl -u dvfs-fileserver -n 50 --no-pager
+```
+
+---
+
+## 4. Running the Admin Server with SSH Flags
+
+When starting the Admin Console binary, supply your SSH configuration:
+```bash
+./bin/admin \
+  -port=8080 \
+  -state_file=./metaserver_state.json \
+  -ssh_user=ubuntu \
+  -ssh_key=~/.ssh/id_ed25519 \
+  -repo_path=~/Distributed-Virtual-File-System
+```
+
+In the web console, navigate to the **Actions** tab. All nodes registered in `metaserver_state.json` will be available for remote orchestration.

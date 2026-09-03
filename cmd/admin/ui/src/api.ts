@@ -1,4 +1,4 @@
-import type { ClusterResponse, Snapshot, UserSummary } from './types';
+import type { ClusterResponse, Snapshot, UserSummary, NodeRestartParams, CommandRecord, ActionRequest } from './types';
 
 export async function fetchCluster(): Promise<ClusterResponse> {
   const res = await fetch('/api/cluster');
@@ -30,3 +30,29 @@ export async function updateUserQuota(username: string, quotaBytes: number): Pro
   }
   return res.json();
 }
+
+export async function fetchActionPresets(): Promise<Record<string, NodeRestartParams>> {
+  const res = await fetch('/api/actions/presets');
+  if (!res.ok) throw new Error(`fetchActionPresets: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<Record<string, NodeRestartParams>>;
+}
+
+export async function fetchCommandHistory(): Promise<CommandRecord[]> {
+  const res = await fetch('/api/actions/history');
+  if (!res.ok) throw new Error(`fetchCommandHistory: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<CommandRecord[]>;
+}
+
+export async function executeActionRest(req: ActionRequest): Promise<CommandRecord> {
+  const res = await fetch('/api/actions/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(errData.error || `executeActionRest: ${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<CommandRecord>;
+}
+

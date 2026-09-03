@@ -1,4 +1,5 @@
-﻿import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, LabelList,
@@ -18,6 +19,7 @@ function bytesToGB(b: number) {
 }
 
 export default function NodeDetailPanel({ node, show, onClose }: Props) {
+  const navigate = useNavigate();
   const m = node.metrics;
 
   const { data: history } = useQuery<Snapshot[]>({
@@ -80,6 +82,43 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
         </div>
 
         <div className="offcanvas-body" style={{ overflowY: 'auto' }}>
+          {/* Scoped Quick Actions */}
+          <div className="d-flex gap-2 mb-4 p-2 rounded bg-light border">
+            <button
+              type="button"
+              className="btn btn-outline-primary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
+              onClick={() => {
+                onClose();
+                navigate(`/actions?node=${node.fsID}&action=restart`);
+              }}
+              title={`Restart Node FS-${node.fsID}`}
+            >
+              <i className="bi bi-arrow-repeat"></i>Restart
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
+              onClick={() => {
+                onClose();
+                navigate(`/actions?node=${node.fsID}&action=pull`);
+              }}
+              title={`Pull repo on Node FS-${node.fsID}`}
+            >
+              <i className="bi bi-git"></i>Git Pull
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
+              onClick={() => {
+                onClose();
+                navigate(`/actions?node=${node.fsID}&action=logs`);
+              }}
+              title={`View logs for Node FS-${node.fsID}`}
+            >
+              <i className="bi bi-journal-text"></i>Logs
+            </button>
+          </div>
+
           {/* Quick Stats */}
           <div className="row g-2 mb-4">
             {[

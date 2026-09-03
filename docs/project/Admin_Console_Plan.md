@@ -300,10 +300,10 @@ Applied to: node card borders, storage/CPU/memory progress bars, temperature bad
 - [x] Frontend: Users page with quota editing + quota violation badges.
 
 ### Phase 3 — Orchestration & Commands
-- [ ] SSH execution engine in the admin backend (`golang.org/x/crypto/ssh`).
-- [ ] WebSocket endpoint for streaming command output.
-- [ ] Frontend: Actions page with Pull/Build/Restart buttons, node targeting, live terminal.
-- [ ] Command history log (persisted to disk).
+- [x] SSH execution engine in the admin backend (`golang.org/x/crypto/ssh`).
+- [x] WebSocket endpoint for streaming command output.
+- [x] Frontend: Actions page with Pull/Build/Restart buttons, node targeting, live terminal.
+- [x] Command history log (persisted to disk).
 
 ### Phase 4 — Throughput & Latency Instrumentation
 - [ ] Add I/O counters (`bytes_written_total`, `read_ops_total`, etc.) to the fileserver gRPC handlers.
@@ -346,3 +346,48 @@ Applied to: node card borders, storage/CPU/memory progress bars, temperature bad
   Implemented pagination in `Users.tsx` with customizable page sizes (5, 10, 25, 50), page indicator, and previous/next page navigation controls.
 - [x] **[Phase 2] Quota Setting Below Current Usage [RESOLVED - BY DESIGN]:**
   Confirmed as intentional design: admins can set quota below current usage to block further uploads until the user deletes files to reclaim free space. Section 4.5 updated accordingly.
+
+---
+
+## Phase 3 Audit: Diversions, Potential Issues & Remediation Plans
+
+> Audit performed: 2026-09-04. All 4 diversions and 7 operational issues identified have been fixed and verified. **Phase 3 is now 100% complete and hardened.**
+
+### Part A: Diversions from Plan Specification — ALL RESOLVED
+
+1. - [x] **[Diversion 1] Node Detail Drawer Missing Scoped Action Buttons [RESOLVED]:**
+   - Added scoped action buttons (`Restart`, `Git Pull`, `View Logs`) inside [`NodeDetailPanel.tsx`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/cmd/admin/ui/src/components/NodeDetailPanel.tsx) with seamless navigation to `/actions?node=<fsID>&action=<type>` using React Router `useNavigate`.
+
+2. - [x] **[Diversion 2] Missing Live Per-Node Status Grid during Active Execution [RESOLVED]:**
+   - Added an interactive live status matrix card directly above the terminal in [`Actions.tsx`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/cmd/admin/ui/src/pages/Actions.tsx), rendering each target node's live state transition (`Pending ⏳` $\rightarrow$ `Running 🔄` $\rightarrow$ `Success ✅` / `Failed ❌`) with individual durations and exit codes.
+
+3. - [x] **[Diversion 3] Backend Command Formatting Overrides User-Specified Git Branch & Make Target [RESOLVED]:**
+   - Added `GitBranch` and `MakeTarget` fields to `ActionRequest` and updated `FormatCommand` in [`internal/admin/actions.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/actions.go) so custom branch pulls and make build targets are fully respected. Verified with `TestFormatCommand`.
+
+4. - [x] **[Diversion 4] Command Field in History Record Stored as Empty for Preset Actions [RESOLVED]:**
+   - Updated `Orchestrator.Execute` in [`internal/admin/actions.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/actions.go) to populate `record.Command` with the exact formatted command string executed across nodes, persisting full auditability in `command_history.json`. Verified with `TestOrchestratorCommandStringPopulation`.
+
+---
+
+### Part B: Potential Real-World Issues & Operational Failure Modes — ALL RESOLVED
+
+1. - [x] **[Issue 1] Command Hanging Indefinitely (Lack of Execution Timeout) [RESOLVED]:**
+   - Added context timeout (default: 300s / 5 minutes, configurable via `TimeoutSeconds`) in [`internal/admin/actions.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/actions.go). Cancels remote session cleanly and tags failed results with `command timed out after %v`. Verified with `TestOrchestratorTimeout`.
+
+2. - [x] **[Issue 2] Sudo Password Prompt in Non-Interactive SSH Session [RESOLVED]:**
+   - Updated systemd restart command to `sudo -n systemctl restart dvfs-fileserver` in [`internal/admin/actions.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/actions.go). If passwordless sudo is unconfigured, sudo fails immediately without hanging the SSH session.
+
+3. - [x] **[Issue 3] SSH Session Hanging on Background Process (`nohup` Detachment) [RESOLVED]:**
+   - Added `< /dev/null` standard input redirection and `fuser -k %d/tcp 2>/dev/null` port clearance in binary restart mode in [`internal/admin/actions.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/actions.go) to guarantee clean SSH disconnection.
+
+4. - [x] **[Issue 4] Non-Interactive SSH PATH Missing Go Toolchain [RESOLVED]:**
+   - Prepended `export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin;` to `make` build commands in `FormatCommand`, ensuring Ubuntu Live Server nodes without interactive `.bashrc` can locate the Go compiler.
+
+5. - [x] **[Issue 5] Hardcoded SSH Port 22 [RESOLVED]:**
+   - Added `SSHPort` to `ActionRequest`, `NodeRestartParams`, CLI flag `-ssh_port` (default 22) in [`cmd/admin/main.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/cmd/admin/main.go), and UI input in [`Actions.tsx`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/cmd/admin/ui/src/pages/Actions.tsx). Verified with `TestOrchestratorCustomSSHPort`.
+
+6. - [x] **[Issue 6] WebSocket Reconnection on Temporary Network Drop [RESOLVED]:**
+   - Added exponential backoff auto-reconnect (1s to 15s), live status pill (`Connected 🟢` / `Connecting 🟡` / `Offline 🔴`), and a manual "Reconnect" trigger button in [`Actions.tsx`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/cmd/admin/ui/src/pages/Actions.tsx).
+
+7. - [x] **[Issue 7] Concurrent Conflicting Actions on the Same Node [RESOLVED]:**
+   - Added atomic per-node execution lock map (`sync.Map`) in `Orchestrator` in [`internal/admin/actions.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/actions.go) to reject overlapping commands targeting busy nodes with `node FS-<id> is currently executing action <id>`. Verified with `TestOrchestratorConcurrencyLock`.

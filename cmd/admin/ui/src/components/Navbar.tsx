@@ -78,6 +78,16 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 <i className="bi bi-people me-1"></i>Users
               </NavLink>
             </li>
+            <li className="nav-item">
+              <NavLink
+                to="/actions"
+                className={({ isActive }) =>
+                  'nav-link' + (isActive ? ' active fw-semibold' : '')
+                }
+              >
+                <i className="bi bi-play-circle me-1"></i>Actions
+              </NavLink>
+            </li>
           </ul>
 
           {/* Right side: health pill + last updated */}

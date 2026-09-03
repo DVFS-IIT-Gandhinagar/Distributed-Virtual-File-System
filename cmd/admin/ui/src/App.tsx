@@ -5,6 +5,7 @@ import AppNavbar from './components/Navbar';
 import Overview from './pages/Overview';
 import Nodes from './pages/Nodes';
 import Users from './pages/Users';
+import Actions from './pages/Actions';
 
 export default function App() {
   const { data, dataUpdatedAt } = useQuery({
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/" element={<Overview />} />
           <Route path="/nodes" element={<Nodes />} />
           <Route path="/users" element={<Users />} />
+          <Route path="/actions" element={<Actions />} />
         </Routes>
       </main>
       <footer className="py-3 text-center text-muted small border-top bg-white">

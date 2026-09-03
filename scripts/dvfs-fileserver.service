@@ -1,0 +1,29 @@
+[Unit]
+Description=Distributed Virtual File System (DVFS) Fileserver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Change to the non-root user running the service on the Ubuntu node
+User=ubuntu
+# Update to the path where DVFS is cloned on the node
+WorkingDirectory=/home/ubuntu/Distributed-Virtual-File-System
+
+# Environment overrides (adjust META_ADDR, FS_PORT, FS_ID as needed)
+Environment=META_ADDR=127.0.0.1:50051
+Environment=FS_PORT=50052
+Environment=FS_ID=fs1
+Environment=DATA_DIR=/home/ubuntu/Distributed-Virtual-File-System/fileserver_data
+
+# ExecStart executes the auto-IP detecting startup wrapper
+ExecStart=/bin/bash /home/ubuntu/Distributed-Virtual-File-System/scripts/start-fileserver.sh
+
+Restart=on-failure
+RestartSec=3s
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
