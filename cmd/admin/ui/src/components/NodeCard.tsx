@@ -1,4 +1,4 @@
-﻿import type { NodeInfo } from '../types';
+import type { NodeInfo } from '../types';
 import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getStorageBarClass, getCpuTempColor } from '../utils';
 
 interface Props {
@@ -15,7 +15,7 @@ export default function NodeCard({ node, onClick }: Props) {
   return (
     <div
       className="card h-100 shadow-sm border-0"
-      style={{ borderLeft: `4px solid ${statusColor} !important`, cursor: 'pointer', borderLeft: `4px solid ${statusColor}` }}
+      style={{ borderLeft: `4px solid ${statusColor}`, cursor: 'pointer' }}
       onClick={onClick}
     >
       <div className="card-header d-flex align-items-center justify-content-between bg-white border-bottom py-2">
