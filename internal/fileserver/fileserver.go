@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 )
@@ -30,6 +31,7 @@ type FileServer struct {
 	msAddr      string
 	Shared      map[string][]string       // directory path -> users map (e.g., "umang/proj" -> ["romit"])
 	sessions    map[string]*clientSession // username -> last known session metadata
+	startTime   time.Time
 }
 
 type trashEntry struct {
@@ -62,6 +64,7 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertP
 		msAddr:      msAddr,
 		Shared:      make(map[string][]string),
 		sessions:    make(map[string]*clientSession),
+		startTime:   time.Now(),
 	}
 
 	// Check if rootDir already exists
