@@ -1,4 +1,4 @@
-﻿import { NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import type { ClusterResponse } from '../types';
 import { getStatusBadgeClass, getStatusColor } from '../utils';
 
@@ -66,6 +66,16 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 }
               >
                 <i className="bi bi-server me-1"></i>Nodes
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
+                to="/users"
+                className={({ isActive }) =>
+                  'nav-link' + (isActive ? ' active fw-semibold' : '')
+                }
+              >
+                <i className="bi bi-people me-1"></i>Users
               </NavLink>
             </li>
           </ul>

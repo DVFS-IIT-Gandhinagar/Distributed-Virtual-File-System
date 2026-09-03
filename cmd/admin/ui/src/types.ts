@@ -1,4 +1,4 @@
-﻿export interface NodeMetrics {
+export interface NodeMetrics {
   disk_total_bytes: number;
   disk_used_bytes: number;
   disk_free_bytes: number;
@@ -42,3 +42,22 @@ export interface Snapshot {
   timestamp: number;
   metrics: NodeMetrics;
 }
+
+export interface NodeUserStorage {
+  fs_id: string;
+  address: string;
+  used_bytes: number;
+  quota_bytes: number;
+}
+
+export interface UserSummary {
+  username: string;
+  home_fs_id: string;
+  home_fs_address: string;
+  quota_limit: number;
+  quota_used: number;
+  usage_percent: number;
+  active_sessions: number;
+  nodes: NodeUserStorage[];
+}
+

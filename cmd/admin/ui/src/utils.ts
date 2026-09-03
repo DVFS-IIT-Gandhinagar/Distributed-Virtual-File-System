@@ -1,4 +1,4 @@
-﻿export function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const gb = bytes / (1024 * 1024 * 1024);
   if (gb >= 1) return `${gb.toFixed(1)} GB`;
@@ -36,16 +36,23 @@ export function getStatusBadgeClass(status: string): string {
   }
 }
 
+export function getStorageBarColor(pct: number): string {
+  if (pct > 95) return '#dc3545';
+  if (pct > 90) return '#fd7e14';
+  if (pct > 80) return '#ffc107';
+  return '#198754';
+}
+
 export function getStorageBarClass(pct: number): string {
-  if (pct >= 90) return 'bg-danger';
-  if (pct >= 75) return 'bg-warning';
+  if (pct > 95) return 'bg-danger';
+  if (pct > 80) return 'bg-warning text-dark';
   return 'bg-success';
 }
 
 export function getCpuTempColor(temp: number): string {
-  if (temp >= 80) return '#dc3545';
-  if (temp >= 65) return '#fd7e14';
-  if (temp >= 50) return '#ffc107';
+  if (temp > 85) return '#dc3545';
+  if (temp > 75) return '#fd7e14';
+  if (temp > 65) return '#ffc107';
   return '#198754';
 }
 
@@ -55,3 +62,18 @@ export function timeAgo(unixSeconds: number): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   return `${Math.floor(diff / 3600)}h ago`;
 }
+
+export function getUserQuotaColor(pct: number): string {
+  if (pct > 100) return '#dc3545';
+  if (pct >= 95) return '#fd7e14';
+  if (pct >= 80) return '#ffc107';
+  return '#198754';
+}
+
+export function getUserQuotaBadge(pct: number): { label: string; badgeClass: string; color: string } | null {
+  if (pct > 100) return { label: 'Exceeded', badgeClass: 'bg-danger text-white', color: '#dc3545' };
+  if (pct >= 95) return { label: 'Near Limit', badgeClass: 'text-dark', color: '#fd7e14' };
+  if (pct >= 80) return { label: 'Warning', badgeClass: 'bg-warning text-dark', color: '#ffc107' };
+  return null;
+}
+

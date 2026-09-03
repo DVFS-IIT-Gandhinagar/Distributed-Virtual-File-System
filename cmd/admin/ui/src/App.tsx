@@ -1,9 +1,10 @@
-﻿import { Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCluster } from './api';
 import AppNavbar from './components/Navbar';
 import Overview from './pages/Overview';
 import Nodes from './pages/Nodes';
+import Users from './pages/Users';
 
 export default function App() {
   const { data, dataUpdatedAt } = useQuery({
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/nodes" element={<Nodes />} />
+          <Route path="/users" element={<Users />} />
         </Routes>
       </main>
       <footer className="py-3 text-center text-muted small border-top bg-white">

@@ -1,5 +1,5 @@
 import type { NodeInfo } from '../types';
-import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getStorageBarClass, getCpuTempColor } from '../utils';
+import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getStorageBarClass, getStorageBarColor, getCpuTempColor } from '../utils';
 
 interface Props {
   node: NodeInfo;
@@ -18,20 +18,17 @@ export default function NodeCard({ node, onClick }: Props) {
       style={{ borderLeft: `4px solid ${statusColor}`, cursor: 'pointer' }}
       onClick={onClick}
     >
-      <div className="card-header d-flex align-items-center justify-content-between bg-white border-bottom py-2">
-        <h6 className="mb-0 fw-bold">
-          <i className="bi bi-server me-2" style={{ color: statusColor }}></i>
-          FS-{node.fsID}
-        </h6>
-        <span className={`badge ${getStatusBadgeClass(node.status)}`}>
-          {node.status}
-        </span>
-      </div>
+      <div className="card-body">
+        {/* Header: FS-ID + status badge */}
+        <div className="d-flex justify-content-between align-items-center mb-1">
+          <span className="fw-bold fs-6">FS-{node.fsID}</span>
+          <span className={`badge ${getStatusBadgeClass(node.status)}`}>
+            {node.status}
+          </span>
+        </div>
 
-      <div className="card-body py-3">
-        {/* Address */}
-        <p className="text-muted small mb-3">
-          <i className="bi bi-ethernet me-1"></i>
+        {/* IP Address */}
+        <p className="text-muted small mb-3 text-truncate" title={node.address}>
           {node.address}
         </p>
 
@@ -44,7 +41,10 @@ export default function NodeCard({ node, onClick }: Props) {
           <div className="progress" style={{ height: 8 }}>
             <div
               className={`progress-bar ${getStorageBarClass(m.disk_usage_percent)}`}
-              style={{ width: `${Math.min(m.disk_usage_percent, 100)}%` }}
+              style={{
+                width: `${Math.min(m.disk_usage_percent, 100)}%`,
+                backgroundColor: getStorageBarColor(m.disk_usage_percent),
+              }}
             />
           </div>
         </div>

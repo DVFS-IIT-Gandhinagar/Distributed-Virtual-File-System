@@ -1,11 +1,11 @@
-﻿import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell,
 } from 'recharts';
 import { fetchCluster } from '../api';
 import StatCard from '../components/StatCard';
-import { formatBytes, getStatusColor, getStatusBadgeClass, getStorageBarClass } from '../utils';
+import { formatBytes, getStatusColor, getStatusBadgeClass, getStorageBarClass, getStorageBarColor } from '../utils';
 
 export default function Overview() {
   const navigate = useNavigate();
@@ -64,9 +64,9 @@ export default function Overview() {
 
   return (
     <div className="container-fluid py-4 px-4">
-      {/* Stat Cards */}
+      {/* Stat Cards Row (Plan Section 4.2: 6 Cards) */}
       <div className="row g-3 mb-4">
-        <div className="col-sm-6 col-xl-3">
+        <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
             title="Active Nodes"
             value={`${cluster.online_count} / ${cluster.node_count}`}
@@ -76,7 +76,7 @@ export default function Overview() {
             onClick={() => navigate('/nodes')}
           />
         </div>
-        <div className="col-sm-6 col-xl-3">
+        <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
             title="Cluster Storage"
             value={`${formatBytes(cluster.used_storage_bytes)} / ${formatBytes(cluster.total_storage_bytes)}`}
@@ -87,12 +87,15 @@ export default function Overview() {
             <div className="progress" style={{ height: 6 }}>
               <div
                 className={`progress-bar ${getStorageBarClass(storagePct)}`}
-                style={{ width: `${Math.min(storagePct, 100)}%` }}
+                style={{
+                  width: `${Math.min(storagePct, 100)}%`,
+                  backgroundColor: getStorageBarColor(storagePct),
+                }}
               />
             </div>
           </StatCard>
         </div>
-        <div className="col-sm-6 col-xl-3">
+        <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
             title="Total Users"
             value={cluster.total_users}
@@ -101,24 +104,53 @@ export default function Overview() {
             iconColor="#198754"
           />
         </div>
-        <div className="col-sm-6 col-xl-3">
+        <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
-            title="Avg CPU Temp"
-            value={`${avgCpuTemp.toFixed(1)}°C`}
-            subtitle="Across online nodes"
-            icon="bi-thermometer-half"
-            iconColor={avgCpuTemp >= 70 ? '#dc3545' : avgCpuTemp >= 55 ? '#fd7e14' : '#0dcaf0'}
+            title="Write Throughput"
+            value="—"
+            subtitle="Phase 4 instrumentation"
+            icon="bi-lightning-charge"
+            iconColor="#ffc107"
+          />
+        </div>
+        <div className="col-sm-6 col-md-4 col-xl-2">
+          <StatCard
+            title="Read Throughput"
+            value="—"
+            subtitle="Phase 4 instrumentation"
+            icon="bi-book"
+            iconColor="#0dcaf0"
+          />
+        </div>
+        <div className="col-sm-6 col-md-4 col-xl-2">
+          <StatCard
+            title="Error Rate"
+            value="0.0%"
+            subtitle="Phase 4 instrumentation"
+            icon="bi-exclamation-octagon"
+            iconColor="#dc3545"
           />
         </div>
       </div>
 
       {/* Node Health Mini-Map */}
       <div className="card shadow-sm border-0 mb-4">
-        <div className="card-header bg-white border-bottom">
+        <div className="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
           <h6 className="mb-0 fw-semibold">
             <i className="bi bi-grid-3x3-gap me-2 text-primary"></i>
             Node Health Map
           </h6>
+          {onlineNodes.length > 0 && (
+            <span
+              className="badge bg-light border"
+              style={{
+                color: avgCpuTemp >= 70 ? '#dc3545' : avgCpuTemp >= 55 ? '#fd7e14' : '#198754',
+              }}
+            >
+              <i className="bi bi-thermometer-half me-1"></i>
+              Avg CPU Temp: {avgCpuTemp.toFixed(1)}°C
+            </span>
+          )}
         </div>
         <div className="card-body">
           <div className="d-flex flex-wrap gap-4 align-items-center">
