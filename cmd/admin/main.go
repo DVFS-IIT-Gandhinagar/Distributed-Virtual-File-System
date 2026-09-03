@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	stateFile := flag.String("state_file", "./metaserver_state.json", "Path to metaserver state JSON")
+	stateFile := flag.String("state_file", "./bin/metaserver_state.json", "Path to metaserver state JSON")
 	port := flag.Int("port", 8080, "Admin server port")
 	staticDir := flag.String("static", "./cmd/admin/static", "Path to static frontend files")
 	flag.Parse()
