@@ -12,6 +12,7 @@ endif
 FILESERVER_BINARY=$(BINARY_DIR)/fileserver$(BINARY_EXT)
 CLIENT_BINARY=$(BINARY_DIR)/client$(BINARY_EXT)
 METASERVER_BINARY=$(BINARY_DIR)/metaserver$(BINARY_EXT)
+ADMIN_BINARY=$(BINARY_DIR)/admin$(BINARY_EXT)
 API_DIR=api
 GO=go
 PROTOC=protoc
@@ -26,6 +27,8 @@ build: certs
 	@$(GO) build -o $(CLIENT_BINARY) cmd/client/main.go
 	@echo "Building meta server..."
 	@$(GO) build -o $(METASERVER_BINARY) cmd/metaserver/main.go
+	@echo "Building admin server..."
+	@$(GO) build -o $(ADMIN_BINARY) cmd/admin/main.go
 	@echo "Build complete!"
 
 
@@ -64,6 +67,14 @@ run-metaserver: build
 
 exec-metaserver:
 	@./$(METASERVER_BINARY) -port=50052
+
+# Run admin console
+run-admin: build
+	@echo "Starting admin console..."
+	@./$(ADMIN_BINARY) -port=8080 -state_file=./metaserver_state.json
+
+exec-admin:
+	@./$(ADMIN_BINARY) -port=8080 -state_file=./metaserver_state.json
 
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice
@@ -111,6 +122,12 @@ test-edge: certs
 	@echo "Running edge-case test suite..."
 	@$(GO) test ./internal/fileserver ./internal/metaserver -count=1 -v
 	@echo "Edge-case tests complete!"
+
+# Run admin console tests
+test-admin:
+	@echo "Running admin test suite..."
+	@$(GO) test ./internal/admin -count=1 -v
+	@echo "Admin tests complete!"
 
 # Run integration and end-to-end tests
 test-integration: certs

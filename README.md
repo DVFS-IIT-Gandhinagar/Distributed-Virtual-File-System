@@ -390,3 +390,49 @@ Other flags and defaults
 - port = 50051
 - tls = false
 - meta = true (whether to go to mds or not)
+
+### For Admin Console (from project root)
+
+The admin console provides a centralized web dashboard to monitor fileserver nodes (storage, CPU temperature, RAM, uptime, per-user usage), active users, and system health in real-time.
+
+#### 1. Building the Frontend (one-time setup)
+The React SPA source is in `cmd/admin/ui`. Build the static assets into `cmd/admin/static`:
+
+```bash
+cd cmd/admin/ui
+npm install
+npm run build
+cd ../../..
+```
+
+*(For live UI development with hot-reload against a running backend, run `npm run dev` inside `cmd/admin/ui`)*
+
+#### 2. Starting the Admin Server
+
+```bash
+go run .\cmd\admin\main.go --state_file=./metaserver_state.json --port=8080
+```
+
+Or with `make`:
+```bash
+make run-admin
+```
+
+Other flags and defaults:
+- `port = 8080` (HTTP port for the web dashboard and REST API)
+- `state_file = ./metaserver_state.json` (metaserver state file used for dynamic node discovery)
+- `static = ./cmd/admin/static` (path to frontend build directory)
+
+Open your browser at `http://localhost:8080` to view the dashboard.
+
+#### 3. How Telemetry Scrapes Work
+- Each fileserver automatically starts a lightweight `/metrics` HTTP sidecar on port `port - 41000` (e.g., gRPC port `50052` → metrics HTTP `9052`).
+- The admin backend reads `metaserver_state.json`, discovers active fileserver addresses, scrapes their `/metrics` endpoints every 5 seconds, maintains a 60-minute in-memory ring buffer for historical graphs, and serves the UI.
+
+#### 4. Running Admin Console Tests
+```bash
+make test-admin
+# or
+go test ./internal/admin -v
+```
+
