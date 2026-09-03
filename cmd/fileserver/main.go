@@ -38,6 +38,11 @@ func main() {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
 
+	// Start metrics HTTP sidecar (port = gRPC port - 41000, e.g. 50052 -> 9052)
+	metricsPort := *port - 41000
+	server.StartMetricsHTTP(metricsPort)
+	log.Printf("Metrics HTTP on :%d", metricsPort)
+
 	// Create gRPC handler
 	handler := fileserver.NewGRPCHandler(server)
 
