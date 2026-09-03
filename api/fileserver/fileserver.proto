@@ -30,6 +30,7 @@ message CreateFileRequest {
   FID fid = 2;
   InodeType type = 3;
   string root_user = 4;
+  uint64 size = 5; // optional expected file size for quota pre-check
 }
 
 message CreateFileResponse {
@@ -260,6 +261,16 @@ message RegisterClientResponse {
   FID user_root_fid = 3; // FID of user's root directory
 }
 
+message SetQuotaRequest {
+  string username = 1;
+  uint64 quota_bytes = 2;
+}
+
+message SetQuotaResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // FileServer service
 service FileServer {
   rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse);
@@ -281,6 +292,7 @@ service FileServer {
   rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse);
   rpc Share(ShareRequest) returns (ShareResponse);
   rpc Unshare(UnshareRequest) returns (UnshareResponse);
+  rpc SetQuota(SetQuotaRequest) returns (SetQuotaResponse);
 }
 
 // To build these run: make proto
