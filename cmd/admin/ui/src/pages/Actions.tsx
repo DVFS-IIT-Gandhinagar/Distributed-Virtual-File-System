@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchCluster, fetchActionPresets, fetchCommandHistory } from '../api';
@@ -101,19 +101,19 @@ export default function Actions() {
   };
 
   const handleStreamEvent = (ev: ActionEvent) => {
-    switch (ev.Type || ev.type) {
+    switch (ev.type) {
       case 'action_started':
         setExecuting(true);
         setExecStatus('running');
         appendTerminal(`\n🚀 [ACTION STARTED] ID: ${ev.action_id} | Command: ${ev.command || 'custom'}`);
         // Initialize all target nodes to pending in the live status matrix
-        setNodeStatusMap((prev) => {
+        {
           const map: Record<string, NodeExecutionStatus> = {};
           selectedNodeIDs.forEach((id) => {
             map[id] = { status: 'pending' };
           });
-          return map;
-        });
+          setNodeStatusMap(map);
+        }
         break;
 
       case 'node_started':
