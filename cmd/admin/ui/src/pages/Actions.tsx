@@ -73,6 +73,11 @@ export default function Actions() {
   // Selected History Record for Details Modal
   const [viewingRecord, setViewingRecord] = useState<CommandRecord | null>(null);
 
+  // Always scroll window to top when opening the Actions tab
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // Synchronize initial node selection when cluster loads (or handle URL search params)
   useEffect(() => {
     const nodeParam = searchParams.get('node');
