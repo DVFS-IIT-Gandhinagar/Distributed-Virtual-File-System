@@ -307,6 +307,15 @@ func (c *CacheHandler) Refresh() error {
 	if c == nil || c.curr == nil {
 		return fmt.Errorf("cache handler is not initialized")
 	}
+
+	// 1. Re-register session with fileserver (restores callbacks & validates root FID)
+	if c.client != nil {
+		if err := c.client.ReRegister(); err != nil {
+			log.Printf("Warning: failed to re-register with server during refresh: %v", err)
+		}
+	}
+
+	// 2. Refresh current directory cache
 	return c.populateCurrentDirCache()
 }
 
@@ -342,6 +351,12 @@ func (c *CacheHandler) populateCurrentDirCache() error {
 	if err != nil {
 		log.Printf("Error fetching %s directory contents: %v", c.curr.Name, err)
 		return err
+	}
+
+	// Defense-in-depth: warn if server returned empty but we have cached entries
+	if len(files) == 0 && len(c.curr.children) > 0 {
+		log.Printf("Warning: server returned 0 entries for dir '%s' but cache has %d entries. Possible stale FID.",
+			c.curr.Name, len(c.curr.children))
 	}
 
 	// Replace children map from authoritative server listing.

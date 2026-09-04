@@ -33,6 +33,7 @@ type FileServer struct {
 	sessions    map[string]*clientSession // username -> last known session metadata
 	startTime   time.Time
 	quotas      map[string]uint64 // username -> quota in bytes
+	inodeStore  *InodeStore
 }
 
 type trashEntry struct {
@@ -72,31 +73,31 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertP
 	// Load custom quota configuration if present
 	_ = fs.loadQuotas()
 
-	// Check if rootDir already exists
-	if _, err := os.Stat(rootDir); err == nil {
-		// Root directory exists, scan and load existing data using FileScanner
-		fileScanner := &FileScanner{rootDir: rootDir, serverID: serverID, fs: fs}
+	// Ensure root directory exists
+	if err := os.MkdirAll(rootDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create root dir: %w", err)
+	}
 
-		if err := fileScanner.loadExistingData(&fs.nextInodeID, &fs.inodes, &fs.users); err != nil {
-			return nil, fmt.Errorf("failed to load existing data: %w", err)
-		}
+	// Initialize persistent inode store before scanning or creating inodes
+	inodeStore, err := NewInodeStore(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize inode store: %w", err)
+	}
+	fs.inodeStore = inodeStore
+	fs.nextInodeID = inodeStore.NextInodeID()
 
-		log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
+	// Scan and load existing data using FileScanner
+	fileScanner := &FileScanner{rootDir: rootDir, serverID: serverID, fs: fs}
+	if err := fileScanner.loadExistingData(&fs.nextInodeID, &fs.inodes, &fs.users); err != nil {
+		return nil, fmt.Errorf("failed to load existing data: %w", err)
+	}
 
-		// Load explicit directory shares from disk
-		if err := fs.LoadDirShares(); err != nil {
-			log.Printf("Warning: failed to load dirShares: %v", err)
-			// Continue anyway - start with empty dirShares
-			fs.Shared = make(map[string][]string)
-		}
+	log.Printf("Loaded existing data from root directory, current inode count: %d", len(fs.inodes))
 
-	} else {
-		// Root directory doesn't exist, create it
-		if err := os.MkdirAll(rootDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create root dir: %w", err)
-		}
-
-		// Initialize empty dirShares
+	// Load explicit directory shares from disk
+	if err := fs.LoadDirShares(); err != nil {
+		log.Printf("Warning: failed to load dirShares: %v", err)
+		// Continue anyway - start with empty dirShares
 		fs.Shared = make(map[string][]string)
 	}
 
@@ -119,10 +120,20 @@ func (fs *FileServer) GetUserRoot(root_path, root_user string) (*domain.FID, err
 			return nil, fmt.Errorf("failed to create user dir: %w", err)
 		}
 
+		var inodeID uint64
+		if fs.inodeStore != nil {
+			inodeID = fs.inodeStore.GetOrAssign(root_user)
+			fs.nextInodeID = fs.inodeStore.NextInodeID()
+			_ = fs.inodeStore.Save()
+		} else {
+			inodeID = fs.nextInodeID
+			atomic.AddUint64(&fs.nextInodeID, 1)
+		}
+
 		// Create root FID for user
 		rootFID = &domain.FID{
 			FileServerID:     fs.serverID,
-			InodeID:          fs.nextInodeID,
+			InodeID:          inodeID,
 			GenerationNumber: 1,
 		}
 
@@ -146,8 +157,6 @@ func (fs *FileServer) GetUserRoot(root_path, root_user string) (*domain.FID, err
 
 		fs.inodes[rootFID.String()] = rootInode
 		fs.users[root_user] = rootFID
-
-		atomic.AddUint64(&fs.nextInodeID, 1)
 	}
 
 	// Ensure per-user trash exists (always use root_user for trash)
@@ -235,12 +244,22 @@ func (fs *FileServer) getOrCreateTrashDirLocked(root_user string) (*domain.Inode
 		return nil, fmt.Errorf("failed to create trash directory: %w", err)
 	}
 
+	trashRelPath := filepath.Join(root_user, trashDirName)
+	var trashInodeID uint64
+	if fs.inodeStore != nil {
+		trashInodeID = fs.inodeStore.GetOrAssign(trashRelPath)
+		fs.nextInodeID = fs.inodeStore.NextInodeID()
+		_ = fs.inodeStore.Save()
+	} else {
+		trashInodeID = fs.nextInodeID
+		atomic.AddUint64(&fs.nextInodeID, 1)
+	}
+
 	trashFID := &domain.FID{
 		FileServerID:     fs.serverID,
-		InodeID:          fs.nextInodeID,
+		InodeID:          trashInodeID,
 		GenerationNumber: 1,
 	}
-	atomic.AddUint64(&fs.nextInodeID, 1)
 
 	ACL := domain.ACL{
 		Owner:  root_user,
@@ -578,6 +597,13 @@ func (fs *FileServer) TrashFile(fid *domain.FID, root_user string, recursive boo
 	trashInode.Children = append(trashInode.Children, inode.FID)
 	fs.updateSubtreePathsLocked(inode, newPath)
 
+	if fs.inodeStore != nil && originalRelPath != "" {
+		if newRelPath, err := filepath.Rel(fs.rootDir, newPath); err == nil {
+			fs.inodeStore.RenamePrefix(originalRelPath, newRelPath)
+			_ = fs.inodeStore.Save()
+		}
+	}
+
 	return finalName, nil
 }
 
@@ -640,6 +666,8 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user, requester string) 
 	finalName := fs.uniqueNameInDirLocked(targetParent, meta.originalName, inode.FID.InodeID)
 	newPath := filepath.Join(targetParent.OSPath, finalName)
 
+	oldTrashRelPath, _ := filepath.Rel(fs.rootDir, inode.OSPath)
+
 	if err := os.Rename(inode.OSPath, newPath); err != nil {
 		return "", fmt.Errorf("failed to restore from trash: %w", err)
 	}
@@ -652,6 +680,13 @@ func (fs *FileServer) RestoreFile(fid *domain.FID, root_user, requester string) 
 	inode.Name = finalName
 	targetParent.Children = append(targetParent.Children, inode.FID)
 	fs.updateSubtreePathsLocked(inode, newPath)
+
+	if fs.inodeStore != nil && oldTrashRelPath != "" {
+		if newRelPath, err := filepath.Rel(fs.rootDir, newPath); err == nil {
+			fs.inodeStore.RenamePrefix(oldTrashRelPath, newRelPath)
+			_ = fs.inodeStore.Save()
+		}
+	}
 
 	if len(meta.sharedSnapshots) > 0 && meta.originalRelPath != "" {
 		newRelPath, relErr := filepath.Rel(fs.rootDir, inode.OSPath)
@@ -1126,15 +1161,12 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		return nil, fmt.Errorf("cannot create files/directories inside trash")
 	}
 
-	// Generate new FID
-	newFID := &domain.FID{
-		FileServerID:     fs.serverID,
-		InodeID:          fs.nextInodeID,
-		GenerationNumber: 1,
-	}
-
 	// Create OS path
 	osPath := filepath.Join(parentInode.OSPath, name)
+	path, err := filepath.Rel(fs.rootDir, osPath)
+	if err != nil {
+		return nil, fmt.Errorf("internal error can't compute path: %w", err)
+	}
 
 	// Create on filesystem
 	switch fileType {
@@ -1148,6 +1180,21 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		if err := os.Mkdir(osPath, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create directory: %w", err)
 		}
+	}
+
+	var inodeID uint64
+	if fs.inodeStore != nil {
+		inodeID = fs.inodeStore.GetOrAssign(path)
+	} else {
+		inodeID = fs.nextInodeID
+		atomic.AddUint64(&fs.nextInodeID, 1)
+	}
+
+	// Generate new FID
+	newFID := &domain.FID{
+		FileServerID:     fs.serverID,
+		InodeID:          inodeID,
+		GenerationNumber: 1,
 	}
 
 	// Create a deep copy of parent's ACL (not a reference)
@@ -1169,11 +1216,6 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 		Size:   0,
 	}
 
-	path, err := filepath.Rel(fs.rootDir, osPath)
-	if err != nil {
-		return nil, fmt.Errorf("internal error can't compute path")
-	}
-
 	if fileType == domain.InodeTypeDirectory {
 		newInode.Children = make([]*domain.FID, 0)
 		fs.SaveACL(path, ACL)
@@ -1185,7 +1227,10 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 	// Add to parent's children
 	parentInode.Children = append(parentInode.Children, newFID)
 
-	atomic.AddUint64(&fs.nextInodeID, 1)
+	if fs.inodeStore != nil {
+		fs.nextInodeID = fs.inodeStore.NextInodeID()
+		_ = fs.inodeStore.Save()
+	}
 
 	return newFID, nil
 }
@@ -1401,10 +1446,18 @@ func (fs *FileServer) DeleteFile(fid *domain.FID, root_user string, recursive bo
 		}
 	}
 
-	// Remove all deleted inodes from the map
+	// Remove all deleted inodes from the map and InodeStore
 	for _, deletedInode := range toDelete {
 		delete(fs.inodes, deletedInode.FID.String())
 		delete(fs.trashMeta, deletedInode.FID.String())
+		if fs.inodeStore != nil {
+			if relPath, err := filepath.Rel(fs.rootDir, deletedInode.OSPath); err == nil {
+				fs.inodeStore.Remove(relPath)
+			}
+		}
+	}
+	if fs.inodeStore != nil {
+		_ = fs.inodeStore.Save()
 	}
 
 	// Collect shared snapshots and remove them from fs.Shared *under the lock*,

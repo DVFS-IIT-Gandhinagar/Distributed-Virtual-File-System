@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
+	"sort"
+	"strings"
 	"sync/atomic"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
@@ -24,77 +25,90 @@ func (scanner *FileScanner) loadExistingData(nextInodeID *uint64, inodes *map[st
 		return fmt.Errorf("failed to read root directory: %w", err)
 	}
 
-	var userWaitGroup sync.WaitGroup
+	// Sort entries deterministically by name (defense-in-depth)
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
 
-	// user volumes are at first level, process each user directory in parallel using goroutines
+	// Process each user directory sequentially to eliminate map race conditions and ensure determinism
 	for _, entry := range entries {
-		if entry.IsDir() {
-			userWaitGroup.Add(1)
-
-			go func(entry os.DirEntry) error {
-				defer userWaitGroup.Done()
-
-				username := entry.Name()
-				userDir := filepath.Join(scanner.rootDir, username)
-
-				// Load ACL from disk (or use default if not found)
-				var ACL domain.ACL
-				if scanner.fs != nil {
-					loadedACL, err := scanner.fs.LoadACL(username, username)
-					if err != nil {
-						fmt.Printf("Warning: failed to load ACL for user %s: %v, using default ACL\n", username, err)
-						ACL = domain.ACL{
-							Owner:  username,
-							Shared: []string{},
-						}
-					} else {
-						ACL = loadedACL
-						fmt.Printf("Loaded ACL for user %s: owner=%s, shared=%v\n", username, ACL.Owner, ACL.Shared)
-					}
-				} else {
-					// Fallback if fs is nil
-					ACL = domain.ACL{
-						Owner:  username,
-						Shared: []string{},
-					}
-				}
-
-				// Create root inode for this user (always inode ID 0)
-				userRootFID := &domain.FID{
-					FileServerID:     scanner.serverID,
-					InodeID:          *nextInodeID,
-					GenerationNumber: 1,
-				}
-				atomic.AddUint64(nextInodeID, 1)
-				(*users)[username] = userRootFID
-
-				// Create root inode
-				userRootInode := &domain.Inode{
-					FID:      userRootFID,
-					Type:     domain.InodeTypeDirectory,
-					Name:     username,
-					OSPath:   userDir,
-					ACL:      ACL,
-					Children: make([]*domain.FID, 0),
-				}
-
-				(*inodes)[userRootFID.String()] = userRootInode
-
-				// Scan user's files and directories (first level only)
-				if err := scanner.scanUserDirectory(username, userDir, userRootInode, nextInodeID, inodes); err != nil {
-					return fmt.Errorf("failed to scan user directory %s: %w", username, err)
-				}
-				userDirSize, err := scanner.calculateDirectorySizes(userRootInode, inodes) // calculate and store sizes of all directories under this user
-				if err != nil {
-					return fmt.Errorf("failed to calculate directory sizes for user %s: %w", username, err)
-				}
-
-				fmt.Printf("Scanned user directory: %s, total size: %d bytes\n", username, userDirSize)
-				return nil
-			}(entry)
+		if !entry.IsDir() {
+			continue
 		}
+		// Skip system metadata and hidden directories
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		username := entry.Name()
+		userDir := filepath.Join(scanner.rootDir, username)
+
+		// Load ACL from disk (or use default if not found)
+		var ACL domain.ACL
+		if scanner.fs != nil {
+			loadedACL, err := scanner.fs.LoadACL(username, username)
+			if err != nil {
+				fmt.Printf("Warning: failed to load ACL for user %s: %v, using default ACL\n", username, err)
+				ACL = domain.ACL{
+					Owner:  username,
+					Shared: []string{},
+				}
+			} else {
+				ACL = loadedACL
+				fmt.Printf("Loaded ACL for user %s: owner=%s, shared=%v\n", username, ACL.Owner, ACL.Shared)
+			}
+		} else {
+			ACL = domain.ACL{
+				Owner:  username,
+				Shared: []string{},
+			}
+		}
+
+		var inodeID uint64
+		if scanner.fs != nil && scanner.fs.inodeStore != nil {
+			inodeID = scanner.fs.inodeStore.GetOrAssign(username)
+		} else {
+			inodeID = *nextInodeID
+			atomic.AddUint64(nextInodeID, 1)
+		}
+
+		// Create root inode for this user
+		userRootFID := &domain.FID{
+			FileServerID:     scanner.serverID,
+			InodeID:          inodeID,
+			GenerationNumber: 1,
+		}
+		(*users)[username] = userRootFID
+
+		// Create root inode
+		userRootInode := &domain.Inode{
+			FID:      userRootFID,
+			Type:     domain.InodeTypeDirectory,
+			Name:     username,
+			OSPath:   userDir,
+			ACL:      ACL,
+			Children: make([]*domain.FID, 0),
+		}
+		userRootInode.Parent = userRootInode
+
+		(*inodes)[userRootFID.String()] = userRootInode
+
+		// Scan user's files and directories (first level only)
+		if err := scanner.scanUserDirectory(username, userDir, userRootInode, nextInodeID, inodes); err != nil {
+			return fmt.Errorf("failed to scan user directory %s: %w", username, err)
+		}
+		userDirSize, err := scanner.calculateDirectorySizes(userRootInode, inodes) // calculate and store sizes of all directories under this user
+		if err != nil {
+			return fmt.Errorf("failed to calculate directory sizes for user %s: %w", username, err)
+		}
+
+		fmt.Printf("Scanned user directory: %s, total size: %d bytes\n", username, userDirSize)
 	}
-	userWaitGroup.Wait() // wait for all user scanning goroutines to finish before returning
+
+	if scanner.fs != nil && scanner.fs.inodeStore != nil {
+		*nextInodeID = scanner.fs.inodeStore.NextInodeID()
+		_ = scanner.fs.inodeStore.Save()
+	}
 
 	return nil
 }
@@ -118,16 +132,39 @@ func (scanner *FileScanner) scanUserDirectory(username string, userDir string, p
 		if err != nil {
 			return fmt.Errorf("failed to read user directory: %w", err)
 		}
+
+		// Sort child entries deterministically by name
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Name() < entries[j].Name()
+		})
+
 		for _, entry := range entries {
 			// Skip .acl files (they are metadata, not user files)
 			if entry.Name() == ".acl" {
 				continue
 			}
 
+			// Create inode
+			itemPath := filepath.Join(userDir, entry.Name())
+
+			// Calculate relative path from rootDir
+			relPath, err := filepath.Rel(scanner.rootDir, itemPath)
+			if err != nil {
+				return fmt.Errorf("failed to calculate relative path: %w", err)
+			}
+
+			var inodeID uint64
+			if scanner.fs != nil && scanner.fs.inodeStore != nil {
+				inodeID = scanner.fs.inodeStore.GetOrAssign(relPath)
+			} else {
+				inodeID = *nextInodeID
+				atomic.AddUint64(nextInodeID, 1)
+			}
+
 			// Generate new FID for this item
 			newFID := &domain.FID{
 				FileServerID:     scanner.serverID,
-				InodeID:          *nextInodeID,
+				InodeID:          inodeID,
 				GenerationNumber: 1,
 			}
 
@@ -137,15 +174,6 @@ func (scanner *FileScanner) scanUserDirectory(username string, userDir string, p
 				inodeType = domain.InodeTypeDirectory
 			} else {
 				inodeType = domain.InodeTypeFile
-			}
-
-			// Create inode
-			itemPath := filepath.Join(userDir, entry.Name())
-
-			// Calculate relative path from rootDir for ACL loading
-			relPath, err := filepath.Rel(scanner.rootDir, itemPath)
-			if err != nil {
-				return fmt.Errorf("failed to calculate relative path: %w", err)
 			}
 
 			// Load ACL from disk (or use default if not found)
@@ -203,9 +231,6 @@ func (scanner *FileScanner) scanUserDirectory(username string, userDir string, p
 
 			// Add to parent's children
 			parentInode.Children = append(parentInode.Children, newFID)
-
-			// Increment inode ID counter
-			atomic.AddUint64(nextInodeID, 1)
 
 			// If dir then add to queue
 			if inodeType == domain.InodeTypeDirectory {

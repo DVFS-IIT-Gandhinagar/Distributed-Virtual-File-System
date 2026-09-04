@@ -169,6 +169,46 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	return c.currentFID, nil
 }
 
+// ReRegister re-establishes the client session with the fileserver.
+// This restores the server-side session (for callbacks) and verifies
+// that the root FID hasn't changed.
+func (c *Client) ReRegister() error {
+	if c.serverConn == nil {
+		return fmt.Errorf("not connected to fileserver")
+	}
+	resp, err := c.serverConn.RegisterClient(context.Background(), &pb.RegisterClientRequest{
+		ClientId:        c.clientID,
+		CallbackAddress: c.callbackAddr,
+		Username:        c.username,
+		RootUser:        c.root_user,
+		RootPath:        c.root_path,
+	})
+	if err != nil {
+		return fmt.Errorf("re-registration RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("re-registration failed: %s", resp.Error)
+	}
+
+	newRootFID := domain.FIDFromProto(resp.UserRootFid)
+	if newRootFID == nil {
+		return fmt.Errorf("server returned nil root FID")
+	}
+
+	c.rootFID = newRootFID
+	if c.cacheHandler != nil && c.cacheHandler.root != nil {
+		c.cacheHandler.root.fid = newRootFID
+	}
+
+	// If current directory is not root (e.g. user was in a subdirectory),
+	// sync the server-side session's currentDirFID to our current directory.
+	if c.currentFID != nil && c.rootFID != nil && c.currentFID.String() != c.rootFID.String() {
+		_, _ = c.ChangeDirectory(".")
+	}
+
+	return nil
+}
+
 // Share another user the root dir only if current user is owner
 func (c *Client) Share(share_with string) error {
 	resp, err := c.serverConn.Share(context.Background(), &pb.ShareRequest{
