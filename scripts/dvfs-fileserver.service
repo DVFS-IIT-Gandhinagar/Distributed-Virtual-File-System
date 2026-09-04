@@ -7,9 +7,12 @@ Wants=network-online.target
 Type=simple
 # Dynamic user resolution: automatically detects the primary non-root user (UID 1000: e.g. ubuntu, rpi, jsm)
 # or respects DVFS_USER / DVFS_REPO environment overrides if set.
-Environment=META_ADDR=127.0.0.1:50051
+# Environment settings:
+# start-fileserver.sh automatically resolves FS_ID (dvfs2 -> fs2) and queries dvfs1 IP from Gist.
+# Manual/Static IP overrides (uncomment if you want to hardcode a static IP or custom ID):
+# Environment=META_ADDR=10.0.171.38:50051
+# Environment=FS_ID=fs1
 Environment=FS_PORT=50052
-Environment=FS_ID=fs1
 
 ExecStart=/bin/bash -c '\
   USER_NAME=$${DVFS_USER:-$$(id -un 1000 2>/dev/null || whoami)}; \
