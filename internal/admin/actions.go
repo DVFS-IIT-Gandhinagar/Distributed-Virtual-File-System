@@ -149,14 +149,11 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		return fmt.Sprintf("git -C %s pull origin %s", repoPath, branch)
 
 	case ActionBuild:
-		if req.CustomCommand != "" {
-			return req.CustomCommand
-		}
 		target := req.MakeTarget
 		if target != "" {
 			target = " " + target
 		}
-		return fmt.Sprintf("export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin; make -C %s%s", repoPath, target)
+		return fmt.Sprintf(". ~/.profile 2>/dev/null; . ~/.bashrc 2>/dev/null; export PATH=\"$PATH:/usr/local/go/bin:/snap/bin:$HOME/go/bin\"; make -C %s%s", repoPath, target)
 
 	case ActionRestart:
 		if req.CustomCommand != "" {

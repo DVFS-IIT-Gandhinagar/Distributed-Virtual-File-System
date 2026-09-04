@@ -166,5 +166,5 @@ help:
 SERVER ?= localhost
 certs:
 	@echo "Generating TLS certificates..."
-	@go run scripts/gen-certs/main.go $(SERVER)
+	@$(GO) run scripts/gen-certs/main.go $(SERVER)
 	@echo "Certificates generated!"

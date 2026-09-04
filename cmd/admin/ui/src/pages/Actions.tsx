@@ -232,7 +232,7 @@ export default function Actions() {
       repo_path: repoPath,
       git_branch: activeAction === 'pull' ? gitBranch : undefined,
       make_target: activeAction === 'build' ? makeTarget : undefined,
-      custom_command: customCommand || undefined,
+      custom_command: activeAction === 'custom' ? customCommand : undefined,
       restart_mode: restartMode,
       log_mode: logMode,
       log_lines: logLines,
@@ -241,14 +241,6 @@ export default function Actions() {
       ssh_port: sshPort && sshPort !== 22 ? sshPort : undefined,
       restart_params: { ...presets, ...nodeParamsOverrides },
     };
-
-    if (activeAction === 'pull' && gitBranch) {
-      payload.custom_command = `git -C ${repoPath} pull origin ${gitBranch}`;
-    }
-
-    if (activeAction === 'build' && makeTarget) {
-      payload.custom_command = `make -C ${repoPath} ${makeTarget}`;
-    }
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(payload));
