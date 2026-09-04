@@ -6,11 +6,12 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=jsm
-Group=jsm
 WorkingDirectory=/opt/dvfs
-ExecStart=/usr/bin/python3 /opt/dvfs/update_gist.py
-
-ProtectSystem=strict
-ReadWritePaths=/opt/dvfs
-PrivateTmp=true
+# Automatically runs as the primary non-root user (UID 1000: e.g. ubuntu, rpi, jsm) or DVFS_USER
+ExecStart=/bin/bash -c '\
+  USER_NAME=$${DVFS_USER:-$$(id -un 1000 2>/dev/null || whoami)}; \
+  if command -v runuser >/dev/null 2>&1; then \
+    exec runuser -u "$$USER_NAME" -- /usr/bin/python3 /opt/dvfs/update_gist.py; \
+  else \
+    exec su - "$$USER_NAME" -c "/usr/bin/python3 /opt/dvfs/update_gist.py"; \
+  fi'

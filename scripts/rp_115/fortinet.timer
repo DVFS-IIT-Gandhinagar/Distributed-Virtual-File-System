@@ -3,8 +3,8 @@
 Description=Timer for Fortinet Connect service
 
 [Timer]
-OnBootSec=1min
-OnUnitActiveSec=60min
+OnBootSec=3min
+OnUnitInactiveSec=60min
 RandomizedDelaySec=30s
 
 [Install]
