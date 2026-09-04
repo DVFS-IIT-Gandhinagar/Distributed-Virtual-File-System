@@ -62,7 +62,7 @@ export default function Actions() {
   const [execStatus, setExecStatus] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
   const [nodeStatusMap, setNodeStatusMap] = useState<Record<string, NodeExecutionStatus>>({});
   const [autoScroll, setAutoScroll] = useState(true);
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const terminalContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // WebSocket Connection Resilience
@@ -89,10 +89,10 @@ export default function Actions() {
     }
   }, [cluster, searchParams]);
 
-  // Auto-scroll terminal
+  // Auto-scroll terminal container only (does NOT scroll the outer window/page)
   useEffect(() => {
-    if (autoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (autoScroll && terminalContainerRef.current) {
+      terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
     }
   }, [terminalLines, autoScroll]);
 
@@ -838,6 +838,7 @@ export default function Actions() {
             </div>
 
             <div
+              ref={terminalContainerRef}
               className="card-body bg-dark text-light p-3 flex-grow-1 font-monospace"
               style={{
                 minHeight: '380px',
@@ -873,7 +874,6 @@ export default function Actions() {
                   </div>
                 ))
               )}
-              <div ref={terminalEndRef} />
             </div>
           </div>
         </div>
