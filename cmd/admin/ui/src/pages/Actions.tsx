@@ -136,22 +136,25 @@ export default function Actions() {
         }
         break;
 
-      case 'node_finished':
-        if (ev.exit_code === 0) {
+      case 'node_finished': {
+        const exitCode = ev.exit_code ?? (ev.error ? -1 : 0);
+        const isSuccess = exitCode === 0 && !ev.error;
+        if (isSuccess) {
           appendTerminal(`✅ [FS-${ev.node_id}] Succeeded in ${ev.duration_ms}ms (Exit 0)`);
         } else {
-          appendTerminal(`❌ [FS-${ev.node_id}] Failed with code ${ev.exit_code} (${ev.error || 'error'}) in ${ev.duration_ms}ms`);
+          appendTerminal(`❌ [FS-${ev.node_id}] Failed with code ${exitCode} (${ev.error || 'error'}) in ${ev.duration_ms}ms`);
         }
         setNodeStatusMap((prev) => ({
           ...prev,
           [ev.node_id || '']: {
-            status: ev.exit_code === 0 ? 'success' : 'failed',
+            status: isSuccess ? 'success' : 'failed',
             durationMs: ev.duration_ms,
-            exitCode: ev.exit_code,
+            exitCode: exitCode,
             error: ev.error,
           },
         }));
         break;
+      }
 
       case 'action_finished':
         setExecuting(false);

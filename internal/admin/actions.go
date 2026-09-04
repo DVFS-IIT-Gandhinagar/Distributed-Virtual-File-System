@@ -61,7 +61,7 @@ type ActionEvent struct {
 	Address    string `json:"address,omitempty"`
 	Stream     string `json:"stream,omitempty"` // "stdout" or "stderr"
 	Chunk      string `json:"chunk,omitempty"`
-	ExitCode   int    `json:"exit_code,omitempty"`
+	ExitCode   int    `json:"exit_code"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Status     string `json:"status,omitempty"` // "running", "success", "failed"
 	Error      string `json:"error,omitempty"`
