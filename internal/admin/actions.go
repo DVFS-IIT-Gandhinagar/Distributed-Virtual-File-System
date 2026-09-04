@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ type NodeRestartParams struct {
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	SSHPort  int    `json:"ssh_port,omitempty"`
+	SSHUser  string `json:"ssh_user,omitempty"`
 	MetaAddr string `json:"meta_addr"`
 	OwnIP    string `json:"own_ip"`
 	DataDir  string `json:"data_dir"`
@@ -113,12 +115,20 @@ func (o *Orchestrator) GetPresets() map[string]*NodeRestartParams {
 			host = node.Address
 		}
 
+		nodeSSHUser := o.defaultSSHUser
+		if nodeSSHUser == "" || strings.HasPrefix(nodeSSHUser, "dvfs") {
+			if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
+				nodeSSHUser = fmt.Sprintf("dvfs%d", num+1)
+			}
+		}
+
 		presets[fsID] = &NodeRestartParams{
 			FsID:     fsID,
 			Address:  node.Address,
 			Host:     host,
 			Port:     port,
 			SSHPort:  o.defaultSSHPort,
+			SSHUser:  nodeSSHUser,
 			MetaAddr: "127.0.0.1:50051",
 			OwnIP:    host,
 			DataDir:  fmt.Sprintf("./fileserver_data_%s", fsID),
@@ -374,7 +384,16 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 			stdoutWriter := &eventWriter{nodeID: nID, stream: "stdout", actionID: actionID, onEvent: onEvent}
 			stderrWriter := &eventWriter{nodeID: nID, stream: "stderr", actionID: actionID, onEvent: onEvent}
 
-			exitCode, err := o.ssh.Run(execCtx, host, sshPort, sshUser, sshKeyPath, cmd, stdoutWriter, stderrWriter)
+			nodeUser := sshUser
+			if params != nil && params.SSHUser != "" {
+				nodeUser = params.SSHUser
+			} else if sshUser == "" || strings.HasPrefix(sshUser, "dvfs") {
+				if num, parseErr := strconv.Atoi(nID); parseErr == nil {
+					nodeUser = fmt.Sprintf("dvfs%d", num+1)
+				}
+			}
+
+			exitCode, err := o.ssh.Run(execCtx, host, sshPort, nodeUser, sshKeyPath, cmd, stdoutWriter, stderrWriter)
 			nodeDuration := time.Since(nodeStart).Milliseconds()
 
 			nodeOutput := stdoutWriter.buf.String()
