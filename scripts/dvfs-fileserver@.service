@@ -8,10 +8,12 @@ Type=simple
 User=%i
 WorkingDirectory=%h/Distributed-Virtual-File-System
 
-# Environment overrides (adjust META_ADDR, FS_PORT, FS_ID as needed)
-Environment=META_ADDR=127.0.0.1:50051
+# Environment settings:
+# start-fileserver.sh automatically resolves FS_ID (%i -> fs<N>) and queries dvfs1 IP from Gist.
+# Manual/Static IP overrides (uncomment if you want to hardcode a static IP or custom ID):
+# Environment=META_ADDR=10.0.171.38:50051
+# Environment=FS_ID=fs1
 Environment=FS_PORT=50052
-Environment=FS_ID=fs1
 Environment=DATA_DIR=%h/Distributed-Virtual-File-System/fileserver_data
 
 # ExecStart executes the auto-IP detecting startup wrapper
