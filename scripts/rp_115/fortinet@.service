@@ -1,0 +1,20 @@
+# /etc/systemd/system/fortinet@.service
+# Usage: sudo systemctl enable --now fortinet@<username>.service
+# sudo systemctl daemon-reload
+# Example: sudo systemctl enable --now fortinet@$USER.service
+[Unit]
+Description=Fortinet Connect service for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h
+ExecStart=/bin/bash %h/connect.sh
+Restart=always
+RestartSec=60min
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

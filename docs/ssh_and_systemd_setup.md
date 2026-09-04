@@ -63,10 +63,11 @@ On each Fileserver node:
 sudo cp scripts/dvfs-fileserver.service /etc/systemd/system/dvfs-fileserver.service
 ```
 
-### Step 2: Adjust Paths and Environment Variables
-Edit `/etc/systemd/system/dvfs-fileserver.service`:
-- Set `User=` to your node's username (e.g. `ubuntu`).
-- Set `WorkingDirectory=` to the repository path on the node.
+### Step 2: Adjust Environment Variables (Optional)
+The service automatically detects the non-root primary user (UID 1000, e.g. `ubuntu`, `rpi`, `jsm`) and their `~/Distributed-Virtual-File-System` path dynamically!
+
+If your setup uses non-standard ports or paths, edit `/etc/systemd/system/dvfs-fileserver.service`:
+- (Optional) Set `Environment=DVFS_USER=<user>` if not using the primary UID 1000 user.
 - Update `META_ADDR=` to the Metaserver's `<IP>:50051`.
 - Set `FS_ID=` and `FS_PORT=` (e.g. `fs1` / `50052`).
 

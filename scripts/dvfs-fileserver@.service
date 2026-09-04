@@ -1,0 +1,27 @@
+[Unit]
+Description=Distributed Virtual File System (DVFS) Fileserver for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/Distributed-Virtual-File-System
+
+# Environment overrides (adjust META_ADDR, FS_PORT, FS_ID as needed)
+Environment=META_ADDR=127.0.0.1:50051
+Environment=FS_PORT=50052
+Environment=FS_ID=fs1
+Environment=DATA_DIR=%h/Distributed-Virtual-File-System/fileserver_data
+
+# ExecStart executes the auto-IP detecting startup wrapper
+ExecStart=/bin/bash %h/Distributed-Virtual-File-System/scripts/start-fileserver.sh
+
+Restart=on-failure
+RestartSec=3s
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

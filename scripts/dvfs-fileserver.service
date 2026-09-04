@@ -5,19 +5,22 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Change to the non-root user running the service on the Ubuntu node
-User=ubuntu
-# Update to the path where DVFS is cloned on the node
-WorkingDirectory=/home/ubuntu/Distributed-Virtual-File-System
-
-# Environment overrides (adjust META_ADDR, FS_PORT, FS_ID as needed)
+# Dynamic user resolution: automatically detects the primary non-root user (UID 1000: e.g. ubuntu, rpi, jsm)
+# or respects DVFS_USER / DVFS_REPO environment overrides if set.
 Environment=META_ADDR=127.0.0.1:50051
 Environment=FS_PORT=50052
 Environment=FS_ID=fs1
-Environment=DATA_DIR=/home/ubuntu/Distributed-Virtual-File-System/fileserver_data
 
-# ExecStart executes the auto-IP detecting startup wrapper
-ExecStart=/bin/bash /home/ubuntu/Distributed-Virtual-File-System/scripts/start-fileserver.sh
+ExecStart=/bin/bash -c '\
+  USER_NAME=$${DVFS_USER:-$$(id -un 1000 2>/dev/null || whoami)}; \
+  USER_HOME=$${DVFS_HOME:-$$(getent passwd "$$USER_NAME" | cut -d: -f6)}; \
+  REPO_DIR="$${DVFS_REPO:-$$USER_HOME/Distributed-Virtual-File-System}"; \
+  cd "$$REPO_DIR" || { echo "[DVFS ERROR] Repository directory $$REPO_DIR not found" >&2; exit 1; }; \
+  if command -v runuser >/dev/null 2>&1; then \
+    exec runuser -u "$$USER_NAME" -- /bin/bash "$$REPO_DIR/scripts/start-fileserver.sh"; \
+  else \
+    exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-fileserver.sh'\''"; \
+  fi'
 
 Restart=on-failure
 RestartSec=3s
