@@ -5,11 +5,6 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
 # Dynamically runs connect.sh as the primary user (UID 1000, e.g. ubuntu, rpi, jsm) or FORTINET_USER
 ExecStart=/bin/bash -c 'USER_NAME=$${FORTINET_USER:-$$(id -un 1000 2>/dev/null || whoami)}; USER_HOME=$$(getent passwd "$$USER_NAME" | cut -d: -f6); exec su - "$$USER_NAME" -c "$$USER_HOME/connect.sh"'
-Restart=always
-RestartSec=60min
-
-[Install]
-WantedBy=multi-user.target

@@ -14,9 +14,4 @@ export PATH=$PATH:/usr/local/go/bin
 
 go version
 
-git clone "https://github.com/Umang-Shikarvar/Distributed-Virtual-File-System.git"
-
-
-cd "Distributed-Virtual-File-System"
-
 make build

@@ -8,13 +8,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=%i
 WorkingDirectory=%h
 ExecStart=/bin/bash %h/connect.sh
-Restart=always
-RestartSec=60min
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
