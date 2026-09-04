@@ -1,0 +1,16 @@
+# /etc/systemd/system/dvfs-gist.service
+[Unit]
+Description=DVFS Tailscale to Gist Sync
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jsm
+Group=jsm
+WorkingDirectory=/opt/dvfs
+ExecStart=/usr/bin/python3 /opt/dvfs/update_gist.py
+
+ProtectSystem=strict
+ReadWritePaths=/opt/dvfs
+PrivateTmp=true

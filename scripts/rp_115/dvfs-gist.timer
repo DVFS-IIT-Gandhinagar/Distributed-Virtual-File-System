@@ -1,0 +1,11 @@
+# /etc/systemd/system/dvfs-gist.timer
+[Unit]
+Description=Timer for DVFS Tailscale Sync
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=60min
+RandomizedDelaySec=30s
+
+[Install]
+WantedBy=timers.target
