@@ -123,7 +123,16 @@ func (r *RemoteSSHExecutor) Run(ctx context.Context, host string, port int, user
 	err = session.Run(command)
 	if err != nil {
 		if exitErr, ok := err.(*ssh.ExitError); ok {
+			if strings.Contains(command, "reboot") && (exitErr.ExitStatus() == 255 || exitErr.ExitStatus() == -1) {
+				return 0, nil
+			}
 			return exitErr.ExitStatus(), nil
+		}
+		if strings.Contains(command, "reboot") {
+			errMsg := strings.ToLower(err.Error())
+			if err == io.EOF || strings.Contains(errMsg, "eof") || strings.Contains(errMsg, "reset") || strings.Contains(errMsg, "closed") {
+				return 0, nil
+			}
 		}
 		return -1, err
 	}

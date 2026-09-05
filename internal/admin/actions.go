@@ -18,6 +18,7 @@ const (
 	ActionPull    = "pull"
 	ActionBuild   = "build"
 	ActionRestart = "restart"
+	ActionReboot  = "reboot"
 	ActionLogs    = "logs"
 	ActionCustom  = "custom"
 )
@@ -189,6 +190,12 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		}
 		// Default systemd restart (using -n for non-interactive sudo safety)
 		return "sudo -n systemctl restart dvfs-fileserver"
+
+	case ActionReboot:
+		if req.CustomCommand != "" {
+			return req.CustomCommand
+		}
+		return "nohup sh -c 'sleep 2 && sudo -n reboot' >/dev/null 2>&1 & echo 'System reboot scheduled in 2 seconds (machine will restart shortly)'"
 
 	case ActionLogs:
 		if req.CustomCommand != "" {

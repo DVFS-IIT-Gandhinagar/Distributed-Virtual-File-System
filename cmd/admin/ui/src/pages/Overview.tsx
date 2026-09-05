@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -5,7 +6,7 @@ import {
 } from 'recharts';
 import { fetchCluster } from '../api';
 import StatCard from '../components/StatCard';
-import { formatBytes, getStatusColor, getStatusBadgeClass, getStorageBarClass, getStorageBarColor } from '../utils';
+import { formatBytes, getStatusColor, getStatusBadgeClass, getStorageBarClass, getStorageBarColor, formatNodeDisplayName, formatMachineName } from '../utils';
 
 export default function Overview() {
   const navigate = useNavigate();
@@ -14,6 +15,16 @@ export default function Overview() {
     queryFn: fetchCluster,
     refetchInterval: 5000,
   });
+
+  const sortedNodes = useMemo(() => {
+    if (!cluster?.nodes) return [];
+    return [...cluster.nodes].sort((a, b) => {
+      const numA = parseInt(a.fsID, 10);
+      const numB = parseInt(b.fsID, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.fsID.localeCompare(b.fsID);
+    });
+  }, [cluster?.nodes]);
 
   if (isLoading) {
     return (
@@ -35,23 +46,23 @@ export default function Overview() {
     );
   }
 
-  const onlineNodes = cluster.nodes.filter(n => n.status === 'online');
+  const onlineNodes = sortedNodes.filter(n => n.status === 'online');
   const avgCpuTemp =
     onlineNodes.length > 0
       ? onlineNodes.reduce((s, n) => s + n.metrics.cpu_temp_celsius, 0) / onlineNodes.length
       : 0;
 
   // Storage bar chart data
-  const storageData = cluster.nodes.map(n => ({
-    name: `FS-${n.fsID}`,
+  const storageData = sortedNodes.map(n => ({
+    name: `${formatNodeDisplayName(n)} (${formatMachineName(n)})`,
     used: parseFloat((n.metrics.disk_used_bytes / (1024 ** 3)).toFixed(2)),
     free: parseFloat((n.metrics.disk_free_bytes / (1024 ** 3)).toFixed(2)),
     color: getStatusColor(n.status),
   }));
 
   // Memory bar chart data
-  const memData = cluster.nodes.map(n => ({
-    name: `FS-${n.fsID}`,
+  const memData = sortedNodes.map(n => ({
+    name: `${formatNodeDisplayName(n)} (${formatMachineName(n)})`,
     used: parseFloat((n.metrics.mem_used_bytes / (1024 ** 3)).toFixed(2)),
     total: parseFloat((n.metrics.mem_total_bytes / (1024 ** 3)).toFixed(2)),
     color: getStatusColor(n.status),
@@ -97,11 +108,12 @@ export default function Overview() {
         </div>
         <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
-            title="Total Users"
-            value={cluster.total_users}
-            subtitle="Registered users"
+            title="Cluster Users"
+            value={`${cluster.online_users ?? 0} / ${cluster.total_users}`}
+            subtitle={`${cluster.online_users ?? 0} online / ${cluster.total_users} total`}
             icon="bi-people"
             iconColor="#198754"
+            onClick={() => navigate('/users')}
           />
         </div>
         <div className="col-sm-6 col-md-4 col-xl-2">
@@ -154,7 +166,7 @@ export default function Overview() {
         </div>
         <div className="card-body">
           <div className="d-flex flex-wrap gap-4 align-items-center">
-            {cluster.nodes.map(node => (
+            {sortedNodes.map(node => (
               <div key={node.fsID} className="text-center" style={{ cursor: 'pointer' }} onClick={() => navigate('/nodes')}>
                 <div
                   className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-1"
@@ -164,17 +176,18 @@ export default function Overview() {
                     backgroundColor: getStatusColor(node.status),
                     boxShadow: `0 0 0 4px ${getStatusColor(node.status)}33`,
                   }}
-                  title={`${node.address} — ${node.status}`}
+                  title={`${formatNodeDisplayName(node)} (${formatMachineName(node)}) — ${node.address} — ${node.status}`}
                 >
                   <i className="bi bi-server text-white" style={{ fontSize: '1.1rem' }}></i>
                 </div>
-                <small className="fw-semibold d-block">FS-{node.fsID}</small>
+                <small className="fw-semibold d-block">{formatNodeDisplayName(node)}</small>
+                <small className="text-muted d-block" style={{ fontSize: '0.65rem' }}>{formatMachineName(node)}</small>
                 <span className={`badge ${getStatusBadgeClass(node.status)}`} style={{ fontSize: '0.65rem' }}>
                   {node.status}
                 </span>
               </div>
             ))}
-            {cluster.nodes.length === 0 && (
+            {sortedNodes.length === 0 && (
               <p className="text-muted mb-0">No nodes registered.</p>
             )}
           </div>

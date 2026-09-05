@@ -69,7 +69,13 @@ func TestFormatCommand(t *testing.T) {
 		t.Errorf("unexpected tail command: %s", cmdLogsTail)
 	}
 
-	// 7. Custom
+	// 7. Reboot
+	cmdReboot := orchestrator.FormatCommand(&ActionRequest{ActionType: ActionReboot}, "0", params)
+	if !strings.Contains(cmdReboot, "sudo -n reboot") || !strings.Contains(cmdReboot, "sleep 2") {
+		t.Errorf("unexpected reboot command: %s", cmdReboot)
+	}
+
+	// 8. Custom
 	cmdCustom := orchestrator.FormatCommand(&ActionRequest{ActionType: ActionCustom, CustomCommand: "df -h"}, "0", params)
 	if cmdCustom != "df -h" {
 		t.Errorf("unexpected custom command: %s", cmdCustom)

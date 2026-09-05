@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchCluster, fetchActionPresets, fetchCommandHistory } from '../api';
 import type { ActionType, ActionRequest, NodeRestartParams, CommandRecord, ActionEvent } from '../types';
-import { getStatusBadgeClass, formatUptime } from '../utils';
+import { getStatusBadgeClass, formatUptime, formatNodeDisplayName, formatMachineName } from '../utils';
 
 interface NodeExecutionStatus {
   status: 'pending' | 'running' | 'success' | 'failed';
@@ -53,6 +53,9 @@ export default function Actions() {
   const [sshKeyPath, setSshKeyPath] = useState('');
   const [sshPort, setSshPort] = useState<number>(22);
 
+  // Reboot Confirmation Modal State
+  const [showRebootModal, setShowRebootModal] = useState(false);
+
   // Per-Node Restart Overrides
   const [nodeParamsOverrides, setNodeParamsOverrides] = useState<Record<string, NodeRestartParams>>({});
 
@@ -78,20 +81,26 @@ export default function Actions() {
     window.scrollTo(0, 0);
   }, []);
 
-  // Synchronize initial node selection when cluster loads (or handle URL search params)
+  // Synchronize initial node selection when cluster loads (only ONCE or when query params change)
+  const initialSelectionDoneRef = useRef(false);
   useEffect(() => {
+    if (initialSelectionDoneRef.current) return;
+    if (!cluster || cluster.nodes.length === 0) return;
+
     const nodeParam = searchParams.get('node');
     const actionParam = searchParams.get('action') as ActionType | null;
 
     if (nodeParam) {
       setSelectedNodeIDs([nodeParam]);
-    } else if (cluster && cluster.nodes.length > 0 && selectedNodeIDs.length === 0) {
+    } else {
       setSelectedNodeIDs(cluster.nodes.map((n) => n.fsID));
     }
 
-    if (actionParam && ['pull', 'build', 'restart', 'logs', 'custom'].includes(actionParam)) {
+    if (actionParam && ['pull', 'build', 'restart', 'reboot', 'logs', 'custom'].includes(actionParam)) {
       setActiveAction(actionParam);
     }
+
+    initialSelectionDoneRef.current = true;
   }, [cluster, searchParams]);
 
   // Auto-scroll terminal container only (does NOT scroll the outer window/page)
@@ -122,7 +131,7 @@ export default function Actions() {
         break;
 
       case 'node_started':
-        appendTerminal(`⚡ [FS-${ev.node_id} | ${ev.address}] Starting execution...`);
+        appendTerminal(`⚡ [${formatNodeDisplayName(ev.node_id || '')} | ${ev.address}] Starting execution...`);
         setNodeStatusMap((prev) => ({
           ...prev,
           [ev.node_id || '']: { status: 'running' },
@@ -134,7 +143,7 @@ export default function Actions() {
           const lines = ev.chunk.split('\n');
           lines.forEach((line) => {
             if (line.trim().length > 0) {
-              const prefix = `[FS-${ev.node_id}] `;
+              const prefix = `[${formatNodeDisplayName(ev.node_id || '')}] `;
               appendTerminal(`${prefix}${line}`);
             }
           });
@@ -144,10 +153,11 @@ export default function Actions() {
       case 'node_finished': {
         const exitCode = ev.exit_code ?? (ev.error ? -1 : 0);
         const isSuccess = exitCode === 0 && !ev.error;
+        const nodeName = formatNodeDisplayName(ev.node_id || '');
         if (isSuccess) {
-          appendTerminal(`✅ [FS-${ev.node_id}] Succeeded in ${ev.duration_ms}ms (Exit 0)`);
+          appendTerminal(`✅ [${nodeName}] Succeeded in ${ev.duration_ms}ms (Exit 0)`);
         } else {
-          appendTerminal(`❌ [FS-${ev.node_id}] Failed with code ${exitCode} (${ev.error || 'error'}) in ${ev.duration_ms}ms`);
+          appendTerminal(`❌ [${nodeName}] Failed with code ${exitCode} (${ev.error || 'error'}) in ${ev.duration_ms}ms`);
         }
         setNodeStatusMap((prev) => ({
           ...prev,
@@ -224,13 +234,7 @@ export default function Actions() {
     };
   }, [connectWebSocket]);
 
-  const handleExecute = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (selectedNodeIDs.length === 0) {
-      alert('Please select at least one node to target.');
-      return;
-    }
-
+  const dispatchAction = () => {
     const payload: ActionRequest = {
       action_type: activeAction,
       target_node_ids: selectedNodeIDs,
@@ -254,18 +258,42 @@ export default function Actions() {
     }
   };
 
+  const handleExecute = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (selectedNodeIDs.length === 0) {
+      alert('Please select at least one node to target.');
+      return;
+    }
+    if (activeAction === 'reboot') {
+      setShowRebootModal(true);
+      return;
+    }
+    dispatchAction();
+  };
+
+  // Deterministically sort target nodes numerically (0, 1, ... 8 -> FS-1 to FS-9)
+  const sortedTargetNodes = useMemo(() => {
+    if (!cluster?.nodes) return [];
+    return [...cluster.nodes].sort((a, b) => {
+      const numA = parseInt(a.fsID, 10);
+      const numB = parseInt(b.fsID, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.fsID.localeCompare(b.fsID);
+    });
+  }, [cluster?.nodes]);
+
   const toggleSelectAll = () => {
     if (!cluster) return;
     if (selectedNodeIDs.length === cluster.nodes.length) {
       setSelectedNodeIDs([]);
     } else {
-      setSelectedNodeIDs(cluster.nodes.map((n) => n.fsID));
+      setSelectedNodeIDs(sortedTargetNodes.map((n) => n.fsID));
     }
   };
 
   const selectHealthyOnly = () => {
     if (!cluster) return;
-    const healthy = cluster.nodes.filter((n) => n.status === 'online').map((n) => n.fsID);
+    const healthy = sortedTargetNodes.filter((n) => n.status === 'online').map((n) => n.fsID);
     setSelectedNodeIDs(healthy);
   };
 
@@ -311,8 +339,10 @@ export default function Actions() {
         </div>
         <div className="card-body">
           <div className="row g-3">
-            {cluster?.nodes.map((node) => {
+            {sortedTargetNodes.map((node) => {
               const isSelected = selectedNodeIDs.includes(node.fsID);
+              const nodeDisplay = formatNodeDisplayName(node);
+              const machine = formatMachineName(node);
               return (
                 <div key={node.fsID} className="col-sm-6 col-md-4 col-xl-3">
                   <div
@@ -334,7 +364,9 @@ export default function Actions() {
                           checked={isSelected}
                           onChange={() => {}}
                         />
-                        <label className="form-check-label fw-bold ms-1">FS-{node.fsID}</label>
+                        <label className="form-check-label fw-bold ms-1">
+                          {nodeDisplay} <small className="text-muted fw-normal">({machine})</small>
+                        </label>
                       </div>
                       <span className={`badge ${getStatusBadgeClass(node.status)}`}>{node.status}</span>
                     </div>
@@ -380,6 +412,14 @@ export default function Actions() {
                     onClick={() => setActiveAction('restart')}
                   >
                     <i className="bi bi-arrow-repeat me-1"></i>Restart
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    className={`nav-link border-0 py-3 px-3 fw-semibold ${activeAction === 'reboot' ? 'active text-danger' : 'text-muted'}`}
+                    onClick={() => setActiveAction('reboot')}
+                  >
+                    <i className="bi bi-power me-1 text-danger"></i>Reboot
                   </button>
                 </li>
                 <li className="nav-item">
@@ -573,6 +613,41 @@ export default function Actions() {
                   </div>
                 )}
 
+                {/* 3b. Reboot Form */}
+                {activeAction === 'reboot' && (
+                  <div>
+                    <h6 className="fw-bold mb-3 text-danger">
+                      <i className="bi bi-power me-2"></i>Machine Remote Reboot
+                    </h6>
+                    <div className="alert alert-danger d-flex align-items-start gap-2 mb-3">
+                      <i className="bi bi-exclamation-triangle-fill fs-5 mt-1 flex-shrink-0"></i>
+                      <div className="small">
+                        <strong>Host-Level Machine Reboot:</strong>
+                        <p className="mb-0 mt-1">
+                          This action runs <code>sudo -n reboot</code> on the selected machine(s) with a 2-second background delay, allowing the SSH session to close cleanly before host reboot begins.
+                        </p>
+                        <p className="mb-0 mt-1 text-danger-emphasis">
+                          All processes running on the host will be interrupted. Fileservers running as systemd services will restart automatically once the node completes boot.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-light rounded border mb-3">
+                      <div className="small text-muted mb-2">Target Machines to Reboot ({selectedNodeIDs.length}):</div>
+                      <div className="d-flex flex-wrap gap-1">
+                        {selectedNodeIDs.length === 0 ? (
+                          <span className="text-danger small fst-italic">No target nodes selected!</span>
+                        ) : (
+                          selectedNodeIDs.map((id) => (
+                            <span key={id} className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1">
+                              <i className="bi bi-server me-1"></i>{formatNodeDisplayName(id)} ({formatMachineName(id)})
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 4. Logs Form */}
                 {activeAction === 'logs' && (
                   <div>
@@ -694,13 +769,18 @@ export default function Actions() {
                 <div className="mt-4">
                   <button
                     type="submit"
-                    className="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2"
+                    className={`btn ${activeAction === 'reboot' ? 'btn-danger' : 'btn-primary'} w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2`}
                     disabled={executing || selectedNodeIDs.length === 0}
                   >
                     {executing ? (
                       <>
                         <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                         Executing Action...
+                      </>
+                    ) : activeAction === 'reboot' ? (
+                      <>
+                        <i className="bi bi-power fs-5"></i>
+                        Reboot {selectedNodeIDs.length} Machine(s)
                       </>
                     ) : (
                       <>
@@ -733,7 +813,7 @@ export default function Actions() {
                   {Object.entries(nodeStatusMap).map(([nodeId, info]) => (
                     <div key={nodeId} className="col-sm-6 col-md-4">
                       <div className="p-2 rounded bg-white border d-flex justify-content-between align-items-center">
-                        <span className="fw-bold small">FS-{nodeId}</span>
+                        <span className="fw-bold small">{formatNodeDisplayName(nodeId)}</span>
                         <div>
                           {info.status === 'pending' && (
                             <span className="badge bg-secondary text-light small">
@@ -934,7 +1014,7 @@ export default function Actions() {
                         <div className="d-flex flex-wrap gap-1">
                           {h.target_nodes.map((nID) => (
                             <span key={nID} className="badge bg-light text-dark border" style={{ fontSize: '0.72rem' }}>
-                              FS-{nID}
+                              {formatNodeDisplayName(nID)}
                             </span>
                           ))}
                         </div>
@@ -1000,7 +1080,7 @@ export default function Actions() {
                 {Object.values(viewingRecord.node_results || {}).map((nr) => (
                   <div key={nr.node_id} className="card bg-light border mb-2">
                     <div className="card-header py-1 px-3 d-flex justify-content-between align-items-center small bg-white border-bottom">
-                      <span className="fw-semibold">Node FS-{nr.node_id} ({nr.address})</span>
+                      <span className="fw-semibold">Node {formatNodeDisplayName(nr.node_id)} ({formatMachineName(nr.node_id)} | {nr.address})</span>
                       <div>
                         <span className={`badge ${nr.exit_code === 0 ? 'bg-success' : 'bg-danger'} me-2`}>
                           Exit {nr.exit_code}
@@ -1019,6 +1099,48 @@ export default function Actions() {
               <div className="modal-footer border-top py-2">
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => setViewingRecord(null)}>
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reboot Confirmation Modal */}
+      {showRebootModal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1060 }} tabIndex={-1}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title fw-bold">
+                  <i className="bi bi-exclamation-triangle-fill me-2"></i>Confirm Machine Reboot
+                </h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowRebootModal(false)}></button>
+              </div>
+              <div className="modal-body py-4">
+                <p className="fw-semibold">Are you sure you want to reboot the following machine(s)?</p>
+                <div className="d-flex flex-wrap gap-2 mb-3">
+                  {selectedNodeIDs.map((id) => (
+                    <span key={id} className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-2">
+                      <i className="bi bi-server me-1"></i>{formatNodeDisplayName(id)} ({formatMachineName(id)})
+                    </span>
+                  ))}
+                </div>
+                <p className="text-muted small mb-0">
+                  The command <code>sudo reboot</code> will be scheduled with a 2-second background delay. The machine(s) will disconnect and remain offline temporarily until the operating system completes its reboot.
+                </p>
+              </div>
+              <div className="modal-footer bg-light">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowRebootModal(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-danger fw-semibold"
+                  onClick={() => {
+                    setShowRebootModal(false);
+                    dispatchAction();
+                  }}
+                >
+                  <i className="bi bi-power me-1"></i>Yes, Reboot Now
                 </button>
               </div>
             </div>

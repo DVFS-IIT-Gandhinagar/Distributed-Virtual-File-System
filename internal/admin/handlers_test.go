@@ -62,6 +62,11 @@ func TestHandleCluster(t *testing.T) {
 		t.Errorf("expected TotalUsers=2, got %d", resp.TotalUsers)
 	}
 
+	// Verify sorting order: 0 before 1
+	if len(resp.Nodes) != 2 || resp.Nodes[0].FsID != "0" || resp.Nodes[1].FsID != "1" {
+		t.Errorf("expected nodes sorted by FsID, got %+v", resp.Nodes)
+	}
+
 	// Method not allowed
 	postReq := httptest.NewRequest(http.MethodPost, "/api/cluster", nil)
 	postRec := httptest.NewRecorder()
@@ -78,17 +83,36 @@ func TestHandleHistory(t *testing.T) {
 	rb.Push(Snapshot{Timestamp: 200})
 
 	admin.nodes["0"] = &NodeState{
-		FsID:    "0",
-		History: rb,
+		FsID:        "0",
+		DisplayID:   1,
+		DisplayName: "FS-1",
+		MachineName: "dvfs1",
+		History:     rb,
 	}
 
-	// Success case
+	// Success case by raw fsID
 	req := httptest.NewRequest(http.MethodGet, "/api/history/0", nil)
 	rec := httptest.NewRecorder()
 	admin.handleHistory(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for existing history, got %d", rec.Code)
+	}
+
+	// Success case by 1-indexed DisplayName "FS-1"
+	reqDisplay := httptest.NewRequest(http.MethodGet, "/api/history/FS-1", nil)
+	recDisplay := httptest.NewRecorder()
+	admin.handleHistory(recDisplay, reqDisplay)
+	if recDisplay.Code != http.StatusOK {
+		t.Fatalf("expected 200 for history by DisplayName, got %d", recDisplay.Code)
+	}
+
+	// Success case by 1-indexed DisplayID "1"
+	reqDisplayID := httptest.NewRequest(http.MethodGet, "/api/history/1", nil)
+	recDisplayID := httptest.NewRecorder()
+	admin.handleHistory(recDisplayID, reqDisplayID)
+	if recDisplayID.Code != http.StatusOK {
+		t.Fatalf("expected 200 for history by DisplayID, got %d", recDisplayID.Code)
 	}
 
 	var snapshots []Snapshot

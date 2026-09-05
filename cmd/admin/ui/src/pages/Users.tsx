@@ -2,10 +2,10 @@ import { useState, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchUsers, updateUserQuota } from '../api';
 import type { UserSummary } from '../types';
-import { formatBytes, getUserQuotaColor, getUserQuotaBadge } from '../utils';
+import { formatBytes, getUserQuotaColor, getUserQuotaBadge, formatNodeDisplayName, formatMachineName } from '../utils';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-type SortField = 'username' | 'home_node' | 'used_storage' | 'quota_limit' | 'usage_percent' | 'active_sessions';
+type SortField = 'username' | 'home_node' | 'used_storage' | 'quota_limit' | 'usage_percent' | 'active_sessions' | 'is_online';
 
 export default function Users() {
   const queryClient = useQueryClient();
@@ -71,6 +71,9 @@ export default function Users() {
           break;
         case 'active_sessions':
           cmp = a.active_sessions - b.active_sessions;
+          break;
+        case 'is_online':
+          cmp = (a.is_online ? 1 : 0) - (b.is_online ? 1 : 0);
           break;
       }
       return sortDirection === 'asc' ? cmp : -cmp;
@@ -217,21 +220,24 @@ export default function Users() {
                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('active_sessions')}>
                   Active Sessions {getSortIcon('active_sessions')}
                 </th>
-                <th>Status</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('is_online')}>
+                  Connection {getSortIcon('is_online')}
+                </th>
+                <th>Quota Status</th>
                 <th className="text-end pe-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-5 text-muted">
+                  <td colSpan={10} className="text-center py-5 text-muted">
                     <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                     Loading cluster user list...
                   </td>
                 </tr>
               ) : paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-5 text-muted">
+                  <td colSpan={10} className="text-center py-5 text-muted">
                     <i className="bi bi-person-x fs-1 d-block mb-2 text-secondary"></i>
                     No users found matching your criteria.
                   </td>
@@ -258,14 +264,25 @@ export default function Users() {
                               {u.username.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <div className="fw-semibold">{u.username}</div>
-                              <small className="text-muted">Home FS-{u.home_fs_id}</small>
+                              <div className="d-flex align-items-center gap-2">
+                                <span className="fw-semibold">{u.username}</span>
+                                {u.is_online ? (
+                                  <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-0" style={{ fontSize: '0.68rem' }}>
+                                    <i className="bi bi-circle-fill me-1" style={{ fontSize: '0.45rem' }}></i>Online
+                                  </span>
+                                ) : (
+                                  <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-0" style={{ fontSize: '0.68rem' }}>
+                                    <i className="bi bi-circle me-1" style={{ fontSize: '0.45rem' }}></i>Offline
+                                  </span>
+                                )}
+                              </div>
+                              <small className="text-muted">Home {formatNodeDisplayName(u.home_fs_id)} ({formatMachineName(u.home_fs_id)})</small>
                             </div>
                           </div>
                         </td>
                         <td>
                           <span className="badge bg-secondary bg-opacity-10 text-secondary border">
-                            <i className="bi bi-server me-1"></i>FS-{u.home_fs_id}
+                            <i className="bi bi-server me-1"></i>{formatNodeDisplayName(u.home_fs_id)}
                           </span>
                         </td>
                         <td className="fw-medium">{formatBytes(u.quota_used)}</td>
@@ -288,9 +305,20 @@ export default function Users() {
                           </div>
                         </td>
                         <td>
-                          <span className="badge bg-light text-dark border">
+                          <span className={`badge ${u.is_online ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25' : 'bg-light text-dark border'}`}>
                             <i className="bi bi-link-45deg me-1"></i>{u.active_sessions}
                           </span>
+                        </td>
+                        <td>
+                          {u.is_online ? (
+                            <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                              <i className="bi bi-check-circle-fill me-1"></i>Connected
+                            </span>
+                          ) : (
+                            <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">
+                              <i className="bi bi-dash-circle me-1"></i>Idle
+                            </span>
+                          )}
                         </td>
                         <td>
                           {badge ? (
@@ -320,7 +348,7 @@ export default function Users() {
                       {/* Expanded Row: Per-Node Distribution */}
                       {isExpanded && (
                         <tr className="bg-light">
-                          <td colSpan={9} className="p-4">
+                          <td colSpan={10} className="p-4">
                             <div className="card border shadow-sm">
                               <div className="card-body">
                                 <h6 className="fw-bold mb-3">
@@ -336,7 +364,7 @@ export default function Users() {
                                         <ResponsiveContainer>
                                           <BarChart
                                             data={u.nodes.map((n) => ({
-                                              name: `FS-${n.fs_id}`,
+                                              name: `${formatNodeDisplayName(n.fs_id)} (${formatMachineName(n.fs_id)})`,
                                               used: Number((n.used_bytes / (1024 * 1024)).toFixed(2)),
                                             }))}
                                             layout="vertical"
@@ -356,7 +384,7 @@ export default function Users() {
                                         {u.nodes.map((n) => (
                                           <li key={n.fs_id} className="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
                                             <div>
-                                              <span className="fw-semibold">Node FS-{n.fs_id}</span>
+                                              <span className="fw-semibold">Node {formatNodeDisplayName(n.fs_id)} ({formatMachineName(n.fs_id)})</span>
                                               <small className="text-muted d-block">{n.address}</small>
                                             </div>
                                             <span className="fw-medium text-dark">{formatBytes(n.used_bytes)}</span>

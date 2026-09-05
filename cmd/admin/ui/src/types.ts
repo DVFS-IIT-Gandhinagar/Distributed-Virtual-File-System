@@ -16,11 +16,15 @@ export interface NodeMetrics {
   uptime_seconds: number;
   last_restart_unix: number;
   active_connections: number;
+  active_users?: string[];
   users_assigned_count: number;
 }
 
 export interface NodeInfo {
   fsID: string;
+  displayID?: number;
+  displayName?: string;
+  machineName?: string;
   address: string;
   metricsURL: string;
   status: string;
@@ -36,6 +40,7 @@ export interface ClusterResponse {
   total_storage_bytes: number;
   used_storage_bytes: number;
   total_users: number;
+  online_users?: number;
 }
 
 export interface Snapshot {
@@ -45,6 +50,9 @@ export interface Snapshot {
 
 export interface NodeUserStorage {
   fs_id: string;
+  display_id?: number;
+  display_name?: string;
+  machine_name?: string;
   address: string;
   used_bytes: number;
   quota_bytes: number;
@@ -53,15 +61,18 @@ export interface NodeUserStorage {
 export interface UserSummary {
   username: string;
   home_fs_id: string;
+  home_fs_display?: string;
+  home_fs_machine?: string;
   home_fs_address: string;
   quota_limit: number;
   quota_used: number;
   usage_percent: number;
   active_sessions: number;
+  is_online?: boolean;
   nodes: NodeUserStorage[];
 }
 
-export type ActionType = 'pull' | 'build' | 'restart' | 'logs' | 'custom';
+export type ActionType = 'pull' | 'build' | 'restart' | 'reboot' | 'logs' | 'custom';
 
 export interface NodeRestartParams {
   fs_id: string;
