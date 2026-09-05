@@ -8,8 +8,45 @@ interface Props {
 
 export default function NodeCard({ node, onClick }: Props) {
   const m = node.metrics;
-  const storageLabel = `${formatBytes(m.disk_used_bytes)} / ${formatBytes(m.disk_total_bytes)} (${m.disk_usage_percent.toFixed(1)}%)`;
   const statusColor = getStatusColor(node.status);
+
+  if (!m) {
+    return (
+      <div
+        className="card h-100 shadow-sm border-0"
+        style={{ borderLeft: `4px solid ${statusColor}`, cursor: 'pointer', opacity: 0.85 }}
+        onClick={onClick}
+      >
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center mb-1">
+            <div>
+              <span className="fw-bold fs-6">{formatNodeDisplayName(node)}</span>
+              <small className="text-muted ms-2">({formatMachineName(node)})</small>
+            </div>
+            <span className={`badge ${getStatusBadgeClass(node.status)}`}>
+              {node.status}
+            </span>
+          </div>
+
+          <p className="text-muted small mb-3 text-truncate" title={node.address}>
+            {node.address}
+          </p>
+
+          <div className="text-center py-4 my-2 text-muted bg-light rounded">
+            <i className="bi bi-hdd-network-fill d-block mb-1" style={{ fontSize: '1.8rem', opacity: 0.5 }}></i>
+            <span className="small">Node Offline &mdash; No telemetry</span>
+          </div>
+
+          <div className="d-flex justify-content-between text-muted small pt-2 border-top">
+            <span>⏱ Offline</span>
+            <span>🔗 0 connections</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const storageLabel = `${formatBytes(m.disk_used_bytes)} / ${formatBytes(m.disk_total_bytes)} (${m.disk_usage_percent.toFixed(1)}%)`;
   const tempColor = getCpuTempColor(m.cpu_temp_celsius);
 
   return (

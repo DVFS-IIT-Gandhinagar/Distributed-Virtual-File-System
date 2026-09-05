@@ -30,10 +30,10 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
   });
 
   // Per-user storage chart data
-  const users = Object.keys(m.per_user_storage);
+  const users = m?.per_user_storage ? Object.keys(m.per_user_storage) : [];
   const perUserData = users.map(u => {
-    const used = m.per_user_storage[u] ?? 0;
-    const quota = m.per_user_quota[u] ?? used;
+    const used = m?.per_user_storage[u] ?? 0;
+    const quota = m?.per_user_quota[u] ?? used;
     const pct = quota > 0 ? (used / quota) * 100 : 0;
     return { name: u, used: bytesToGB(used), quota: bytesToGB(quota), pct };
   });
@@ -41,12 +41,12 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
   // History chart data (last 60 snapshots)
   const recentHistory = (history ?? []).slice(-60).map(s => ({
     time: new Date(s.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    diskPct: s.metrics.disk_usage_percent,
-    cpuTemp: s.metrics.cpu_temp_celsius,
+    diskPct: s.metrics?.disk_usage_percent ?? 0,
+    cpuTemp: s.metrics?.cpu_temp_celsius ?? 0,
   }));
 
   const statusColor = getStatusColor(node.status);
-  const tempColor = getCpuTempColor(m.cpu_temp_celsius);
+  const tempColor = m ? getCpuTempColor(m.cpu_temp_celsius) : '#6c757d';
 
   return (
     <>
@@ -130,111 +130,124 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             </button>
           </div>
 
-          {/* Quick Stats */}
-          <div className="row g-2 mb-4">
-            {[
-              { label: 'CPU Usage', value: `${m.cpu_usage_percent.toFixed(1)}%`, icon: 'bi-cpu' },
-              { label: 'RAM Usage', value: `${m.mem_usage_percent.toFixed(1)}%`, icon: 'bi-memory' },
-              { label: 'Chunks', value: m.chunk_count, icon: 'bi-box' },
-              {
-                label: 'Connections',
-                value: m.active_users && m.active_users.length > 0
-                  ? `${m.active_connections} (${m.active_users.join(', ')})`
-                  : m.active_connections,
-                icon: 'bi-diagram-2'
-              },
-              { label: 'Load 1m', value: m.load_avg_1m.toFixed(2), icon: 'bi-graph-up' },
-              { label: 'Uptime', value: formatUptime(m.uptime_seconds), icon: 'bi-clock' },
-            ].map(s => (
-              <div key={s.label} className="col-6 col-md-4">
-                <div className="p-2 rounded" style={{ background: '#f8f9fa', border: '1px solid #e9ecef' }}>
-                  <div className="d-flex align-items-center gap-2">
-                    <i className={`bi ${s.icon} text-primary`}></i>
-                    <div>
-                      <div className="small text-muted" style={{ fontSize: '0.7rem' }}>{s.label}</div>
-                      <div className="fw-semibold small">{s.value}</div>
+          {!m && (
+            <div className="alert alert-secondary d-flex align-items-center mb-4" role="alert">
+              <i className="bi bi-exclamation-circle-fill me-2 fs-5 text-secondary"></i>
+              <div>
+                <strong>Node is Offline.</strong> Real-time telemetry is unavailable. You can use the buttons above to restart, reboot, or check logs.
+              </div>
+            </div>
+          )}
+
+          {m && (
+            <>
+              {/* Quick Stats */}
+              <div className="row g-2 mb-4">
+                {[
+                  { label: 'CPU Usage', value: `${m.cpu_usage_percent.toFixed(1)}%`, icon: 'bi-cpu' },
+                  { label: 'RAM Usage', value: `${m.mem_usage_percent.toFixed(1)}%`, icon: 'bi-memory' },
+                  { label: 'Chunks', value: m.chunk_count, icon: 'bi-box' },
+                  {
+                    label: 'Connections',
+                    value: m.active_users && m.active_users.length > 0
+                      ? `${m.active_connections} (${m.active_users.join(', ')})`
+                      : m.active_connections,
+                    icon: 'bi-diagram-2'
+                  },
+                  { label: 'Load 1m', value: m.load_avg_1m.toFixed(2), icon: 'bi-graph-up' },
+                  { label: 'Uptime', value: formatUptime(m.uptime_seconds), icon: 'bi-clock' },
+                ].map(s => (
+                  <div key={s.label} className="col-6 col-md-4">
+                    <div className="p-2 rounded" style={{ background: '#f8f9fa', border: '1px solid #e9ecef' }}>
+                      <div className="d-flex align-items-center gap-2">
+                        <i className={`bi ${s.icon} text-primary`}></i>
+                        <div>
+                          <div className="small text-muted" style={{ fontSize: '0.7rem' }}>{s.label}</div>
+                          <div className="fw-semibold small">{s.value}</div>
+                        </div>
+                      </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* CPU Temp */}
+              <div className="d-flex align-items-center mb-4 p-3 rounded" style={{ background: '#f8f9fa' }}>
+                <span style={{ fontSize: '1.5rem' }}>🌡</span>
+                <div className="ms-3">
+                  <div className="small text-muted">CPU Temperature</div>
+                  <div className="fw-bold" style={{ fontSize: '1.5rem', color: tempColor }}>
+                    {m.cpu_temp_celsius.toFixed(1)}°C
+                  </div>
+                </div>
+                <div className="ms-auto text-end">
+                  <div className="small text-muted">Memory</div>
+                  <div className="small fw-semibold">
+                    {formatBytes(m.mem_used_bytes)} / {formatBytes(m.mem_total_bytes)}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* CPU Temp */}
-          <div className="d-flex align-items-center mb-4 p-3 rounded" style={{ background: '#f8f9fa' }}>
-            <span style={{ fontSize: '1.5rem' }}>🌡</span>
-            <div className="ms-3">
-              <div className="small text-muted">CPU Temperature</div>
-              <div className="fw-bold" style={{ fontSize: '1.5rem', color: tempColor }}>
-                {m.cpu_temp_celsius.toFixed(1)}°C
+              {/* Storage */}
+              <div className="mb-4">
+                <h6 className="fw-semibold mb-2">
+                  <i className="bi bi-hdd me-1 text-primary"></i>Storage
+                </h6>
+                <div className="d-flex justify-content-between small text-muted mb-1">
+                  <span>{formatBytes(m.disk_used_bytes)} used</span>
+                  <span>{formatBytes(m.disk_total_bytes)} total</span>
+                </div>
+                <div className="progress mb-1" style={{ height: 12 }}>
+                  <div
+                    className="progress-bar"
+                    style={{ width: `${Math.min(m.disk_usage_percent, 100)}%`, backgroundColor: statusColor }}
+                  >
+                    <span className="small">{m.disk_usage_percent.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <small className="text-muted">{m.chunk_count} chunks stored</small>
               </div>
-            </div>
-            <div className="ms-auto text-end">
-              <div className="small text-muted">Memory</div>
-              <div className="small fw-semibold">
-                {formatBytes(m.mem_used_bytes)} / {formatBytes(m.mem_total_bytes)}
-              </div>
-            </div>
-          </div>
 
-          {/* Storage */}
-          <div className="mb-4">
-            <h6 className="fw-semibold mb-2">
-              <i className="bi bi-hdd me-1 text-primary"></i>Storage
-            </h6>
-            <div className="d-flex justify-content-between small text-muted mb-1">
-              <span>{formatBytes(m.disk_used_bytes)} used</span>
-              <span>{formatBytes(m.disk_total_bytes)} total</span>
-            </div>
-            <div className="progress mb-1" style={{ height: 12 }}>
-              <div
-                className="progress-bar"
-                style={{ width: `${Math.min(m.disk_usage_percent, 100)}%`, backgroundColor: statusColor }}
-              >
-                <span className="small">{m.disk_usage_percent.toFixed(1)}%</span>
-              </div>
-            </div>
-            <small className="text-muted">{m.chunk_count} chunks stored</small>
-          </div>
-
-          {/* Per-User Storage */}
-          {perUserData.length > 0 && (
-            <div className="mb-4">
-              <h6 className="fw-semibold mb-2">
-                <i className="bi bi-people me-1 text-primary"></i>Per-User Storage
-              </h6>
-              <ResponsiveContainer width="100%" height={Math.max(perUserData.length * 40, 80)}>
-                <BarChart
-                  data={perUserData}
-                  layout="vertical"
-                  margin={{ top: 0, right: 50, left: 40, bottom: 0 }}
-                >
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={50} />
-                  <Tooltip
-                    formatter={(val: number, name: string) => [
-                      `${val} GB`,
-                      name === 'used' ? 'Used' : 'Quota',
-                    ]}
-                  />
-                  <Bar dataKey="quota" name="Quota" fill="#dee2e6" radius={[4, 4, 4, 4]} />
-                  <Bar dataKey="used" name="Used" fill="#0d6efd" radius={[4, 4, 4, 4]}>
-                    {perUserData.map((entry, i) => (
-                      <Cell
-                        key={i}
-                        fill={entry.pct >= 90 ? '#dc3545' : entry.pct >= 75 ? '#ffc107' : '#0d6efd'}
+              {/* Per-User Storage */}
+              {perUserData.length > 0 && (
+                <div className="mb-4">
+                  <h6 className="fw-semibold mb-2">
+                    <i className="bi bi-people me-1 text-primary"></i>Per-User Storage
+                  </h6>
+                  <ResponsiveContainer width="100%" height={Math.max(perUserData.length * 40, 80)}>
+                    <BarChart
+                      data={perUserData}
+                      layout="vertical"
+                      margin={{ top: 0, right: 50, left: 40, bottom: 0 }}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={50} />
+                      <Tooltip
+                        formatter={(val: number, name: string) => [
+                          `${val} GB`,
+                          name === 'used' ? 'Used' : 'Quota',
+                        ]}
                       />
-                    ))}
-                    <LabelList
-                      dataKey="pct"
-                      position="right"
-                      formatter={(v: number) => `${v.toFixed(0)}%`}
-                      style={{ fontSize: 11, fill: '#6c757d' }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                      <Bar dataKey="quota" name="Quota" fill="#dee2e6" radius={[4, 4, 4, 4]} />
+                      <Bar dataKey="used" name="Used" fill="#0d6efd" radius={[4, 4, 4, 4]}>
+                        {perUserData.map((entry, i) => (
+                          <Cell
+                            key={i}
+                            fill={entry.pct >= 90 ? '#dc3545' : entry.pct >= 75 ? '#ffc107' : '#0d6efd'}
+                          />
+                        ))}
+                        <LabelList
+                          dataKey="pct"
+                          position="right"
+                          formatter={(v: number) => `${v.toFixed(0)}%`}
+                          style={{ fontSize: 11, fill: '#6c757d' }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </>
           )}
 
           {/* History Charts */}
