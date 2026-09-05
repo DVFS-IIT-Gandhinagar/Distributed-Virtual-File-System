@@ -1,11 +1,13 @@
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
-  const gb = bytes / (1024 * 1024 * 1024);
-  if (gb >= 1) return `${gb.toFixed(1)} GB`;
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
-  if (kb >= 1) return `${kb.toFixed(1)} KB`;
+  const tib = bytes / (1024 * 1024 * 1024 * 1024);
+  if (tib >= 1) return `${tib.toFixed(1)} TiB`;
+  const gib = bytes / (1024 * 1024 * 1024);
+  if (gib >= 1) return `${gib.toFixed(1)} GiB`;
+  const mib = bytes / (1024 * 1024);
+  if (mib >= 1) return `${mib.toFixed(1)} MiB`;
+  const kib = bytes / 1024;
+  if (kib >= 1) return `${kib.toFixed(1)} KiB`;
   return `${bytes} B`;
 }
 

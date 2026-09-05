@@ -19,7 +19,7 @@ export default function Users() {
 
   // Modal form state
   const [quotaValue, setQuotaValue] = useState<number>(1);
-  const [quotaUnit, setQuotaUnit] = useState<'MB' | 'GB'>('GB');
+  const [quotaUnit, setQuotaUnit] = useState<'MiB' | 'GiB' | 'TiB'>('GiB');
   const [modalError, setModalError] = useState<string | null>(null);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -111,14 +111,18 @@ export default function Users() {
   const openEditModal = (u: UserSummary) => {
     setEditingUser(u);
     setModalError(null);
-    const gb = u.quota_limit / (1024 * 1024 * 1024);
-    if (gb >= 1 && Number.isInteger(gb)) {
-      setQuotaValue(gb);
-      setQuotaUnit('GB');
+    const tib = u.quota_limit / (1024 * 1024 * 1024 * 1024);
+    const gib = u.quota_limit / (1024 * 1024 * 1024);
+    if (tib >= 1 && Number.isInteger(tib)) {
+      setQuotaValue(tib);
+      setQuotaUnit('TiB');
+    } else if (gib >= 1 && Number.isInteger(gib)) {
+      setQuotaValue(gib);
+      setQuotaUnit('GiB');
     } else {
-      const mb = Math.round(u.quota_limit / (1024 * 1024));
-      setQuotaValue(mb);
-      setQuotaUnit('MB');
+      const mib = Math.round(u.quota_limit / (1024 * 1024));
+      setQuotaValue(mib);
+      setQuotaUnit('MiB');
     }
   };
 
@@ -130,13 +134,18 @@ export default function Users() {
       return;
     }
 
-    const multiplier = quotaUnit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024;
+    const multiplier =
+      quotaUnit === 'TiB' ? 1024 * 1024 * 1024 * 1024 :
+      quotaUnit === 'GiB' ? 1024 * 1024 * 1024 : 1024 * 1024;
     const quotaBytes = Math.round(quotaValue * multiplier);
 
     quotaMutation.mutate({ username: editingUser.username, quotaBytes });
   };
 
-  const calculatedBytes = quotaValue * (quotaUnit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024);
+  const calculatedBytes = quotaValue * (
+    quotaUnit === 'TiB' ? 1024 * 1024 * 1024 * 1024 :
+    quotaUnit === 'GiB' ? 1024 * 1024 * 1024 : 1024 * 1024
+  );
   const isLowerThanUsage = editingUser ? calculatedBytes < editingUser.quota_used : false;
 
   return (
@@ -534,11 +543,12 @@ export default function Users() {
                         className="form-select"
                         style={{ maxWidth: '100px' }}
                         value={quotaUnit}
-                        onChange={(e) => setQuotaUnit(e.target.value as 'MB' | 'GB')}
+                        onChange={(e) => setQuotaUnit(e.target.value as 'MiB' | 'GiB' | 'TiB')}
                         disabled={quotaMutation.isPending}
                       >
-                        <option value="MB">MB</option>
-                        <option value="GB">GB</option>
+                        <option value="MiB">MiB</option>
+                        <option value="GiB">GiB</option>
+                        <option value="TiB">TiB</option>
                       </select>
                     </div>
                     <small className="text-muted mt-1 d-block">
