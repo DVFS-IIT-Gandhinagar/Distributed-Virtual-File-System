@@ -43,6 +43,8 @@ export PATH="$PATH:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin"
 # Build UI if npm is available, or use existing pre-built static files
 if command -v npm >/dev/null 2>&1; then
     echo "[STARTUP] Building admin UI with npm..."
+    # Strip any UTF-8 BOM from UI JSON files to prevent Node/npm syntax errors
+    sed -i '1s/^\xEF\xBB\xBF//' ./cmd/admin/ui/*.json 2>/dev/null || true
     (cd ./cmd/admin/ui && npm run build) || echo "[STARTUP WARNING] npm run build failed, continuing with existing files..."
 elif [ -f "$STATIC_DIR/index.html" ]; then
     echo "[STARTUP] Found pre-built UI in $STATIC_DIR (npm not in PATH; skipping build)."
