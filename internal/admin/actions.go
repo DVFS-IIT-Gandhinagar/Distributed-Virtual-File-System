@@ -19,6 +19,7 @@ const (
 	ActionBuild   = "build"
 	ActionRestart = "restart"
 	ActionReboot  = "reboot"
+	ActionApt     = "apt"
 	ActionLogs    = "logs"
 	ActionCustom  = "custom"
 )
@@ -44,6 +45,8 @@ type ActionRequest struct {
 	RepoPath       string                        `json:"repo_path,omitempty"`
 	GitBranch      string                        `json:"git_branch,omitempty"`
 	MakeTarget     string                        `json:"make_target,omitempty"`
+	TargetService  string                        `json:"target_service,omitempty"` // "fileserver", "metaserver", "admin", "all"
+	AptMode        string                        `json:"apt_mode,omitempty"`       // "update_upgrade" (default), "update_only"
 	TimeoutSeconds int                           `json:"timeout_seconds,omitempty"`
 	SSHPort        int                           `json:"ssh_port,omitempty"`
 	LogLines       int                           `json:"log_lines,omitempty"`
@@ -170,32 +173,85 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		if req.CustomCommand != "" {
 			return req.CustomCommand
 		}
+		targetService := req.TargetService
+		if targetService == "" {
+			targetService = "fileserver"
+		}
+
 		if req.RestartMode == "binary" {
-			dataDir := params.DataDir
-			if dataDir == "" {
-				dataDir = "./fileserver_data"
+			switch targetService {
+			case "metaserver":
+				return fmt.Sprintf(
+					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -state_file=%s/bin/metaserver_state.json > %s/metaserver.log 2>&1 < /dev/null &",
+					repoPath, repoPath, repoPath,
+				)
+			case "admin":
+				return fmt.Sprintf(
+					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 -state_file=%s/bin/metaserver_state.json > %s/admin.log 2>&1 < /dev/null &",
+					repoPath, repoPath, repoPath,
+				)
+			case "all":
+				dataDir := params.DataDir
+				if dataDir == "" {
+					dataDir = "./fileserver_data"
+				}
+				metaAddr := params.MetaAddr
+				if metaAddr == "" {
+					metaAddr = "127.0.0.1:50051"
+				}
+				ownIP := params.OwnIP
+				if ownIP == "" {
+					ownIP = params.Host
+				}
+				return fmt.Sprintf(
+					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -state_file=%s/bin/metaserver_state.json > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 -state_file=%s/bin/metaserver_state.json > %s/admin.log 2>&1 < /dev/null &",
+					params.Port, params.FsID, repoPath, repoPath, repoPath, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, repoPath, repoPath,
+				)
+			default: // "fileserver"
+				dataDir := params.DataDir
+				if dataDir == "" {
+					dataDir = "./fileserver_data"
+				}
+				metaAddr := params.MetaAddr
+				if metaAddr == "" {
+					metaAddr = "127.0.0.1:50051"
+				}
+				ownIP := params.OwnIP
+				if ownIP == "" {
+					ownIP = params.Host
+				}
+				return fmt.Sprintf(
+					"fuser -k %d/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || true; sleep 1; nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null &",
+					params.Port, params.FsID, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath,
+				)
 			}
-			metaAddr := params.MetaAddr
-			if metaAddr == "" {
-				metaAddr = "127.0.0.1:50051"
-			}
-			ownIP := params.OwnIP
-			if ownIP == "" {
-				ownIP = params.Host
-			}
-			return fmt.Sprintf(
-				"fuser -k %d/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || true; sleep 1; nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null &",
-				params.Port, params.FsID, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath,
-			)
 		}
 		// Default systemd restart (using -n for non-interactive sudo safety)
-		return "sudo -n systemctl restart dvfs-fileserver"
+		switch targetService {
+		case "metaserver":
+			return "sudo -n systemctl restart dvfs-metaserver"
+		case "admin":
+			return "sudo -n systemctl restart dvfs-admin"
+		case "all":
+			return "sudo -n systemctl restart dvfs-metaserver dvfs-fileserver dvfs-admin"
+		default: // "fileserver"
+			return "sudo -n systemctl restart dvfs-fileserver"
+		}
 
 	case ActionReboot:
 		if req.CustomCommand != "" {
 			return req.CustomCommand
 		}
 		return "nohup sh -c 'sleep 2 && sudo -n reboot' >/dev/null 2>&1 & echo 'System reboot scheduled in 2 seconds (machine will restart shortly)'"
+
+	case ActionApt:
+		if req.CustomCommand != "" {
+			return req.CustomCommand
+		}
+		if req.AptMode == "update_only" {
+			return "sudo -n DEBIAN_FRONTEND=noninteractive apt-get update"
+		}
+		return "sudo -n DEBIAN_FRONTEND=noninteractive apt-get update && sudo -n DEBIAN_FRONTEND=noninteractive apt-get upgrade -y"
 
 	case ActionLogs:
 		if req.CustomCommand != "" {
@@ -205,15 +261,29 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		if lines <= 0 {
 			lines = 50
 		}
+		targetService := req.TargetService
+		if targetService == "" {
+			targetService = "fileserver"
+		}
+		serviceName := "dvfs-fileserver"
+		logFileName := "fileserver.log"
+		switch targetService {
+		case "metaserver":
+			serviceName = "dvfs-metaserver"
+			logFileName = "metaserver.log"
+		case "admin":
+			serviceName = "dvfs-admin"
+			logFileName = "admin.log"
+		}
 		if req.LogMode == "tail" {
 			logPath := req.LogPath
 			if logPath == "" {
-				logPath = fmt.Sprintf("%s/fileserver.log", repoPath)
+				logPath = fmt.Sprintf("%s/%s", repoPath, logFileName)
 			}
 			return fmt.Sprintf("tail -n %d %s", lines, logPath)
 		}
 		// Default journalctl
-		return fmt.Sprintf("journalctl -u dvfs-fileserver -n %d --no-pager", lines)
+		return fmt.Sprintf("journalctl -u %s -n %d --no-pager", serviceName, lines)
 
 	case ActionCustom:
 		return req.CustomCommand
@@ -302,10 +372,14 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 		}
 	}()
 
-	// Execution timeout (default 300s / 5 minutes)
+	// Execution timeout (default 300s / 5 minutes, or 600s / 10 minutes for apt)
 	timeout := time.Duration(req.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
-		timeout = 300 * time.Second
+		if req.ActionType == ActionApt {
+			timeout = 600 * time.Second
+		} else {
+			timeout = 300 * time.Second
+		}
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
