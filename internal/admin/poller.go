@@ -47,20 +47,33 @@ func (a *AdminServer) refreshNodes() {
 	// Update or add fileservers
 	for fsID, fsInfo := range state.FileServers {
 		metricsURL := deriveMetricsURL(fsInfo.Address)
+		displayID := 1
+		if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
+			displayID = num + 1
+		}
+		displayName := fmt.Sprintf("FS-%d", displayID)
+		machineName := fmt.Sprintf("dvfs%d", displayID)
+
 		if node, exists := a.nodes[fsID]; exists {
 			node.Address = fsInfo.Address
 			node.MetricsURL = metricsURL
+			node.DisplayID = displayID
+			node.DisplayName = displayName
+			node.MachineName = machineName
 		} else {
 			a.nodes[fsID] = &NodeState{
-				FsID:       fsID,
-				Address:    fsInfo.Address,
-				MetricsURL: metricsURL,
-				Status:     StatusOffline,
-				LastSeen:   0,
-				Metrics:    nil,
-				History:    NewRingBuffer(720),
+				FsID:        fsID,
+				DisplayID:   displayID,
+				DisplayName: displayName,
+				MachineName: machineName,
+				Address:     fsInfo.Address,
+				MetricsURL:  metricsURL,
+				Status:      StatusOffline,
+				LastSeen:    0,
+				Metrics:     nil,
+				History:     NewRingBuffer(720),
 			}
-			log.Printf("[ADMIN] Discovered fileserver %s at %s (metrics: %s)", fsID, fsInfo.Address, metricsURL)
+			log.Printf("[ADMIN] Discovered fileserver %s (%s / %s) at %s (metrics: %s)", fsID, displayName, machineName, fsInfo.Address, metricsURL)
 		}
 	}
 }

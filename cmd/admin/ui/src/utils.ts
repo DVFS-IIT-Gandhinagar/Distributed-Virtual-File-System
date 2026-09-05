@@ -77,3 +77,27 @@ export function getUserQuotaBadge(pct: number): { label: string; badgeClass: str
   return null;
 }
 
+export function formatNodeDisplayName(node: { displayName?: string; fsID?: string; fs_id?: string } | string): string {
+  if (typeof node === 'string') {
+    const n = parseInt(node, 10);
+    return !isNaN(n) ? `FS-${n + 1}` : `FS-${node}`;
+  }
+  if (node.displayName) return node.displayName;
+  const rawId = node.fsID || node.fs_id || '';
+  const n = parseInt(rawId, 10);
+  return !isNaN(n) ? `FS-${n + 1}` : `FS-${rawId}`;
+}
+
+export function formatMachineName(node: { machineName?: string; machine_name?: string; fsID?: string; fs_id?: string } | string): string {
+  if (typeof node === 'string') {
+    const n = parseInt(node, 10);
+    return !isNaN(n) ? `dvfs${n + 1}` : `dvfs-${node}`;
+  }
+  if (node.machineName) return node.machineName;
+  if (node.machine_name) return node.machine_name;
+  const rawId = node.fsID || node.fs_id || '';
+  const n = parseInt(rawId, 10);
+  return !isNaN(n) ? `dvfs${n + 1}` : `dvfs-${rawId}`;
+}
+
+

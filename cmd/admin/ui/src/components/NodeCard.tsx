@@ -1,5 +1,5 @@
 import type { NodeInfo } from '../types';
-import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getStorageBarClass, getStorageBarColor, getCpuTempColor } from '../utils';
+import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getStorageBarClass, getStorageBarColor, getCpuTempColor, formatNodeDisplayName, formatMachineName } from '../utils';
 
 interface Props {
   node: NodeInfo;
@@ -19,9 +19,12 @@ export default function NodeCard({ node, onClick }: Props) {
       onClick={onClick}
     >
       <div className="card-body">
-        {/* Header: FS-ID + status badge */}
+        {/* Header: 1-indexed FS-ID + machine name + status badge */}
         <div className="d-flex justify-content-between align-items-center mb-1">
-          <span className="fw-bold fs-6">FS-{node.fsID}</span>
+          <div>
+            <span className="fw-bold fs-6">{formatNodeDisplayName(node)}</span>
+            <small className="text-muted ms-2">({formatMachineName(node)})</small>
+          </div>
           <span className={`badge ${getStatusBadgeClass(node.status)}`}>
             {node.status}
           </span>
@@ -92,8 +95,12 @@ export default function NodeCard({ node, onClick }: Props) {
           <span title="Users assigned">
             <i className="bi bi-people me-1"></i>{m.users_assigned_count} users
           </span>
-          <span title="Active connections">
-            <i className="bi bi-diagram-2 me-1"></i>{m.active_connections} conn
+          <span
+            title={m.active_users && m.active_users.length > 0 ? `Active: ${m.active_users.join(', ')}` : 'Active connections'}
+            className={m.active_connections > 0 ? 'text-success fw-semibold' : ''}
+          >
+            <i className={`bi bi-link-45deg me-1 ${m.active_connections > 0 ? 'text-success' : ''}`}></i>
+            {m.active_connections} {m.active_connections === 1 ? 'conn' : 'conns'}
           </span>
           <span title="Uptime">
             <i className="bi bi-clock me-1"></i>{formatUptime(m.uptime_seconds)}

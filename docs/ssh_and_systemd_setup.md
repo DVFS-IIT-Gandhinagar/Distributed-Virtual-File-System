@@ -35,21 +35,21 @@ ssh -i ~/.ssh/id_ed25519 <ssh_user>@<node_ip> "echo 'SSH connection successful!'
 
 ---
 
-## 2. Passwordless `systemctl` & `journalctl` for Sudo
+## 2. Passwordless `systemctl`, `journalctl` & `reboot` for Sudo
 
-The Admin Console executes `sudo systemctl restart dvfs-fileserver` and `journalctl -u dvfs-fileserver` to restart nodes and read logs. To allow the SSH user to execute these service commands without a password prompt:
+The Admin Console executes `sudo systemctl restart dvfs-fileserver`, `journalctl -u dvfs-fileserver`, and `sudo reboot` (or `shutdown`) to restart services, read logs, and reboot physical cluster machines. To allow the SSH user to execute these commands without a password prompt:
 
-On **each Fileserver node**, create `/etc/sudoers.d/dvfs`:
+On **each Fileserver node**, create or update `/etc/sudoers.d/dvfs`:
 ```bash
 sudo bash -c 'cat <<EOF > /etc/sudoers.d/dvfs
-# Allow dvfs service management without password prompt
-<ssh_user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dvfs-fileserver, /usr/bin/systemctl status dvfs-fileserver, /usr/bin/journalctl
+# Allow dvfs service management and machine reboot without password prompt
+<ssh_user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dvfs-fileserver, /usr/bin/systemctl status dvfs-fileserver, /usr/bin/journalctl, /sbin/reboot, /usr/sbin/reboot, /usr/bin/systemctl reboot, /sbin/shutdown
 EOF'
 
 # Secure permissions
 sudo chmod 0440 /etc/sudoers.d/dvfs
 ```
-*(Replace `<ssh_user>` with your actual username, e.g., `ubuntu` or `jsm`)*
+*(Replace `<ssh_user>` with your actual username, e.g., `dvfs2`, `ubuntu`, or `jsm`)*
 
 ---
 

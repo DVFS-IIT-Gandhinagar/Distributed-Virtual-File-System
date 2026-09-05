@@ -18,13 +18,16 @@ const (
 
 // NodeState represents the tracked state and latest telemetry of a single fileserver.
 type NodeState struct {
-	FsID       string             `json:"fsID"`
-	Address    string             `json:"address"`
-	MetricsURL string             `json:"metricsURL"`
-	Status     NodeStatus         `json:"status"`
-	LastSeen   int64              `json:"lastSeen"`
-	Metrics    *FileserverMetrics `json:"metrics"`
-	History    *RingBuffer        `json:"-"`
+	FsID        string             `json:"fsID"`
+	DisplayID   int                `json:"displayID"`
+	DisplayName string             `json:"displayName"`
+	MachineName string             `json:"machineName"`
+	Address     string             `json:"address"`
+	MetricsURL  string             `json:"metricsURL"`
+	Status      NodeStatus         `json:"status"`
+	LastSeen    int64              `json:"lastSeen"`
+	Metrics     *FileserverMetrics `json:"metrics"`
+	History     *RingBuffer        `json:"-"`
 }
 
 // AdminServer coordinates fileserver discovery, metrics polling, and serves the REST API + UI.

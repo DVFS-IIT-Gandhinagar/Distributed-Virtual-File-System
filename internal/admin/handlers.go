@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +21,7 @@ type ClusterResponse struct {
 	TotalStorageBytes uint64            `json:"total_storage_bytes"`
 	UsedStorageBytes  uint64            `json:"used_storage_bytes"`
 	TotalUsers        int               `json:"total_users"`
+	OnlineUsers       int               `json:"online_users"`
 }
 
 func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
@@ -37,17 +40,33 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 	onlineCount := 0
 	var totalStorage uint64
 	var usedStorage uint64
+	onlineUsersMap := make(map[string]struct{})
 
 	for _, n := range a.nodes {
 		nodes = append(nodes, n)
 		if n.Status == StatusOnline || n.Status == StatusWarning || n.Status == StatusDegraded || n.Status == StatusCritical {
 			onlineCount++
+			if n.Metrics != nil {
+				for _, u := range n.Metrics.ActiveUsers {
+					onlineUsersMap[u] = struct{}{}
+				}
+			}
 		}
 		if n.Metrics != nil {
 			totalStorage += n.Metrics.DiskTotalBytes
 			usedStorage += n.Metrics.DiskUsedBytes
 		}
 	}
+
+	// Deterministically sort nodes by numerical ID (0, 1, ... 8)
+	sort.Slice(nodes, func(i, j int) bool {
+		id1, err1 := strconv.Atoi(nodes[i].FsID)
+		id2, err2 := strconv.Atoi(nodes[j].FsID)
+		if err1 == nil && err2 == nil {
+			return id1 < id2
+		}
+		return nodes[i].FsID < nodes[j].FsID
+	})
 
 	usersCopy := make(map[string]string, len(a.users))
 	for u, id := range a.users {
@@ -62,6 +81,7 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 		TotalStorageBytes: totalStorage,
 		UsedStorageBytes:  usedStorage,
 		TotalUsers:        len(usersCopy),
+		OnlineUsers:       len(onlineUsersMap),
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -83,9 +103,18 @@ func (a *AdminServer) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 	a.mu.RLock()
 	node, exists := a.nodes[fsID]
+	if !exists {
+		for _, n := range a.nodes {
+			if strings.EqualFold(n.DisplayName, fsID) || fmt.Sprintf("%d", n.DisplayID) == fsID {
+				node = n
+				exists = true
+				break
+			}
+		}
+	}
 	a.mu.RUnlock()
 
-	if !exists || node.History == nil {
+	if !exists || node == nil || node.History == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -122,20 +151,26 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type NodeUserStorage struct {
-	FsID       string `json:"fs_id"`
-	Address    string `json:"address"`
-	UsedBytes  uint64 `json:"used_bytes"`
-	QuotaBytes uint64 `json:"quota_bytes"`
+	FsID        string `json:"fs_id"`
+	DisplayID   int    `json:"display_id"`
+	DisplayName string `json:"display_name"`
+	MachineName string `json:"machine_name"`
+	Address     string `json:"address"`
+	UsedBytes   uint64 `json:"used_bytes"`
+	QuotaBytes  uint64 `json:"quota_bytes"`
 }
 
 type UserSummary struct {
 	Username       string            `json:"username"`
 	HomeFsID       string            `json:"home_fs_id"`
+	HomeFsDisplay  string            `json:"home_fs_display"`
+	HomeFsMachine  string            `json:"home_fs_machine"`
 	HomeFsAddress  string            `json:"home_fs_address"`
 	QuotaLimit     uint64            `json:"quota_limit"`
 	QuotaUsed      uint64            `json:"quota_used"`
 	UsagePercent   float64           `json:"usage_percent"`
 	ActiveSessions int               `json:"active_sessions"`
+	IsOnline       bool              `json:"is_online"`
 	Nodes          []NodeUserStorage `json:"nodes"`
 }
 
@@ -156,15 +191,27 @@ func (a *AdminServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 	userList := make([]UserSummary, 0, len(a.users))
 	for username, homeFsID := range a.users {
+		homeDisplayID := 1
+		if num, parseErr := strconv.Atoi(homeFsID); parseErr == nil {
+			homeDisplayID = num + 1
+		}
 		summary := UserSummary{
-			Username:   username,
-			HomeFsID:   homeFsID,
-			QuotaLimit: 1024 * 1024 * 1024, // 1 GB default
-			Nodes:      make([]NodeUserStorage, 0),
+			Username:      username,
+			HomeFsID:      homeFsID,
+			HomeFsDisplay: fmt.Sprintf("FS-%d", homeDisplayID),
+			HomeFsMachine: fmt.Sprintf("dvfs%d", homeDisplayID),
+			QuotaLimit:    1024 * 1024 * 1024, // 1 GB default
+			Nodes:         make([]NodeUserStorage, 0),
 		}
 
 		if homeNode, exists := a.nodes[homeFsID]; exists {
 			summary.HomeFsAddress = homeNode.Address
+			if homeNode.DisplayName != "" {
+				summary.HomeFsDisplay = homeNode.DisplayName
+			}
+			if homeNode.MachineName != "" {
+				summary.HomeFsMachine = homeNode.MachineName
+			}
 			if homeNode.Metrics != nil {
 				if q, ok := homeNode.Metrics.PerUserQuota[username]; ok && q > 0 {
 					summary.QuotaLimit = q
@@ -173,29 +220,72 @@ func (a *AdminServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var totalUsed uint64
+		var activeSessions int
 		for fsID, node := range a.nodes {
 			if node.Metrics != nil {
 				used, hasUsed := node.Metrics.PerUserStorage[username]
 				quota, hasQuota := node.Metrics.PerUserQuota[username]
 				if hasUsed || hasQuota {
+					nodeDisplayID := 1
+					if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
+						nodeDisplayID = num + 1
+					}
+					nodeDisplayName := node.DisplayName
+					if nodeDisplayName == "" {
+						nodeDisplayName = fmt.Sprintf("FS-%d", nodeDisplayID)
+					}
+					nodeMachineName := node.MachineName
+					if nodeMachineName == "" {
+						nodeMachineName = fmt.Sprintf("dvfs%d", nodeDisplayID)
+					}
+
 					summary.Nodes = append(summary.Nodes, NodeUserStorage{
-						FsID:       fsID,
-						Address:    node.Address,
-						UsedBytes:  used,
-						QuotaBytes: quota,
+						FsID:        fsID,
+						DisplayID:   nodeDisplayID,
+						DisplayName: nodeDisplayName,
+						MachineName: nodeMachineName,
+						Address:     node.Address,
+						UsedBytes:   used,
+						QuotaBytes:  quota,
 					})
 					totalUsed += used
+				}
+
+				// Check active sessions on online nodes
+				if node.Status == StatusOnline || node.Status == StatusWarning || node.Status == StatusDegraded || node.Status == StatusCritical {
+					for _, activeUser := range node.Metrics.ActiveUsers {
+						if activeUser == username {
+							activeSessions++
+						}
+					}
 				}
 			}
 		}
 
 		summary.QuotaUsed = totalUsed
+		summary.ActiveSessions = activeSessions
+		summary.IsOnline = (activeSessions > 0)
 		if summary.QuotaLimit > 0 {
 			summary.UsagePercent = float64(summary.QuotaUsed) / float64(summary.QuotaLimit) * 100.0
 		}
 
+		// Sort user's nodes list deterministically by numerical ID
+		sort.Slice(summary.Nodes, func(i, j int) bool {
+			id1, err1 := strconv.Atoi(summary.Nodes[i].FsID)
+			id2, err2 := strconv.Atoi(summary.Nodes[j].FsID)
+			if err1 == nil && err2 == nil {
+				return id1 < id2
+			}
+			return summary.Nodes[i].FsID < summary.Nodes[j].FsID
+		})
+
 		userList = append(userList, summary)
 	}
+
+	// Sort users alphabetically
+	sort.Slice(userList, func(i, j int) bool {
+		return userList[i].Username < userList[j].Username
+	})
 
 	if err := json.NewEncoder(w).Encode(userList); err != nil {
 		log.Printf("[ADMIN] handleUsers encode error: %v", err)

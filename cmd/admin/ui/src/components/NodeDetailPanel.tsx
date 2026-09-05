@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import type { NodeInfo, Snapshot } from '../types';
 import { fetchHistory } from '../api';
-import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getCpuTempColor } from '../utils';
+import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getCpuTempColor, formatNodeDisplayName, formatMachineName } from '../utils';
 
 interface Props {
   node: NodeInfo;
@@ -64,14 +64,14 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
         className={`offcanvas offcanvas-end ${show ? 'show' : ''}`}
         tabIndex={-1}
         style={{ width: 550, zIndex: 1045, visibility: show ? 'visible' : 'hidden' }}
-        aria-label={`Node FS-${node.fsID} details`}
+        aria-label={`Node ${formatNodeDisplayName(node)} details`}
       >
         {/* Header */}
         <div className="offcanvas-header border-bottom" style={{ borderLeft: `4px solid ${statusColor}` }}>
           <div>
             <h5 className="offcanvas-title fw-bold mb-0">
               <i className="bi bi-server me-2" style={{ color: statusColor }}></i>
-              Node FS-{node.fsID}
+              Node {formatNodeDisplayName(node)} <small className="text-muted fw-normal">({formatMachineName(node)})</small>
             </h5>
             <small className="text-muted">{node.address}</small>
           </div>
@@ -91,9 +91,20 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                 onClose();
                 navigate(`/actions?node=${node.fsID}&action=restart`);
               }}
-              title={`Restart Node FS-${node.fsID}`}
+              title={`Restart Node ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-arrow-repeat"></i>Restart
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
+              onClick={() => {
+                onClose();
+                navigate(`/actions?node=${node.fsID}&action=reboot`);
+              }}
+              title={`Reboot Machine for ${formatNodeDisplayName(node)}`}
+            >
+              <i className="bi bi-power"></i>Reboot
             </button>
             <button
               type="button"
@@ -102,7 +113,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                 onClose();
                 navigate(`/actions?node=${node.fsID}&action=pull`);
               }}
-              title={`Pull repo on Node FS-${node.fsID}`}
+              title={`Pull repo on Node ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-git"></i>Git Pull
             </button>
@@ -113,7 +124,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                 onClose();
                 navigate(`/actions?node=${node.fsID}&action=logs`);
               }}
-              title={`View logs for Node FS-${node.fsID}`}
+              title={`View logs for Node ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-journal-text"></i>Logs
             </button>
@@ -125,7 +136,13 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
               { label: 'CPU Usage', value: `${m.cpu_usage_percent.toFixed(1)}%`, icon: 'bi-cpu' },
               { label: 'RAM Usage', value: `${m.mem_usage_percent.toFixed(1)}%`, icon: 'bi-memory' },
               { label: 'Chunks', value: m.chunk_count, icon: 'bi-box' },
-              { label: 'Connections', value: m.active_connections, icon: 'bi-diagram-2' },
+              {
+                label: 'Connections',
+                value: m.active_users && m.active_users.length > 0
+                  ? `${m.active_connections} (${m.active_users.join(', ')})`
+                  : m.active_connections,
+                icon: 'bi-diagram-2'
+              },
               { label: 'Load 1m', value: m.load_avg_1m.toFixed(2), icon: 'bi-graph-up' },
               { label: 'Uptime', value: formatUptime(m.uptime_seconds), icon: 'bi-clock' },
             ].map(s => (

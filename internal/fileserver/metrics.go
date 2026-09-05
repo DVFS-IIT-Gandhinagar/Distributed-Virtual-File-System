@@ -29,6 +29,7 @@ type Metrics struct {
 	UptimeSeconds     float64           `json:"uptime_seconds"`
 	LastRestartUnix   int64             `json:"last_restart_unix"`
 	ActiveConnections int               `json:"active_connections"`
+	ActiveUsers       []string          `json:"active_users"`
 	UsersAssigned     int               `json:"users_assigned_count"`
 }
 
@@ -56,7 +57,14 @@ func (fs *FileServer) CollectMetrics() Metrics {
 		}
 	}
 
-	activeConns := len(fs.sessions)
+	now := time.Now()
+	activeUsers := make([]string, 0)
+	for username, sess := range fs.sessions {
+		if fs.isSessionActiveLocked(sess, now) {
+			activeUsers = append(activeUsers, username)
+		}
+	}
+	activeConns := len(activeUsers)
 	usersAssigned := len(fs.users)
 	rootDir := fs.rootDir
 	startTime := fs.startTime
@@ -102,6 +110,7 @@ func (fs *FileServer) CollectMetrics() Metrics {
 		UptimeSeconds:     time.Since(startTime).Seconds(),
 		LastRestartUnix:   startTime.Unix(),
 		ActiveConnections: activeConns,
+		ActiveUsers:       activeUsers,
 		UsersAssigned:     usersAssigned,
 	}
 }

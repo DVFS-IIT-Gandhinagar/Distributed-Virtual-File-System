@@ -41,6 +41,7 @@ func TestHandleUsers(t *testing.T) {
 			PerUserQuota: map[string]uint64{
 				"alice": 1024 * 1024 * 1024,
 			},
+			ActiveUsers: []string{"alice"},
 		},
 	}
 	admin.nodes["1"] = &NodeState{
@@ -55,6 +56,7 @@ func TestHandleUsers(t *testing.T) {
 			PerUserQuota: map[string]uint64{
 				"bob": 1024 * 1024 * 1024,
 			},
+			ActiveUsers: []string{},
 		},
 	}
 
@@ -95,6 +97,9 @@ func TestHandleUsers(t *testing.T) {
 	if len(alice.Nodes) != 2 {
 		t.Errorf("expected alice to have entries on 2 nodes, got %d", len(alice.Nodes))
 	}
+	if alice.ActiveSessions != 1 || !alice.IsOnline {
+		t.Errorf("expected alice active_sessions=1 and is_online=true, got sessions=%d online=%v", alice.ActiveSessions, alice.IsOnline)
+	}
 
 	bob, exists := userMap["bob"]
 	if !exists {
@@ -106,6 +111,9 @@ func TestHandleUsers(t *testing.T) {
 	}
 	if bob.UsagePercent < 95.0 {
 		t.Errorf("expected bob usage percent > 95%%, got %f", bob.UsagePercent)
+	}
+	if bob.ActiveSessions != 0 || bob.IsOnline {
+		t.Errorf("expected bob active_sessions=0 and is_online=false, got sessions=%d online=%v", bob.ActiveSessions, bob.IsOnline)
 	}
 }
 

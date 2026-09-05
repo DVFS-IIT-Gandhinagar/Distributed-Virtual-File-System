@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCluster } from '../api';
 import NodeCard from '../components/NodeCard';
@@ -13,6 +13,16 @@ export default function Nodes() {
     queryFn: fetchCluster,
     refetchInterval: 5000,
   });
+
+  const sortedNodes = useMemo(() => {
+    if (!cluster?.nodes) return [];
+    return [...cluster.nodes].sort((a, b) => {
+      const numA = parseInt(a.fsID, 10);
+      const numB = parseInt(b.fsID, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.fsID.localeCompare(b.fsID);
+    });
+  }, [cluster?.nodes]);
 
   if (isLoading) {
     return (
@@ -57,14 +67,14 @@ export default function Nodes() {
         </div>
 
         {/* Node Grid */}
-        {cluster.nodes.length === 0 ? (
+        {sortedNodes.length === 0 ? (
           <div className="text-center py-5">
             <i className="bi bi-hdd-network text-muted" style={{ fontSize: '3rem' }}></i>
             <p className="mt-3 text-muted">No nodes registered in the cluster.</p>
           </div>
         ) : (
           <div className="row g-4">
-            {cluster.nodes.map(node => (
+            {sortedNodes.map(node => (
               <div key={node.fsID} className="col-sm-6 col-lg-4 col-xl-3">
                 <NodeCard
                   node={node}
