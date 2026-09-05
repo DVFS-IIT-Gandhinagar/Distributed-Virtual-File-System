@@ -353,3 +353,30 @@ func TestDeleteFileFreesStorageQuota(t *testing.T) {
 		t.Errorf("expected final storage to be 5 MB, got %d", rootFinal.Size)
 	}
 }
+
+func TestDiskSafetyBufferLimit(t *testing.T) {
+	fs := newTestFileServer(t)
+
+	// Verify constant is exactly 20 GiB
+	expected20GiB := uint64(20 * 1024 * 1024 * 1024)
+	if DiskSafetyBuffer != expected20GiB {
+		t.Errorf("expected DiskSafetyBuffer to be 20 GiB (%d), got %d", expected20GiB, DiskSafetyBuffer)
+	}
+
+	// Verify readFileserverDiskStats applies 20 GiB reserve
+	total, _, free, _ := readFileserverDiskStats(fs.rootDir)
+	rawTotal, _, rawFree, _ := readDiskStats(fs.rootDir)
+
+	if rawTotal > DiskSafetyBuffer {
+		if total != rawTotal-DiskSafetyBuffer {
+			t.Errorf("expected reported total %d, got %d", rawTotal-DiskSafetyBuffer, total)
+		}
+	}
+	if rawFree > DiskSafetyBuffer {
+		if free != rawFree-DiskSafetyBuffer {
+			t.Errorf("expected reported free %d, got %d", rawFree-DiskSafetyBuffer, free)
+		}
+	} else if free != 0 {
+		t.Errorf("expected free=0 when rawFree <= 20 GiB, got %d", free)
+	}
+}

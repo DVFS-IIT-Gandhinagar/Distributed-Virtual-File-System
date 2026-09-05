@@ -15,6 +15,8 @@ const (
 )
 
 // getUserQuotaLocked returns the configured quota for a user in bytes.
+// If a user has a custom quota configured in fs.quotas, that is used.
+// Otherwise, it returns defaultStorageQuota (1 GB).
 // Caller must hold fs.mu (either read or write lock).
 func (fs *FileServer) getUserQuotaLocked(username string) uint64 {
 	if q, exists := fs.quotas[username]; exists && q > 0 {
