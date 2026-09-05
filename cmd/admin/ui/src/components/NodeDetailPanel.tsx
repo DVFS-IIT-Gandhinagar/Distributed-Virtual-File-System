@@ -235,7 +235,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={50} />
                       <Tooltip
                         formatter={(val: number, name: string) => [
-                          `${val} GB`,
+                          `${val} GiB`,
                           name === 'used' ? 'Used' : 'Quota',
                         ]}
                       />

@@ -202,15 +202,15 @@ export default function Overview() {
             <div className="card-header bg-white border-bottom">
               <h6 className="mb-0 fw-semibold">
                 <i className="bi bi-hdd me-2 text-purple" style={{ color: '#6f42c1' }}></i>
-                Cluster Storage by Node (GB)
+                Cluster Storage by Node (GiB)
               </h6>
             </div>
             <div className="card-body">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={storageData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} unit=" GB" />
-                  <Tooltip formatter={(val: number) => `${val} GB`} />
+                  <YAxis tick={{ fontSize: 12 }} unit=" GiB" />
+                  <Tooltip formatter={(val: number) => `${val} GiB`} />
                   <Legend />
                   <Bar dataKey="used" name="Used" stackId="a" radius={[0, 0, 0, 0]}>
                     {storageData.map((entry, i) => (
@@ -230,15 +230,15 @@ export default function Overview() {
             <div className="card-header bg-white border-bottom">
               <h6 className="mb-0 fw-semibold">
                 <i className="bi bi-memory me-2" style={{ color: '#0d6efd' }}></i>
-                Cluster Memory Usage by Node (GB)
+                Cluster Memory Usage by Node (GiB)
               </h6>
             </div>
             <div className="card-body">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={memData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} unit=" GB" />
-                  <Tooltip formatter={(val: number) => `${val} GB`} />
+                  <YAxis tick={{ fontSize: 12 }} unit=" GiB" />
+                  <Tooltip formatter={(val: number) => `${val} GiB`} />
                   <Legend />
                   <Bar dataKey="used" name="Used" radius={[0, 0, 0, 0]}>
                     {memData.map((entry, i) => (

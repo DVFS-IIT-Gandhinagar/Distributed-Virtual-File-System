@@ -52,6 +52,10 @@ const trashDirName = ".trash"
 const storageQuota uint64 = defaultStorageQuota // backwards-compatibility alias for tests
 const trashNavigationDeniedMsg = "access denied: use show_trash to view trash contents"
 
+// DiskSafetyBuffer is the reserved disk space for host OS and system health (20 GiB).
+// The fileserver max usable space is capped at (disk space - DiskSafetyBuffer).
+const DiskSafetyBuffer uint64 = 20 * 1024 * 1024 * 1024 // 20 GiB safety buffer
+
 // NewFileServer creates a new file server object, either blank or loading from existing data
 func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertPath string) (*FileServer, error) {
 	fs := &FileServer{
@@ -740,6 +744,21 @@ func (fs *FileServer) checkStorageQuotaWithAdditional(username string, additiona
 			username, freeSpace, additionalBytes, quota)
 	}
 
+	// Verify that physical disk has enough free space while preserving the 20 GiB safety buffer
+	if additionalBytes > 0 {
+		_, _, diskFree, _ := readDiskStats(fs.rootDir)
+		if diskFree > 0 {
+			if diskFree <= DiskSafetyBuffer || additionalBytes > (diskFree-DiskSafetyBuffer) {
+				usableFree := uint64(0)
+				if diskFree > DiskSafetyBuffer {
+					usableFree = diskFree - DiskSafetyBuffer
+				}
+				return fmt.Errorf("fileserver storage limit reached: cannot write %d bytes (usable free space: %d bytes, 20 GiB reserved for system safety)",
+					additionalBytes, usableFree)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1344,6 +1363,19 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 			}
 			return fmt.Errorf("storage quota exceeded: write of %d bytes exceeds available free space (%d bytes remaining of %d quota)",
 				len(data), freeSpace, quota)
+		}
+		if sizeDiff > 0 {
+			_, _, diskFree, _ := readDiskStats(fs.rootDir)
+			if diskFree > 0 {
+				if diskFree <= DiskSafetyBuffer || uint64(sizeDiff) > (diskFree-DiskSafetyBuffer) {
+					usableFree := uint64(0)
+					if diskFree > DiskSafetyBuffer {
+						usableFree = diskFree - DiskSafetyBuffer
+					}
+					return fmt.Errorf("fileserver storage limit reached: cannot write %d bytes (usable free space: %d bytes, 20 GiB reserved for system safety)",
+						sizeDiff, usableFree)
+				}
+			}
 		}
 	}
 

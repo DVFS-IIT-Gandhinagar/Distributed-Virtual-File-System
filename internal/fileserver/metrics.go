@@ -71,8 +71,8 @@ func (fs *FileServer) CollectMetrics() Metrics {
 
 	fs.mu.RUnlock()
 
-	// Disk stats
-	diskTotal, diskUsed, diskFree, diskPct := readDiskStats(rootDir)
+	// Disk stats (max usable space is disk space - 20 GiB safety buffer)
+	diskTotal, diskUsed, diskFree, diskPct := readFileserverDiskStats(rootDir)
 
 	// CPU temperature
 	cpuTemp := readCPUTemp()
@@ -231,4 +231,28 @@ func readCPUUsage() float64 {
 	}
 	idleDelta := s2.idle - s1.idle
 	return (1.0 - float64(idleDelta)/float64(totalDelta)) * 100.0
+}
+
+// readFileserverDiskStats reads disk statistics and applies the 20 GiB safety buffer,
+// ensuring the fileserver's max usable space is capped at (disk space - 20 GiB).
+func readFileserverDiskStats(path string) (total, used, free uint64, pct float64) {
+	rawTotal, rawUsed, rawFree, _ := readDiskStats(path)
+	if rawTotal > DiskSafetyBuffer {
+		total = rawTotal - DiskSafetyBuffer
+	} else {
+		total = rawTotal
+	}
+	if rawFree > DiskSafetyBuffer {
+		free = rawFree - DiskSafetyBuffer
+	} else {
+		free = 0
+	}
+	used = rawUsed
+	if total > 0 {
+		pct = float64(used) / float64(total) * 100.0
+		if pct > 100.0 {
+			pct = 100.0
+		}
+	}
+	return total, used, free, pct
 }
