@@ -50,6 +50,8 @@ export default function Actions() {
   const [gitBranch, setGitBranch] = useState('main');
   const [makeTarget, setMakeTarget] = useState('');
   const [restartMode, setRestartMode] = useState<'systemctl' | 'binary'>('systemctl');
+  const [targetService, setTargetService] = useState<'fileserver' | 'metaserver' | 'admin' | 'all'>('fileserver');
+  const [aptMode, setAptMode] = useState<'update_upgrade' | 'update_only'>('update_upgrade');
   const [logMode, setLogMode] = useState<'journalctl' | 'tail'>('journalctl');
   const [logLines, setLogLines] = useState<number>(50);
   const [customCommand, setCustomCommand] = useState('');
@@ -100,7 +102,7 @@ export default function Actions() {
       setSelectedNodeIDs(cluster.nodes.map((n) => n.fsID));
     }
 
-    if (actionParam && ['pull', 'build', 'restart', 'reboot', 'logs', 'custom'].includes(actionParam)) {
+    if (actionParam && ['pull', 'build', 'restart', 'reboot', 'apt', 'logs', 'custom'].includes(actionParam)) {
       setActiveAction(actionParam);
     }
 
@@ -251,6 +253,8 @@ export default function Actions() {
       git_branch: activeAction === 'pull' ? gitBranch : undefined,
       make_target: activeAction === 'build' ? makeTarget : undefined,
       custom_command: activeAction === 'custom' ? customCommand : undefined,
+      target_service: (activeAction === 'restart' || activeAction === 'logs') ? targetService : undefined,
+      apt_mode: activeAction === 'apt' ? aptMode : undefined,
       restart_mode: restartMode,
       log_mode: logMode,
       log_lines: logLines,
@@ -433,6 +437,14 @@ export default function Actions() {
                 </li>
                 <li className="nav-item">
                   <button
+                    className={`nav-link border-0 py-3 px-3 fw-semibold ${activeAction === 'apt' ? 'active text-success' : 'text-muted'}`}
+                    onClick={() => setActiveAction('apt')}
+                  >
+                    <i className="bi bi-arrow-up-circle me-1 text-success"></i>APT Update
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
                     className={`nav-link border-0 py-3 px-3 fw-semibold ${activeAction === 'logs' ? 'active text-primary' : 'text-muted'}`}
                     onClick={() => setActiveAction('logs')}
                   >
@@ -517,7 +529,7 @@ export default function Actions() {
                 {activeAction === 'restart' && (
                   <div>
                     <div className="d-flex justify-content-between align-items-center mb-3">
-                      <h6 className="fw-bold mb-0">Fileserver Process Restart</h6>
+                      <h6 className="fw-bold mb-0">Service Process Restart</h6>
                       <div className="btn-group btn-group-sm" role="group">
                         <button
                           type="button"
@@ -536,87 +548,146 @@ export default function Actions() {
                       </div>
                     </div>
 
+                    {/* Service Target Selector */}
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Target Service to Restart</label>
+                      <div className="btn-group btn-group-sm w-100" role="group">
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'fileserver' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('fileserver')}
+                        >
+                          <i className="bi bi-hdd-network me-1"></i>Fileserver
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'metaserver' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('metaserver')}
+                        >
+                          <i className="bi bi-diagram-3 me-1"></i>Metaserver
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'admin' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('admin')}
+                        >
+                          <i className="bi bi-speedometer2 me-1"></i>Admin Console
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'all' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('all')}
+                        >
+                          <i className="bi bi-grid-fill me-1"></i>All Services
+                        </button>
+                      </div>
+                    </div>
+
                     {restartMode === 'systemctl' ? (
                       <div className="alert alert-info py-2 small mb-3">
                         <i className="bi bi-info-circle me-1"></i>
-                        Executes <code>sudo systemctl restart dvfs-fileserver</code>. Requires systemd service installed on nodes.
+                        {targetService === 'fileserver' && (
+                          <span>Executes <code>sudo systemctl restart dvfs-fileserver</code>. Requires systemd service installed on nodes.</span>
+                        )}
+                        {targetService === 'metaserver' && (
+                          <span>Executes <code>sudo systemctl restart dvfs-metaserver</code> on selected nodes.</span>
+                        )}
+                        {targetService === 'admin' && (
+                          <span>Executes <code>sudo systemctl restart dvfs-admin</code> on selected nodes.</span>
+                        )}
+                        {targetService === 'all' && (
+                          <span>Executes <code>sudo systemctl restart dvfs-metaserver dvfs-fileserver dvfs-admin</code> on selected nodes.</span>
+                        )}
                       </div>
                     ) : (
                       <div className="mb-3">
                         <small className="text-muted d-block mb-2">
-                          Direct launch uses <code>pkill</code> followed by <code>nohup ./bin/fileserver ...</code>.
+                          {targetService === 'fileserver' && (
+                            <>Direct launch uses <code>pkill</code> followed by <code>nohup ./bin/fileserver ...</code>.</>
+                          )}
+                          {targetService === 'metaserver' && (
+                            <>Direct launch uses <code>pkill -f metaserver</code> followed by <code>nohup ./bin/metaserver ... &</code>.</>
+                          )}
+                          {targetService === 'admin' && (
+                            <>Direct launch uses <code>pkill -f bin/admin</code> followed by <code>nohup ./bin/admin ... &</code>.</>
+                          )}
+                          {targetService === 'all' && (
+                            <>Direct launch stops active binaries and restarts metaserver, fileserver, and admin in the background.</>
+                          )}
                         </small>
-                        <div className="accordion accordion-flush border rounded" id="restartParamsAccordion">
-                          {selectedNodeIDs.map((id) => {
-                            const p = nodeParamsOverrides[id] || presets[id] || {
-                              fs_id: id,
-                              port: 50052,
-                              meta_addr: '127.0.0.1:50051',
-                              own_ip: '127.0.0.1',
-                              data_dir: `./fileserver_data_${id}`,
-                            };
-                            return (
-                              <div key={id} className="accordion-item">
-                                <h2 className="accordion-header" id={`flush-heading-${id}`}>
-                                  <button
-                                    className="accordion-button collapsed py-2 small fw-semibold"
-                                    type="button"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target={`#flush-collapse-${id}`}
-                                  >
-                                    Node FS-{id} Parameters ({p.host || p.address})
-                                  </button>
-                                </h2>
-                                <div id={`flush-collapse-${id}`} className="accordion-collapse collapse p-3 bg-light">
-                                  <div className="row g-2 small">
-                                    <div className="col-6">
-                                      <label className="form-label">Port</label>
-                                      <input
-                                        type="number"
-                                        className="form-control form-control-sm"
-                                        value={p.port}
-                                        onChange={(e) =>
-                                          setNodeParamsOverrides({
-                                            ...nodeParamsOverrides,
-                                            [id]: { ...p, port: Number(e.target.value) },
-                                          })
-                                        }
-                                      />
-                                    </div>
-                                    <div className="col-6">
-                                      <label className="form-label">Own IP</label>
-                                      <input
-                                        type="text"
-                                        className="form-control form-control-sm"
-                                        value={p.own_ip}
-                                        onChange={(e) =>
-                                          setNodeParamsOverrides({
-                                            ...nodeParamsOverrides,
-                                            [id]: { ...p, own_ip: e.target.value },
-                                          })
-                                        }
-                                      />
-                                    </div>
-                                    <div className="col-12">
-                                      <label className="form-label">Meta Server Addr</label>
-                                      <input
-                                        type="text"
-                                        className="form-control form-control-sm"
-                                        value={p.meta_addr}
-                                        onChange={(e) =>
-                                          setNodeParamsOverrides({
-                                            ...nodeParamsOverrides,
-                                            [id]: { ...p, meta_addr: e.target.value },
-                                          })
-                                        }
-                                      />
+                        {targetService === 'fileserver' && (
+                          <div className="accordion accordion-flush border rounded" id="restartParamsAccordion">
+                            {selectedNodeIDs.map((id) => {
+                              const p = nodeParamsOverrides[id] || presets[id] || {
+                                fs_id: id,
+                                port: 50052,
+                                meta_addr: '127.0.0.1:50051',
+                                own_ip: '127.0.0.1',
+                                data_dir: `./fileserver_data_${id}`,
+                              };
+                              return (
+                                <div key={id} className="accordion-item">
+                                  <h2 className="accordion-header" id={`flush-heading-${id}`}>
+                                    <button
+                                      className="accordion-button collapsed py-2 small fw-semibold"
+                                      type="button"
+                                      data-bs-toggle="collapse"
+                                      data-bs-target={`#flush-collapse-${id}`}
+                                    >
+                                      Node FS-{id} Parameters ({p.host || p.address})
+                                    </button>
+                                  </h2>
+                                  <div id={`flush-collapse-${id}`} className="accordion-collapse collapse p-3 bg-light">
+                                    <div className="row g-2 small">
+                                      <div className="col-6">
+                                        <label className="form-label">Port</label>
+                                        <input
+                                          type="number"
+                                          className="form-control form-control-sm"
+                                          value={p.port}
+                                          onChange={(e) =>
+                                            setNodeParamsOverrides({
+                                              ...nodeParamsOverrides,
+                                              [id]: { ...p, port: Number(e.target.value) },
+                                            })
+                                          }
+                                        />
+                                      </div>
+                                      <div className="col-6">
+                                        <label className="form-label">Own IP</label>
+                                        <input
+                                          type="text"
+                                          className="form-control form-control-sm"
+                                          value={p.own_ip}
+                                          onChange={(e) =>
+                                            setNodeParamsOverrides({
+                                              ...nodeParamsOverrides,
+                                              [id]: { ...p, own_ip: e.target.value },
+                                            })
+                                          }
+                                        />
+                                      </div>
+                                      <div className="col-12">
+                                        <label className="form-label">Meta Server Addr</label>
+                                        <input
+                                          type="text"
+                                          className="form-control form-control-sm"
+                                          value={p.meta_addr}
+                                          onChange={(e) =>
+                                            setNodeParamsOverrides({
+                                              ...nodeParamsOverrides,
+                                              [id]: { ...p, meta_addr: e.target.value },
+                                            })
+                                          }
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -657,11 +728,78 @@ export default function Actions() {
                   </div>
                 )}
 
+                {/* 3c. APT Update Form */}
+                {activeAction === 'apt' && (
+                  <div>
+                    <h6 className="fw-bold mb-3 text-success">
+                      <i className="bi bi-arrow-up-circle me-2"></i>APT Package Update & Upgrade
+                    </h6>
+                    <div className="alert alert-success d-flex align-items-start gap-2 mb-3">
+                      <i className="bi bi-check-circle-fill fs-5 mt-1 flex-shrink-0"></i>
+                      <div className="small">
+                        <strong>Debian / Ubuntu Package Management:</strong>
+                        <p className="mb-0 mt-1">
+                          Executes system package updates across selected cluster nodes via <code>apt</code> with non-interactive flags.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Update Mode</label>
+                      <div className="d-flex flex-column gap-2">
+                        <div className="form-check">
+                          <input
+                            className="form-check-input"
+                            type="radio"
+                            name="aptModeRadio"
+                            id="aptModeBoth"
+                            checked={aptMode === 'update_upgrade'}
+                            onChange={() => setAptMode('update_upgrade')}
+                          />
+                          <label className="form-check-label small" htmlFor="aptModeBoth">
+                            <strong>Update & Upgrade:</strong> <code>sudo apt update && sudo apt upgrade -y</code>
+                            <div className="text-muted small">Synchronizes package lists and upgrades all installed packages non-interactively.</div>
+                          </label>
+                        </div>
+                        <div className="form-check">
+                          <input
+                            className="form-check-input"
+                            type="radio"
+                            name="aptModeRadio"
+                            id="aptModeUpdateOnly"
+                            checked={aptMode === 'update_only'}
+                            onChange={() => setAptMode('update_only')}
+                          />
+                          <label className="form-check-label small" htmlFor="aptModeUpdateOnly">
+                            <strong>Update Lists Only:</strong> <code>sudo apt update</code>
+                            <div className="text-muted small">Refreshes repository indices without modifying installed software.</div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-light rounded border mb-3">
+                      <div className="small text-muted mb-2">Target Machines for APT ({selectedNodeIDs.length}):</div>
+                      <div className="d-flex flex-wrap gap-1">
+                        {selectedNodeIDs.length === 0 ? (
+                          <span className="text-danger small fst-italic">No target nodes selected!</span>
+                        ) : (
+                          selectedNodeIDs.map((id) => (
+                            <span key={id} className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                              <i className="bi bi-server me-1"></i>{formatNodeDisplayName(id)} ({formatMachineName(id)})
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 4. Logs Form */}
                 {activeAction === 'logs' && (
                   <div>
                     <div className="d-flex justify-content-between align-items-center mb-3">
-                      <h6 className="fw-bold mb-0">View Fileserver Logs</h6>
+                      <h6 className="fw-bold mb-0">View Service Logs</h6>
                       <div className="btn-group btn-group-sm" role="group">
                         <button
                           type="button"
@@ -676,6 +814,33 @@ export default function Actions() {
                           onClick={() => setLogMode('tail')}
                         >
                           File Tail
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold">Target Service</label>
+                      <div className="btn-group btn-group-sm w-100" role="group">
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'fileserver' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('fileserver')}
+                        >
+                          <i className="bi bi-hdd-network me-1"></i>Fileserver
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'metaserver' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('metaserver')}
+                        >
+                          <i className="bi bi-diagram-3 me-1"></i>Metaserver
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${targetService === 'admin' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          onClick={() => setTargetService('admin')}
+                        >
+                          <i className="bi bi-speedometer2 me-1"></i>Admin Console
                         </button>
                       </div>
                     </div>
@@ -696,8 +861,8 @@ export default function Actions() {
 
                     <p className="text-muted small">
                       {logMode === 'journalctl'
-                        ? `Fetches logs using journalctl -u dvfs-fileserver -n ${logLines} --no-pager.`
-                        : `Tails ${repoPath}/fileserver.log.`}
+                        ? `Fetches logs using journalctl -u ${targetService === 'metaserver' ? 'dvfs-metaserver' : targetService === 'admin' ? 'dvfs-admin' : 'dvfs-fileserver'} -n ${logLines} --no-pager.`
+                        : `Tails ${repoPath}/${targetService === 'metaserver' ? 'metaserver.log' : targetService === 'admin' ? 'admin.log' : 'fileserver.log'}.`}
                     </p>
                   </div>
                 )}
@@ -778,7 +943,7 @@ export default function Actions() {
                 <div className="mt-4">
                   <button
                     type="submit"
-                    className={`btn ${activeAction === 'reboot' ? 'btn-danger' : 'btn-primary'} w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2`}
+                    className={`btn ${activeAction === 'reboot' ? 'btn-danger' : activeAction === 'apt' ? 'btn-success' : 'btn-primary'} w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2`}
                     disabled={executing || selectedNodeIDs.length === 0}
                   >
                     {executing ? (
@@ -790,6 +955,11 @@ export default function Actions() {
                       <>
                         <i className="bi bi-power fs-5"></i>
                         Reboot {selectedNodeIDs.length} Machine(s)
+                      </>
+                    ) : activeAction === 'apt' ? (
+                      <>
+                        <i className="bi bi-arrow-up-circle fs-5"></i>
+                        Run APT {aptMode === 'update_upgrade' ? 'Update & Upgrade' : 'Update'} on {selectedNodeIDs.length} Node(s)
                       </>
                     ) : (
                       <>
