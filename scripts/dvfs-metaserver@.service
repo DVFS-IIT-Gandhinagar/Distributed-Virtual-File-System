@@ -1,0 +1,22 @@
+[Unit]
+Description=Distributed Virtual File System (DVFS) Metaserver for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/Distributed-Virtual-File-System
+Environment=META_PORT=50051
+Environment=STATE_FILE=%h/Distributed-Virtual-File-System/bin/metaserver_state.json
+
+ExecStart=/bin/bash %h/Distributed-Virtual-File-System/scripts/start-metaserver.sh
+
+Restart=on-failure
+RestartSec=3s
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
