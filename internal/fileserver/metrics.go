@@ -116,19 +116,7 @@ func (fs *FileServer) CollectMetrics() Metrics {
 }
 
 
-// readCPUTemp reads the CPU temperature from the Linux thermal sysfs interface.
-func readCPUTemp() float64 {
-	data, err := os.ReadFile("/sys/class/thermal/thermal_zone0/temp")
-	if err != nil {
-		return 0.0
-	}
-	raw := strings.TrimSpace(string(data))
-	milliDeg, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0.0
-	}
-	return float64(milliDeg) / 1000.0
-}
+
 
 // readMemInfo parses /proc/meminfo and returns total and available memory in bytes.
 func readMemInfo() (total, avail uint64) {

@@ -72,7 +72,7 @@ export interface UserSummary {
   nodes: NodeUserStorage[];
 }
 
-export type ActionType = 'pull' | 'build' | 'restart' | 'reboot' | 'logs' | 'custom';
+export type ActionType = 'pull' | 'build' | 'restart' | 'reboot' | 'apt' | 'logs' | 'custom';
 
 export interface NodeRestartParams {
   fs_id: string;
@@ -92,6 +92,8 @@ export interface ActionRequest {
   repo_path?: string;
   git_branch?: string;
   make_target?: string;
+  target_service?: 'fileserver' | 'metaserver' | 'admin' | 'all';
+  apt_mode?: 'update_upgrade' | 'update_only';
   timeout_seconds?: number;
   ssh_port?: number;
   log_lines?: number;

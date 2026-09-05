@@ -119,6 +119,17 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             </button>
             <button
               type="button"
+              className="btn btn-outline-success btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
+              onClick={() => {
+                onClose();
+                navigate(`/actions?node=${node.fsID}&action=apt`);
+              }}
+              title={`APT Update on ${formatNodeDisplayName(node)}`}
+            >
+              <i className="bi bi-arrow-up-circle"></i>APT
+            </button>
+            <button
+              type="button"
               className="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
               onClick={() => {
                 onClose();

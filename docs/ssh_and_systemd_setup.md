@@ -37,13 +37,13 @@ ssh -i ~/.ssh/id_ed25519 <ssh_user>@<node_ip> "echo 'SSH connection successful!'
 
 ## 2. Passwordless `systemctl`, `journalctl` & `reboot` for Sudo
 
-The Admin Console executes `sudo systemctl restart dvfs-fileserver`, `journalctl -u dvfs-fileserver`, and `sudo reboot` (or `shutdown`) to restart services, read logs, and reboot physical cluster machines. To allow the SSH user to execute these commands without a password prompt:
+The Admin Console executes `sudo systemctl restart dvfs-fileserver` (and `dvfs-metaserver`, `dvfs-admin`), `journalctl`, `sudo reboot`, and `sudo apt update && sudo apt upgrade -y`. To allow the SSH user to execute these commands without an interactive password prompt:
 
-On **each Fileserver node**, create or update `/etc/sudoers.d/dvfs`:
+On **cluster nodes**, create or update `/etc/sudoers.d/dvfs`:
 ```bash
 sudo bash -c 'cat <<EOF > /etc/sudoers.d/dvfs
-# Allow dvfs service management and machine reboot without password prompt
-<ssh_user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dvfs-fileserver, /usr/bin/systemctl status dvfs-fileserver, /usr/bin/journalctl, /sbin/reboot, /usr/sbin/reboot, /usr/bin/systemctl reboot, /sbin/shutdown
+# Allow dvfs service management, system reboot, and apt package updates without password prompt
+<ssh_user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dvfs-*, /usr/bin/systemctl status dvfs-*, /usr/bin/journalctl, /sbin/reboot, /usr/sbin/reboot, /usr/bin/systemctl reboot, /sbin/shutdown, /usr/bin/apt, /usr/bin/apt-get
 EOF'
 
 # Secure permissions
