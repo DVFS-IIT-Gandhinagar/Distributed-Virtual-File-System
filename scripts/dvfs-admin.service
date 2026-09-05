@@ -1,0 +1,31 @@
+[Unit]
+Description=Distributed Virtual File System (DVFS) Admin Console
+After=network-online.target dvfs-metaserver.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Dynamic user resolution: automatically detects the primary non-root user (UID 1000: e.g. ubuntu, rpi, jsm)
+# or respects DVFS_USER / DVFS_REPO environment overrides if set.
+Environment=ADMIN_PORT=8080
+Environment=STATE_FILE=./bin/metaserver_state.json
+
+ExecStart=/bin/bash -c '\
+  USER_NAME=$${DVFS_USER:-$$(id -un 1000 2>/dev/null || whoami)}; \
+  USER_HOME=$${DVFS_HOME:-$$(getent passwd "$$USER_NAME" | cut -d: -f6)}; \
+  REPO_DIR="$${DVFS_REPO:-$$USER_HOME/Distributed-Virtual-File-System}"; \
+  cd "$$REPO_DIR" || { echo "[DVFS ERROR] Repository directory $$REPO_DIR not found" >&2; exit 1; }; \
+  if command -v runuser >/dev/null 2>&1; then \
+    exec runuser -u "$$USER_NAME" -- /bin/bash "$$REPO_DIR/scripts/start-admin.sh"; \
+  else \
+    exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
+  fi'
+
+Restart=on-failure
+RestartSec=3s
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

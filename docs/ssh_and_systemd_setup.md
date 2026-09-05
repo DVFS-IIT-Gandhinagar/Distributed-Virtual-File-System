@@ -91,16 +91,47 @@ journalctl -u dvfs-fileserver -n 50 --no-pager
 
 ---
 
-## 4. Running the Admin Server with SSH Flags
+## 4. Installing the systemd Metaserver & Admin Console Services
 
-When starting the Admin Console binary, supply your SSH configuration:
+To run the Metaserver and Admin Console automatically on startup as persistent background services on the coordinator machine:
+
+### Step 1: Copy Service Files
+```bash
+sudo cp scripts/dvfs-metaserver.service /etc/systemd/system/
+sudo cp scripts/dvfs-admin.service /etc/systemd/system/
+chmod +x scripts/start-metaserver.sh scripts/start-admin.sh
+```
+
+### Step 2: Enable & Start the Services
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now dvfs-metaserver
+sudo systemctl enable --now dvfs-admin
+```
+
+### Step 3: Verify Status & View Logs
+```bash
+# Check status
+sudo systemctl status dvfs-metaserver
+sudo systemctl status dvfs-admin
+
+# Stream live service logs
+journalctl -u dvfs-metaserver -f
+journalctl -u dvfs-admin -f
+```
+
+---
+
+## 5. Running the Admin Server Manually (Optional)
+
+When starting the Admin Console binary manually without systemd:
 ```bash
 ./bin/admin \
   -port=8080 \
-  -state_file=./metaserver_state.json \
-  -ssh_user=ubuntu \
+  -state_file=./bin/metaserver_state.json \
+  -ssh_user=$(whoami) \
   -ssh_key=~/.ssh/id_ed25519 \
   -repo_path=~/Distributed-Virtual-File-System
 ```
 
-In the web console, navigate to the **Actions** tab. All nodes registered in `metaserver_state.json` will be available for remote orchestration.
+In the web console (default `http://<host-ip>:8080`), navigate to the **Actions** tab. All nodes registered in `metaserver_state.json` will be available for remote orchestration.
