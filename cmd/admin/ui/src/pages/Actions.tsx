@@ -37,6 +37,10 @@ export default function Actions() {
 
   // Selected Nodes
   const [selectedNodeIDs, setSelectedNodeIDs] = useState<string[]>([]);
+  const selectedNodeIDsRef = useRef<string[]>(selectedNodeIDs);
+  useEffect(() => {
+    selectedNodeIDsRef.current = selectedNodeIDs;
+  }, [selectedNodeIDs]);
 
   // Action Tabs
   const [activeAction, setActiveAction] = useState<ActionType>('pull');
@@ -123,7 +127,7 @@ export default function Actions() {
         // Initialize all target nodes to pending in the live status matrix
         {
           const map: Record<string, NodeExecutionStatus> = {};
-          selectedNodeIDs.forEach((id) => {
+          selectedNodeIDsRef.current.forEach((id) => {
             map[id] = { status: 'pending' };
           });
           setNodeStatusMap(map);
@@ -187,6 +191,11 @@ export default function Actions() {
     }
   };
 
+  const handleStreamEventRef = useRef(handleStreamEvent);
+  useEffect(() => {
+    handleStreamEventRef.current = handleStreamEvent;
+  });
+
   const connectWebSocket = useCallback(() => {
     if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
       return;
@@ -206,7 +215,7 @@ export default function Actions() {
     ws.onmessage = (event) => {
       try {
         const ev: ActionEvent = JSON.parse(event.data);
-        handleStreamEvent(ev);
+        handleStreamEventRef.current(ev);
       } catch (err) {
         appendTerminal(`[RAW] ${event.data}`);
       }

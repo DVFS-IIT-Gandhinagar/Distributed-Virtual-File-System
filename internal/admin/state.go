@@ -24,6 +24,24 @@ type MetaState struct {
 // LoadMetaState reads and parses the metaserver state JSON file.
 func LoadMetaState(path string) (*MetaState, error) {
 	f, err := os.Open(path)
+	if err != nil && os.IsNotExist(err) {
+		// Try sensible fallbacks if the configured path doesn't exist
+		fallbacks := []string{
+			"./metaserver_state.json",
+			"./bin/metaserver_state.json",
+			"../metaserver_state.json",
+		}
+		for _, fb := range fallbacks {
+			if fb == path {
+				continue
+			}
+			if fbFile, fbErr := os.Open(fb); fbErr == nil {
+				f = fbFile
+				err = nil
+				break
+			}
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("LoadMetaState: open %s: %w", path, err)
 	}
