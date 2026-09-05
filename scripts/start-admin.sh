@@ -27,10 +27,28 @@ if [ -z "$SSH_KEY" ]; then
 fi
 
 
-cd ./cmd/admin/ui
-npm run build
-cd ../../..
+# Ensure user environment (NVM, .profile, .bashrc, PATH) is loaded under systemd
+if [ -s "$HOME/.profile" ]; then
+    . "$HOME/.profile" 2>/dev/null || true
+fi
+if [ -s "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc" 2>/dev/null || true
+fi
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    export NVM_DIR="$HOME/.nvm"
+    . "$NVM_DIR/nvm.sh" 2>/dev/null || true
+fi
+export PATH="$PATH:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin"
 
+# Build UI if npm is available, or use existing pre-built static files
+if command -v npm >/dev/null 2>&1; then
+    echo "[STARTUP] Building admin UI with npm..."
+    (cd ./cmd/admin/ui && npm run build) || echo "[STARTUP WARNING] npm run build failed, continuing with existing files..."
+elif [ -f "$STATIC_DIR/index.html" ]; then
+    echo "[STARTUP] Found pre-built UI in $STATIC_DIR (npm not in PATH; skipping build)."
+else
+    echo "[STARTUP WARNING] npm not found and $STATIC_DIR/index.html does not exist. API will start, but web UI may be unavailable."
+fi
 
 # Ensure binary is built
 if [ ! -f "./bin/admin" ]; then

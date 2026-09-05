@@ -10,7 +10,7 @@ WorkingDirectory=%h/Distributed-Virtual-File-System
 Environment=ADMIN_PORT=8080
 Environment=STATE_FILE=%h/Distributed-Virtual-File-System/bin/metaserver_state.json
 
-ExecStart=/bin/bash %h/Distributed-Virtual-File-System/scripts/start-admin.sh
+ExecStart=/bin/bash -l %h/Distributed-Virtual-File-System/scripts/start-admin.sh
 
 Restart=on-failure
 RestartSec=3s
