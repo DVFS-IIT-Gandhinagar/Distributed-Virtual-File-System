@@ -142,6 +142,22 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 	}, nil
 }
 
+// UnregisterClient handles client disconnect and removes their active session
+func (h *GRPCHandler) UnregisterClient(ctx context.Context, req *pb.UnregisterClientRequest) (*pb.UnregisterClientResponse, error) {
+	if req == nil || req.Username == "" {
+		return &pb.UnregisterClientResponse{
+			Success: false,
+			Error:   "username is required",
+		}, nil
+	}
+
+	log.Printf("UnregisterClient: user '%s' disconnected (clientId: %s)", req.Username, req.ClientId)
+	h.fileServer.RemoveClientSession(req.Username)
+	return &pb.UnregisterClientResponse{
+		Success: true,
+	}, nil
+}
+
 // GetAttr gets file attributes
 func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.GetAttrResponse, error) {
 	log.Printf("GetAttr: FID=%v", req.Fid)

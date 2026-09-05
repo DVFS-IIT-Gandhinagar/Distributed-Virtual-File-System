@@ -294,3 +294,39 @@ func TestHandlerShowTrashListsEntries(t *testing.T) {
 		t.Fatalf("expected listed entry name to be set")
 	}
 }
+
+func TestHandlerUnregisterClient(t *testing.T) {
+	h, fs := setupHandlerTest(t)
+
+	// Register client
+	regResp, err := h.RegisterClient(context.Background(), &pb.RegisterClientRequest{
+		Username: "alice",
+		RootUser: "alice",
+		RootPath: "alice",
+		ClientId: "client-1",
+	})
+	if err != nil || !regResp.Success {
+		t.Fatalf("RegisterClient failed: %v", err)
+	}
+
+	// Verify session active in metrics
+	m1 := fs.CollectMetrics()
+	if m1.ActiveConnections != 1 || len(m1.ActiveUsers) != 1 || m1.ActiveUsers[0] != "alice" {
+		t.Fatalf("expected 1 active connection for alice, got %d active, users=%v", m1.ActiveConnections, m1.ActiveUsers)
+	}
+
+	// Unregister client
+	unregResp, err := h.UnregisterClient(context.Background(), &pb.UnregisterClientRequest{
+		Username: "alice",
+		ClientId: "client-1",
+	})
+	if err != nil || !unregResp.Success {
+		t.Fatalf("UnregisterClient failed: %v", err)
+	}
+
+	// Verify session immediately removed and active connections is 0
+	m2 := fs.CollectMetrics()
+	if m2.ActiveConnections != 0 || len(m2.ActiveUsers) != 0 {
+		t.Fatalf("expected 0 active connections after unregister, got %d, users=%v", m2.ActiveConnections, m2.ActiveUsers)
+	}
+}

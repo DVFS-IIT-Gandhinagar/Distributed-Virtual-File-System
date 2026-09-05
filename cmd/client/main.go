@@ -4,6 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
 )
@@ -29,6 +32,16 @@ func main() {
 
 	// Create client
 	c := client.NewClient(*username, *useTLS, *caCertPath)
+	defer c.Disconnect()
+
+	// Handle graceful exit on Ctrl+C or kill signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		c.Disconnect()
+		os.Exit(0)
+	}()
 
 	// Main loop for metaserver navigation
 	for {
@@ -132,5 +145,6 @@ func main() {
 
 		// Otherwise, loop back to metaserver selection
 		fmt.Println("Returning to metaserver root selection...")
+		c.Disconnect()
 	}
 }

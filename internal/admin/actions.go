@@ -392,7 +392,11 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 			stderrWriter := &eventWriter{nodeID: nID, stream: "stderr", actionID: actionID, onEvent: onEvent}
 
 			nodeUser := sshUser
-			if params != nil && params.SSHUser != "" {
+			if req.RestartParams != nil && req.RestartParams[nID] != nil && req.RestartParams[nID].SSHUser != "" {
+				nodeUser = req.RestartParams[nID].SSHUser
+			} else if req.SSHUser != "" {
+				nodeUser = req.SSHUser
+			} else if params != nil && params.SSHUser != "" {
 				nodeUser = params.SSHUser
 			} else if sshUser == "" || strings.HasPrefix(sshUser, "dvfs") {
 				if num, parseErr := strconv.Atoi(nID); parseErr == nil {

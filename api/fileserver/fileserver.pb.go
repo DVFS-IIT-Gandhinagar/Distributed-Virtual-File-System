@@ -2629,6 +2629,78 @@ func (x *SetQuotaResponse) GetError() string {
 	return ""
 }
 
+type UnregisterClientRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnregisterClientRequest) Reset() {
+	*x = UnregisterClientRequest{}
+}
+
+func (x *UnregisterClientRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnregisterClientRequest) ProtoMessage() {}
+
+func (x *UnregisterClientRequest) ProtoReflect() protoreflect.Message {
+	return nil
+}
+
+func (x *UnregisterClientRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *UnregisterClientRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+type UnregisterClientResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnregisterClientResponse) Reset() {
+	*x = UnregisterClientResponse{}
+}
+
+func (x *UnregisterClientResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnregisterClientResponse) ProtoMessage() {}
+
+func (x *UnregisterClientResponse) ProtoReflect() protoreflect.Message {
+	return nil
+}
+
+func (x *UnregisterClientResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UnregisterClientResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_api_fileserver_fileserver_proto protoreflect.FileDescriptor
 
 const file_api_fileserver_fileserver_proto_rawDesc = "" +

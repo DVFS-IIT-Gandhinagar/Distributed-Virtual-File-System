@@ -46,25 +46,25 @@ export default function Overview() {
     );
   }
 
-  const onlineNodes = sortedNodes.filter(n => n.status === 'online');
+  const onlineNodes = sortedNodes.filter(n => n.metrics && n.status !== 'offline');
   const avgCpuTemp =
     onlineNodes.length > 0
-      ? onlineNodes.reduce((s, n) => s + n.metrics.cpu_temp_celsius, 0) / onlineNodes.length
+      ? onlineNodes.reduce((s, n) => s + (n.metrics?.cpu_temp_celsius ?? 0), 0) / onlineNodes.length
       : 0;
 
   // Storage bar chart data
   const storageData = sortedNodes.map(n => ({
     name: `${formatNodeDisplayName(n)} (${formatMachineName(n)})`,
-    used: parseFloat((n.metrics.disk_used_bytes / (1024 ** 3)).toFixed(2)),
-    free: parseFloat((n.metrics.disk_free_bytes / (1024 ** 3)).toFixed(2)),
+    used: n.metrics ? parseFloat((n.metrics.disk_used_bytes / (1024 ** 3)).toFixed(2)) : 0,
+    free: n.metrics ? parseFloat((n.metrics.disk_free_bytes / (1024 ** 3)).toFixed(2)) : 0,
     color: getStatusColor(n.status),
   }));
 
   // Memory bar chart data
   const memData = sortedNodes.map(n => ({
     name: `${formatNodeDisplayName(n)} (${formatMachineName(n)})`,
-    used: parseFloat((n.metrics.mem_used_bytes / (1024 ** 3)).toFixed(2)),
-    total: parseFloat((n.metrics.mem_total_bytes / (1024 ** 3)).toFixed(2)),
+    used: n.metrics ? parseFloat((n.metrics.mem_used_bytes / (1024 ** 3)).toFixed(2)) : 0,
+    total: n.metrics ? parseFloat((n.metrics.mem_total_bytes / (1024 ** 3)).toFixed(2)) : 0,
     color: getStatusColor(n.status),
   }));
 
