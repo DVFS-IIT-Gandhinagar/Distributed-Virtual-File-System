@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FileServer_RegisterClient_FullMethodName = "/fileserver.FileServer/RegisterClient"
-	FileServer_CreateFile_FullMethodName     = "/fileserver.FileServer/CreateFile"
+	FileServer_RegisterClient_FullMethodName   = "/fileserver.FileServer/RegisterClient"
+	FileServer_UnregisterClient_FullMethodName = "/fileserver.FileServer/UnregisterClient"
+	FileServer_CreateFile_FullMethodName       = "/fileserver.FileServer/CreateFile"
 	FileServer_OpenFile_FullMethodName       = "/fileserver.FileServer/OpenFile"
 	FileServer_ReadFile_FullMethodName       = "/fileserver.FileServer/ReadFile"
 	FileServer_WriteFile_FullMethodName      = "/fileserver.FileServer/WriteFile"
@@ -48,6 +49,7 @@ const (
 // FileServer service
 type FileServerClient interface {
 	RegisterClient(ctx context.Context, in *RegisterClientRequest, opts ...grpc.CallOption) (*RegisterClientResponse, error)
+	UnregisterClient(ctx context.Context, in *UnregisterClientRequest, opts ...grpc.CallOption) (*UnregisterClientResponse, error)
 	CreateFile(ctx context.Context, in *CreateFileRequest, opts ...grpc.CallOption) (*CreateFileResponse, error)
 	OpenFile(ctx context.Context, in *OpenFileRequest, opts ...grpc.CallOption) (*OpenFileResponse, error)
 	ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (*ReadFileResponse, error)
@@ -81,6 +83,16 @@ func (c *fileServerClient) RegisterClient(ctx context.Context, in *RegisterClien
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterClientResponse)
 	err := c.cc.Invoke(ctx, FileServer_RegisterClient_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServerClient) UnregisterClient(ctx context.Context, in *UnregisterClientRequest, opts ...grpc.CallOption) (*UnregisterClientResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnregisterClientResponse)
+	err := c.cc.Invoke(ctx, FileServer_UnregisterClient_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +308,7 @@ func (c *fileServerClient) SetQuota(ctx context.Context, in *SetQuotaRequest, op
 // FileServer service
 type FileServerServer interface {
 	RegisterClient(context.Context, *RegisterClientRequest) (*RegisterClientResponse, error)
+	UnregisterClient(context.Context, *UnregisterClientRequest) (*UnregisterClientResponse, error)
 	CreateFile(context.Context, *CreateFileRequest) (*CreateFileResponse, error)
 	OpenFile(context.Context, *OpenFileRequest) (*OpenFileResponse, error)
 	ReadFile(context.Context, *ReadFileRequest) (*ReadFileResponse, error)
@@ -327,6 +340,9 @@ type UnimplementedFileServerServer struct{}
 
 func (UnimplementedFileServerServer) RegisterClient(context.Context, *RegisterClientRequest) (*RegisterClientResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterClient not implemented")
+}
+func (UnimplementedFileServerServer) UnregisterClient(context.Context, *UnregisterClientRequest) (*UnregisterClientResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnregisterClient not implemented")
 }
 func (UnimplementedFileServerServer) CreateFile(context.Context, *CreateFileRequest) (*CreateFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateFile not implemented")
@@ -420,6 +436,24 @@ func _FileServer_RegisterClient_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(FileServerServer).RegisterClient(ctx, req.(*RegisterClientRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileServer_UnregisterClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterClientRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServerServer).UnregisterClient(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileServer_UnregisterClient_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServerServer).UnregisterClient(ctx, req.(*UnregisterClientRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -758,6 +792,10 @@ var FileServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterClient",
 			Handler:    _FileServer_RegisterClient_Handler,
+		},
+		{
+			MethodName: "UnregisterClient",
+			Handler:    _FileServer_UnregisterClient_Handler,
 		},
 		{
 			MethodName: "CreateFile",

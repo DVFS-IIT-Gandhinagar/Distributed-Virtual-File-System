@@ -271,9 +271,20 @@ message SetQuotaResponse {
   string error = 2;
 }
 
+message UnregisterClientRequest {
+  string client_id = 1;
+  string username = 2;
+}
+
+message UnregisterClientResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // FileServer service
 service FileServer {
   rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse);
+  rpc UnregisterClient(UnregisterClientRequest) returns (UnregisterClientResponse);
   rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
   rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
