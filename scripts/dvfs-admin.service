@@ -16,9 +16,9 @@ ExecStart=/bin/bash -c '\
   REPO_DIR="$${DVFS_REPO:-$$USER_HOME/Distributed-Virtual-File-System}"; \
   cd "$$REPO_DIR" || { echo "[DVFS ERROR] Repository directory $$REPO_DIR not found" >&2; exit 1; }; \
   if command -v runuser >/dev/null 2>&1; then \
-    exec runuser -u "$$USER_NAME" -- /bin/bash "$$REPO_DIR/scripts/start-admin.sh"; \
+    exec runuser -l "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash -l '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
   else \
-    exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
+    exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash -l '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
   fi'
 
 Restart=on-failure
