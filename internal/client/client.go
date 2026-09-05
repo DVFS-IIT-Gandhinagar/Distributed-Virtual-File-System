@@ -29,6 +29,7 @@ type Client struct {
 	rootFID       *domain.FID
 	currentFID    *domain.FID
 	serverConn    pb.FileServerClient
+	grpcConn      *grpc.ClientConn
 	useTLS        bool
 	caCertPath    string
 	cacheHandler  *CacheHandler
@@ -146,6 +147,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
 
+	c.grpcConn = conn
 	c.serverConn = pb.NewFileServerClient(conn)
 
 	// Register and get root FID
@@ -207,6 +209,28 @@ func (c *Client) ReRegister() error {
 	}
 
 	return nil
+}
+
+// Disconnect gracefully unregisters the client from the fileserver, closes the gRPC connection,
+// and shuts down the callback listener.
+func (c *Client) Disconnect() {
+	if c.serverConn != nil && c.username != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, _ = c.serverConn.UnregisterClient(ctx, &pb.UnregisterClientRequest{
+			ClientId: c.clientID,
+			Username: c.username,
+		})
+		c.serverConn = nil
+	}
+	if c.grpcConn != nil {
+		_ = c.grpcConn.Close()
+		c.grpcConn = nil
+	}
+	if c.stopCallback != nil {
+		_ = c.stopCallback()
+		c.stopCallback = nil
+	}
 }
 
 // Share another user the root dir only if current user is owner

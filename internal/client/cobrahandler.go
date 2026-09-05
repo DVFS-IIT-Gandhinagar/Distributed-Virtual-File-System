@@ -376,6 +376,9 @@ func (h *CobraHandler) setupCommands() {
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Goodbye!")
 			h.cacheHandler.ClearCache()
+			if h.cacheHandler != nil && h.cacheHandler.client != nil {
+				h.cacheHandler.client.Disconnect()
+			}
 			os.Exit(0)
 		},
 	})
