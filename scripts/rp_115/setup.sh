@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+sudo lvextend -l +100%FREE -r /dev/ubuntu-vg/ubuntu-lv
 sudo apt update
 sudo apt install -y git make wget lm-sensors
 
