@@ -23,12 +23,24 @@ type clientSession struct {
 	consecutiveFailures int
 }
 
-const activeSessionTTL = 5 * time.Minute
+const activeSessionTTL = 45 * time.Second
 const callbackTimeout = 3 * time.Second
 const maxCallbackFailures = 3
 const callbackEventFileUpdated uint64 = 1
 const callbackEventDirNewFile uint64 = 2
 const callbackEventFileDeleted uint64 = 3
+
+// RemoveClientSession removes a client session when the client explicitly disconnects.
+func (fs *FileServer) RemoveClientSession(username string) {
+	if username == "" {
+		return
+	}
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	delete(fs.sessions, username)
+}
 
 // UpsertClientSession records callback address and activity metadata for a user.
 func (fs *FileServer) UpsertClientSession(username, callbackAddress string, rootFID *domain.FID) {
