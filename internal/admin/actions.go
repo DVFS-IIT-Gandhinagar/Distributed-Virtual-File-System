@@ -358,16 +358,18 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 	}
 
 	// Concurrency lock: ensure none of the target nodes are currently running an action
+	var acquiredLocks []string
 	for _, nID := range req.TargetNodeIDs {
-		if activeAct, busy := o.activeNodes.Load(nID); busy {
-			return nil, fmt.Errorf("node FS-%s is currently executing action %s", nID, activeAct)
+		if actual, loaded := o.activeNodes.LoadOrStore(nID, actionID); loaded {
+			for _, lockedID := range acquiredLocks {
+				o.activeNodes.Delete(lockedID)
+			}
+			return nil, fmt.Errorf("node FS-%s is currently executing action %s", nID, actual)
 		}
-	}
-	for _, nID := range req.TargetNodeIDs {
-		o.activeNodes.Store(nID, actionID)
+		acquiredLocks = append(acquiredLocks, nID)
 	}
 	defer func() {
-		for _, nID := range req.TargetNodeIDs {
+		for _, nID := range acquiredLocks {
 			o.activeNodes.Delete(nID)
 		}
 	}()
