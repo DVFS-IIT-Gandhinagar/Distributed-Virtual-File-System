@@ -2,16 +2,12 @@ package fileserver
 
 import (
 	"context"
-	"crypto/x509"
 	"log"
-	"net"
-	"os"
 	"time"
 
 	cbpb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/callback"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 type clientSession struct {
@@ -183,30 +179,8 @@ func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FI
 		return
 	}
 
-	var opts []grpc.DialOption
-	if fs.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(fs.caCertPath)
-		if err != nil {
-			log.Printf("Callback: failed to read CA cert file: %v", err)
-			fs.recordCallbackResult(target.username, false)
-			return
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			log.Printf("Callback: failed to append CA cert for user=%s", target.username)
-			fs.recordCallbackResult(target.username, false)
-			return
-		}
-
-		host, _, err := net.SplitHostPort(target.callbackAddress)
-		if err != nil {
-			host = target.callbackAddress
-		}
-		creds := credentials.NewClientTLSFromCert(cp, host)
-		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
-	}
+	// Callbacks are lightweight invalidation pulses; dial over plaintext (Option A)
+	opts := []grpc.DialOption{grpc.WithInsecure()}
 
 	conn, err := grpc.NewClient(target.callbackAddress, opts...)
 	if err != nil {

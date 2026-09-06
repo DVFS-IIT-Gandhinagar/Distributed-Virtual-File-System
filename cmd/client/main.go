@@ -17,9 +17,6 @@ func main() {
 	ip_addr := flag.String("ip_addr", "127.0.0.1", "enter ip_addr for mds/fs")
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
 	port := flag.String("port", "", "enter port for mds/fs")
-	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
-	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to CA certificate")
-
 	flag.Parse()
 
 	if *port == "" {
@@ -30,8 +27,8 @@ func main() {
 		}
 	}
 
-	// Create client
-	c := client.NewClient(*username, *useTLS, *caCertPath)
+	// Create client (Root CA TLS is enabled by default)
+	c := client.NewClient(*username)
 	defer c.Disconnect()
 
 	// Handle graceful exit on Ctrl+C or kill signal

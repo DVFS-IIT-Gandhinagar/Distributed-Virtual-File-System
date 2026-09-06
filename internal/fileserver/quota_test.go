@@ -18,7 +18,7 @@ func TestGetUserQuotaDefault(t *testing.T) {
 
 func TestSetUserQuotaAndPersistence(t *testing.T) {
 	root := t.TempDir()
-	fs, err := NewFileServer("fs-test", root, false, "", "")
+	fs, err := NewFileServer("fs-test", root, "")
 	if err != nil {
 		t.Fatalf("NewFileServer failed: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestSetUserQuotaAndPersistence(t *testing.T) {
 	}
 
 	// Create a new FileServer instance on the same directory to verify persistence
-	fs2, err := NewFileServer("fs-test", root, false, "", "")
+	fs2, err := NewFileServer("fs-test", root, "")
 	if err != nil {
 		t.Fatalf("NewFileServer (restart) failed: %v", err)
 	}

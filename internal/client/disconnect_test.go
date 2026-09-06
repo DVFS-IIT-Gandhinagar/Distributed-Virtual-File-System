@@ -81,7 +81,7 @@ func TestClientDisconnect_FullGRPCTeardown(t *testing.T) {
 	fsAddr, fs, cleanupFS := startTestFileServerGRPC(t, "")
 	defer cleanupFS()
 
-	c := NewClient("alice", false, "")
+	c := NewClient("alice", WithInsecure())
 	c.SetRootUser("alice")
 	c.SetRootPath("alice", "alice")
 

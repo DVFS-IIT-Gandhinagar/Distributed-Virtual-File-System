@@ -108,7 +108,7 @@ func testInodeStoreNormalizePath(t *testing.T) {
 func testACLStoreLoadCorrupted(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	fs, err := NewFileServer("server-1", dir, false, "ms-addr", "")
+	fs, err := NewFileServer("server-1", dir, "ms-addr")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,7 +136,7 @@ func testACLStoreLoadCorrupted(t *testing.T) {
 func testACLStoreSharedNull(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	fs, err := NewFileServer("server-1", dir, false, "ms-addr", "")
+	fs, err := NewFileServer("server-1", dir, "ms-addr")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -184,7 +184,7 @@ func testACLStoreDirShares(t *testing.T) {
 
 	// Corrupted dirShares
 	dir := t.TempDir()
-	fs2, err := NewFileServer("server-1", dir, false, "ms-addr", "")
+	fs2, err := NewFileServer("server-1", dir, "ms-addr")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -267,7 +267,7 @@ func testOpMetrics(t *testing.T) {
 func testCallbackServer(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	fs, err := NewFileServer("server-1", dir, false, "ms-addr", "")
+	fs, err := NewFileServer("server-1", dir, "ms-addr")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -357,7 +357,7 @@ func testCallbackServer(t *testing.T) {
 func testQuota(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	fs, err := NewFileServer("server-1", dir, false, "ms-addr", "")
+	fs, err := NewFileServer("server-1", dir, "ms-addr")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -399,7 +399,7 @@ func testFileServer(t *testing.T) {
 	
 	// 1. NewFileServer with non-existent rootDir
 	dir := filepath.Join(t.TempDir(), "nonexistent_root")
-	fs, err := NewFileServer("server-1", dir, false, "ms-addr", "")
+	fs, err := NewFileServer("server-1", dir, "ms-addr")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

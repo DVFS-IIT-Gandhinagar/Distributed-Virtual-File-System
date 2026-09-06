@@ -26,8 +26,6 @@ type FileServer struct {
 	users       map[string]*domain.FID
 	nextInodeID uint64
 	mu          sync.RWMutex
-	useTLS      bool
-	caCertPath  string
 	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
 	msAddr      string
 	Shared      map[string][]string       // directory path -> users map (e.g., "umang/proj" -> ["romit"])
@@ -59,15 +57,13 @@ const trashNavigationDeniedMsg = "access denied: use show_trash to view trash co
 const DiskSafetyBuffer uint64 = 20 * 1024 * 1024 * 1024 // 20 GiB safety buffer
 
 // NewFileServer creates a new file server object, either blank or loading from existing data
-func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertPath string) (*FileServer, error) {
+func NewFileServer(serverID, rootDir string, msAddr string) (*FileServer, error) {
 	fs := &FileServer{
 		serverID:    serverID,
 		rootDir:     rootDir,
 		inodes:      make(map[string]*domain.Inode),
 		users:       make(map[string]*domain.FID),
 		nextInodeID: 0,
-		useTLS:      useTLS,
-		caCertPath:  caCertPath,
 		trashMeta:   make(map[string]trashEntry),
 		msAddr:      msAddr,
 		Shared:      make(map[string][]string),

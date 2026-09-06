@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
@@ -20,7 +21,6 @@ func main() {
 	stateFile := flag.String("state_file", "./metaserver_state.json", "Path to metaserver state snapshot file")
 	heartbeatTimeout := flag.Duration("heartbeat_timeout", 30*time.Second, "Timeout after which fileserver is marked stale")
 	heartbeatCheckInterval := flag.Duration("heartbeat_check_interval", 5*time.Second, "Interval to evaluate fileserver liveness")
-	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
 	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
 	tlsKeyPath := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
 	flag.Parse()
@@ -41,14 +41,18 @@ func main() {
 
 	// TLS configuration
 	var opts []grpc.ServerOption
-	if *useTLS {
-		log.Println("TLS enabled")
-		tlsCert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsKeyPath)
-		if err != nil {
-			log.Fatalf("Failed to load key pair: %v", err)
+	if *tlsCertPath != "" && *tlsKeyPath != "" {
+		if _, errCert := os.Stat(*tlsCertPath); errCert == nil {
+			if _, errKey := os.Stat(*tlsKeyPath); errKey == nil {
+				tlsCert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsKeyPath)
+				if err != nil {
+					log.Fatalf("Failed to load key pair: %v", err)
+				}
+				creds := credentials.NewServerTLSFromCert(&tlsCert)
+				opts = append(opts, grpc.Creds(creds))
+				log.Println("TLS enabled with server certificate")
+			}
 		}
-		creds := credentials.NewServerTLSFromCert(&tlsCert)
-		opts = append(opts, grpc.Creds(creds))
 	}
 
 	// Start gRPC server

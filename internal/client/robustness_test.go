@@ -52,7 +52,7 @@ func TestRobustness_PathContainsTrashSegment_EdgeCases(t *testing.T) {
 // =============================================================================
 
 func TestRobustness_ClientNotifyWriter(t *testing.T) {
-	c := NewClient("alice", false, "")
+	c := NewClient("alice", WithInsecure())
 
 	// 1. Notify without notifyWriter set (should not panic)
 	c.Notify("test message %d", 42)
@@ -167,7 +167,7 @@ func TestRobustness_CallbackServerInvalidate_EventTypesAndNotification(t *testin
 }
 
 func TestRobustness_CallbackServerInvalidate_NilCacheHandler(t *testing.T) {
-	c := NewClient("bob", false, "")
+	c := NewClient("bob", WithInsecure())
 	var notifyBuf bytes.Buffer
 	c.SetNotifyWriter(&notifyBuf)
 	// client without cache handler
@@ -506,7 +506,7 @@ func TestRobustness_CobraHandlerCommandExecution(t *testing.T) {
 // =============================================================================
 
 func TestRobustness_MSClientEdgeCases(t *testing.T) {
-	c := NewClient("alice", false, "")
+	c := NewClient("alice", WithInsecure())
 
 	// Empty msAddr
 	roots, err := c.GetRoots("")
@@ -519,16 +519,16 @@ func TestRobustness_MSClientEdgeCases(t *testing.T) {
 		t.Fatalf("expected empty addr and nil err for empty msAddr, got addr=%q, err=%v", addr, err)
 	}
 
-	// Non-existent CA cert path with useTLS=true
-	cTLS := NewClient("alice", true, filepath.Join(t.TempDir(), "nonexistent.crt"))
+	// Default client uses hardcoded Root CA; dialing non-existent server fails
+	cTLS := NewClient("alice")
 	_, err = cTLS.GetRoots("127.0.0.1:50051")
 	if err == nil {
-		t.Fatalf("expected error dialing with non-existent CA cert, got nil")
+		t.Fatalf("expected error dialing non-existent server with TLS, got nil")
 	}
 
 	_, err = cTLS.NavigateToFileServer("127.0.0.1:50051")
 	if err == nil {
-		t.Fatalf("expected error navigating with non-existent CA cert, got nil")
+		t.Fatalf("expected error navigating with TLS, got nil")
 	}
 }
 

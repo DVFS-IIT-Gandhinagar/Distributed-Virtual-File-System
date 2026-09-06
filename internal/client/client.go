@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -18,6 +17,23 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+// ClientOption configures optional client settings (primarily for testing).
+type ClientOption func(*Client)
+
+// WithInsecure disables TLS verification (for local in-memory unit tests only).
+func WithInsecure() ClientOption {
+	return func(c *Client) {
+		c.insecure = true
+	}
+}
+
+// WithServerName sets a custom TLS server name (SNI).
+func WithServerName(name string) ClientOption {
+	return func(c *Client) {
+		c.serverName = name
+	}
+}
+
 // Client provides basic VFS client functionality
 type Client struct {
 	username      string
@@ -30,8 +46,8 @@ type Client struct {
 	currentFID    *domain.FID
 	serverConn    pb.FileServerClient
 	grpcConn      *grpc.ClientConn
-	useTLS        bool
-	caCertPath    string
+	insecure      bool   // used only for local mock unit tests
+	serverName    string // optional TLS SNI override
 	cacheHandler  *CacheHandler
 	stopCallback  func() error
 	notifyWriter  io.Writer // readline-aware writer for notification messages
@@ -58,14 +74,16 @@ func pathContainsTrashSegment(path string) bool {
 	return false
 }
 
-// NewClient creates a new VFS client
-func NewClient(username string, useTLS bool, caCertPath string) *Client {
-	return &Client{
-		username:   username,
-		useTLS:     useTLS,
-		caCertPath: caCertPath,
-		clientID:   fmt.Sprintf("%s-%d", username, time.Now().UnixNano()),
+// NewClient creates a new VFS client using the hardcoded Root CA by default.
+func NewClient(username string, opts ...ClientOption) *Client {
+	c := &Client{
+		username: username,
+		clientID: fmt.Sprintf("%s-%d", username, time.Now().UnixNano()),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // AttachCacheHandler wires cache invalidation callbacks to the active cache handler.
@@ -120,20 +138,19 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		grpc.MaxCallSendMsgSize(64*1024*1024),
 		grpc.MaxCallRecvMsgSize(64*1024*1024),
 	))
-	if c.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(c.caCertPath)
+	if !c.insecure {
+		cp, err := NewDVFSUniversalCertPool()
 		if err != nil {
-			return nil, fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return nil, fmt.Errorf("failed to append CA certificate")
+			return nil, fmt.Errorf("failed to load Root CA: %w", err)
 		}
 
-		// Extract host for TLS verification
-		host, _, err := net.SplitHostPort(serverAddress)
-		if err != nil {
-			host = serverAddress // Fallback if no port specified
+		host := c.serverName
+		if host == "" {
+			var splitErr error
+			host, _, splitErr = net.SplitHostPort(serverAddress)
+			if splitErr != nil {
+				host = serverAddress // Fallback if no port specified
+			}
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
 		opts = append(opts, grpc.WithTransportCredentials(creds))
