@@ -214,6 +214,9 @@ func (c *Client) ReRegister() error {
 // Disconnect gracefully unregisters the client from the fileserver, closes the gRPC connection,
 // and shuts down the callback listener.
 func (c *Client) Disconnect() {
+	if c == nil {
+		return
+	}
 	if c.serverConn != nil && c.username != "" {
 		func() {
 			defer func() { _ = recover() }()
