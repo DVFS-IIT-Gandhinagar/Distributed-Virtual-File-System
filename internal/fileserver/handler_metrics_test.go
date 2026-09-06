@@ -2,9 +2,11 @@ package fileserver
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
+	"google.golang.org/grpc/metadata"
 )
 
 // TestGRPCHandlerMetricsTracking verifies that successful RPC operations via GRPCHandler
@@ -170,5 +172,192 @@ func TestGRPCHandlerErrorMetricsTracking(t *testing.T) {
 	if finalSnap.FailedReadsTotal <= afterSnap.FailedReadsTotal {
 		t.Errorf("expected FailedReadsTotal to increment on failed ReadFile: before=%d, after=%d",
 			afterSnap.FailedReadsTotal, finalSnap.FailedReadsTotal)
+	}
+}
+
+// mockUploadServer implements pb.FileServer_UploadFileServer for testing streaming uploads
+type mockUploadServer struct {
+	ctx      context.Context
+	requests []*pb.UploadFileRequest
+	idx      int
+	response *pb.UploadFileResponse
+	onRecv   func(idx int)
+}
+
+func (m *mockUploadServer) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+func (m *mockUploadServer) Recv() (*pb.UploadFileRequest, error) {
+	if m.onRecv != nil {
+		m.onRecv(m.idx)
+	}
+	if m.idx >= len(m.requests) {
+		return nil, io.EOF
+	}
+	req := m.requests[m.idx]
+	m.idx++
+	return req, nil
+}
+func (m *mockUploadServer) SendAndClose(res *pb.UploadFileResponse) error {
+	m.response = res
+	return nil
+}
+func (m *mockUploadServer) SetHeader(metadata.MD) error  { return nil }
+func (m *mockUploadServer) SendHeader(metadata.MD) error { return nil }
+func (m *mockUploadServer) SetTrailer(metadata.MD)       {}
+func (m *mockUploadServer) SendMsg(msg any) error        { return nil }
+func (m *mockUploadServer) RecvMsg(msg any) error        { return nil }
+
+// mockDownloadServer implements pb.FileServer_DownloadFileServer for testing streaming downloads
+type mockDownloadServer struct {
+	ctx       context.Context
+	responses []*pb.DownloadFileResponse
+	onChunk   func(res *pb.DownloadFileResponse)
+}
+
+func (m *mockDownloadServer) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+func (m *mockDownloadServer) Send(res *pb.DownloadFileResponse) error {
+	m.responses = append(m.responses, res)
+	if m.onChunk != nil {
+		m.onChunk(res)
+	}
+	return nil
+}
+func (m *mockDownloadServer) SetHeader(metadata.MD) error  { return nil }
+func (m *mockDownloadServer) SendHeader(metadata.MD) error { return nil }
+func (m *mockDownloadServer) SetTrailer(metadata.MD)       {}
+func (m *mockDownloadServer) SendMsg(msg any) error        { return nil }
+func (m *mockDownloadServer) RecvMsg(msg any) error        { return nil }
+
+// TestGRPCHandlerStreamingMetricsTracking verifies that UploadFile and DownloadFile
+// update BytesWrittenTotal and BytesReadTotal in real time as chunks stream across the wire.
+func TestGRPCHandlerStreamingMetricsTracking(t *testing.T) {
+	h, fs := setupHandlerTest(t)
+	ctx := context.Background()
+
+	regResp, err := h.RegisterClient(ctx, &pb.RegisterClientRequest{
+		Username: "streamer",
+		RootUser: "streamer",
+		RootPath: "streamer",
+	})
+	if err != nil || !regResp.Success {
+		t.Fatalf("RegisterClient failed: %v", err)
+	}
+	rootFID := regResp.UserRootFid
+
+	fileName := "streaming_sample.bin"
+	chunk1 := []byte("AAAAABBBBBCCCCCDDDDD")                               // 20 bytes
+	chunk2 := []byte("EEEEEFFFFFGGGGGHHHHH")                               // 20 bytes
+	chunk3 := []byte("IIIIIJJJJJKKKKKLLLLL")                               // 20 bytes
+	totalExpectedBytes := uint64(len(chunk1) + len(chunk2) + len(chunk3)) // 60 bytes
+
+	// 1. Create file first
+	createResp, err := h.CreateFile(ctx, &pb.CreateFileRequest{
+		Fid:      rootFID,
+		Name:     fileName,
+		RootUser: "streamer",
+		Type:     pb.InodeType_FILE,
+		Size:     totalExpectedBytes,
+	})
+	if err != nil || !createResp.Success {
+		t.Fatalf("CreateFile failed: %v", err)
+	}
+
+	snapBeforeUpload := fs.OpMetricsSnapshot()
+
+	// 2. Prepare streaming upload with 3 chunks
+	uploadStream := &mockUploadServer{
+		requests: []*pb.UploadFileRequest{
+			{ParentFid: rootFID, Name: fileName, User: "streamer", Offset: 0, Chunk: chunk1},
+			{ParentFid: rootFID, Name: fileName, User: "streamer", Offset: 20, Chunk: chunk2},
+			{ParentFid: rootFID, Name: fileName, User: "streamer", Offset: 40, Chunk: chunk3},
+		},
+	}
+
+	// Capture live byte counter during streaming.
+	// When idx > 0, chunk (idx-1) has been received and written to disk.
+	var bytesObservedDuringStreaming []uint64
+	uploadStream.onRecv = func(idx int) {
+		snap := fs.OpMetricsSnapshot()
+		bytesObservedDuringStreaming = append(bytesObservedDuringStreaming, snap.BytesWrittenTotal)
+	}
+
+	err = h.UploadFile(uploadStream)
+	if err != nil {
+		t.Fatalf("UploadFile failed: %v", err)
+	}
+	if uploadStream.response == nil || !uploadStream.response.Success {
+		t.Fatalf("UploadFile response was not successful: %+v", uploadStream.response)
+	}
+
+	snapAfterUpload := fs.OpMetricsSnapshot()
+
+	// Verify write bytes increased by 60
+	diffWritten := snapAfterUpload.BytesWrittenTotal - snapBeforeUpload.BytesWrittenTotal
+	if diffWritten != totalExpectedBytes {
+		t.Errorf("expected %d bytes written, got %d", totalExpectedBytes, diffWritten)
+	}
+
+	// Verify writeOpsTotal incremented by 1 (the single upload stream operation)
+	if snapAfterUpload.WriteOpsTotal != snapBeforeUpload.WriteOpsTotal+1 {
+		t.Errorf("expected WriteOpsTotal to increment by 1: before=%d, after=%d",
+			snapBeforeUpload.WriteOpsTotal, snapAfterUpload.WriteOpsTotal)
+	}
+
+	// Verify real-time intermediate observations showed incremental bytes
+	// idx=0: 0 bytes written, idx=1: 20 bytes written, idx=2: 40 bytes written, idx=3 (EOF): 60 bytes written
+	if len(bytesObservedDuringStreaming) != 4 {
+		t.Fatalf("expected 4 intermediate streaming snapshots (0, 1, 2, EOF), got %d", len(bytesObservedDuringStreaming))
+	}
+	if bytesObservedDuringStreaming[1]-snapBeforeUpload.BytesWrittenTotal != 20 {
+		t.Errorf("expected 20 bytes after chunk 1, got %d", bytesObservedDuringStreaming[1]-snapBeforeUpload.BytesWrittenTotal)
+	}
+	if bytesObservedDuringStreaming[2]-snapBeforeUpload.BytesWrittenTotal != 40 {
+		t.Errorf("expected 40 bytes after chunk 2, got %d", bytesObservedDuringStreaming[2]-snapBeforeUpload.BytesWrittenTotal)
+	}
+	if bytesObservedDuringStreaming[3]-snapBeforeUpload.BytesWrittenTotal != 60 {
+		t.Errorf("expected 60 bytes after chunk 3, got %d", bytesObservedDuringStreaming[3]-snapBeforeUpload.BytesWrittenTotal)
+	}
+
+	// 3. Test DownloadFile streaming
+	snapBeforeDownload := fs.OpMetricsSnapshot()
+	var downloadBytesObserved []uint64
+	downloadStream := &mockDownloadServer{
+		onChunk: func(res *pb.DownloadFileResponse) {
+			snap := fs.OpMetricsSnapshot()
+			downloadBytesObserved = append(downloadBytesObserved, snap.BytesReadTotal)
+		},
+	}
+
+	err = h.DownloadFile(&pb.DownloadFileRequest{
+		ParentFid: rootFID,
+		Name:      fileName,
+	}, downloadStream)
+	if err != nil {
+		t.Fatalf("DownloadFile failed: %v", err)
+	}
+
+	snapAfterDownload := fs.OpMetricsSnapshot()
+
+	diffRead := snapAfterDownload.BytesReadTotal - snapBeforeDownload.BytesReadTotal
+	if diffRead != totalExpectedBytes {
+		t.Errorf("expected %d bytes read, got %d", totalExpectedBytes, diffRead)
+	}
+
+	if snapAfterDownload.ReadOpsTotal != snapBeforeDownload.ReadOpsTotal+1 {
+		t.Errorf("expected ReadOpsTotal to increment by 1: before=%d, after=%d",
+			snapBeforeDownload.ReadOpsTotal, snapAfterDownload.ReadOpsTotal)
+	}
+
+	if len(downloadBytesObserved) == 0 {
+		t.Errorf("expected at least 1 chunk observed during download")
 	}
 }

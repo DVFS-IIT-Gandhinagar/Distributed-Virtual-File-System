@@ -36,6 +36,10 @@ func TestOperationMetricsNilSafety(t *testing.T) {
 	om.RecordWrite(512, 10.0, errors.New("write failure"))
 	om.RecordRead(2048, 8.2, nil)
 	om.RecordRead(256, 5.0, errors.New("read failure"))
+	om.AddBytesWritten(1024)
+	om.AddBytesRead(2048)
+	om.RecordWriteOp(12.5, nil)
+	om.RecordReadOp(8.2, nil)
 
 	snap := om.Snapshot()
 	if snap.BytesWrittenTotal != 0 || snap.BytesReadTotal != 0 || snap.ErrorsTotal != 0 {

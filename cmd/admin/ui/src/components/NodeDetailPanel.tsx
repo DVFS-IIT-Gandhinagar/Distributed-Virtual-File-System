@@ -157,7 +157,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                 {[
                   { label: 'CPU Usage', value: `${m.cpu_usage_percent.toFixed(1)}%`, icon: 'bi-cpu' },
                   { label: 'RAM Usage', value: `${m.mem_usage_percent.toFixed(1)}%`, icon: 'bi-memory' },
-                  { label: 'Chunks', value: m.chunk_count, icon: 'bi-box' },
+                  { label: 'Files Stored', value: m.chunk_count, icon: 'bi-file-earmark' },
                   {
                     label: 'Connections',
                     value: m.active_users && m.active_users.length > 0
@@ -216,7 +216,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                     <span className="small">{m.disk_usage_percent.toFixed(1)}%</span>
                   </div>
                 </div>
-                <small className="text-muted">{m.chunk_count} chunks stored</small>
+                <small className="text-muted">{m.chunk_count} files stored</small>
               </div>
 
               {/* Per-User Storage */}

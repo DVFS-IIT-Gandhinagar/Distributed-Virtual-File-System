@@ -456,10 +456,9 @@ func (h *GRPCHandler) cleanupFailedUpload(parentFID *domain.FID, name string, us
 // UploadFile uploads the file chunk by chunk
 func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 	start := time.Now()
-	var totalBytes uint64
 	var opErr error
 	defer func() {
-		h.fileServer.RecordWrite(totalBytes, time.Since(start).Seconds()*1000.0, opErr)
+		h.fileServer.RecordWriteOp(time.Since(start).Seconds()*1000.0, opErr)
 	}()
 
 	var name string
@@ -534,7 +533,6 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 			first = false
 		}
 
-		totalBytes += uint64(len(req.Chunk))
 		err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
 		if err != nil {
 			opErr = err
@@ -545,16 +543,16 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 				Error:   err.Error(),
 			})
 		}
+		h.fileServer.AddBytesWritten(uint64(len(req.Chunk)))
 	}
 }
 
 // DownloadFile downloads the file by it's name in cwd
 func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileServer_DownloadFileServer) error {
 	start := time.Now()
-	var totalBytes uint64
 	var opErr error
 	defer func() {
-		h.fileServer.RecordRead(totalBytes, time.Since(start).Seconds()*1000.0, opErr)
+		h.fileServer.RecordReadOp(time.Since(start).Seconds()*1000.0, opErr)
 	}()
 
 	log.Printf("DownloadFile: Name=%s", req.Name)
@@ -612,7 +610,7 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 			}
 
 			offset += uint64(n)
-			totalBytes += uint64(n)
+			h.fileServer.AddBytesRead(uint64(n))
 		}
 
 		if err == io.EOF {

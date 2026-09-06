@@ -107,6 +107,29 @@ func (om *OperationMetrics) RecordWrite(bytes uint64, durationMs float64, err er
 	}
 }
 
+// AddBytesWritten increments the running total of bytes written in real time as chunks arrive.
+func (om *OperationMetrics) AddBytesWritten(bytes uint64) {
+	if om == nil {
+		return
+	}
+	atomic.AddUint64(&om.bytesWrittenTotal, bytes)
+}
+
+// RecordWriteOp records completion of a write operation, updating op count, error status, and latency.
+func (om *OperationMetrics) RecordWriteOp(durationMs float64, err error) {
+	if om == nil {
+		return
+	}
+	atomic.AddUint64(&om.writeOpsTotal, 1)
+	if err != nil {
+		atomic.AddUint64(&om.errorsTotal, 1)
+		atomic.AddUint64(&om.failedWritesTotal, 1)
+	}
+	if durationMs >= 0 {
+		om.writeLatency.Add(durationMs)
+	}
+}
+
 // RecordRead records a read operation with its bytes transferred, duration, and error status.
 func (om *OperationMetrics) RecordRead(bytes uint64, durationMs float64, err error) {
 	if om == nil {
@@ -118,6 +141,29 @@ func (om *OperationMetrics) RecordRead(bytes uint64, durationMs float64, err err
 		atomic.AddUint64(&om.failedReadsTotal, 1)
 	} else {
 		atomic.AddUint64(&om.bytesReadTotal, bytes)
+	}
+	if durationMs >= 0 {
+		om.readLatency.Add(durationMs)
+	}
+}
+
+// AddBytesRead increments the running total of bytes read in real time as chunks are streamed.
+func (om *OperationMetrics) AddBytesRead(bytes uint64) {
+	if om == nil {
+		return
+	}
+	atomic.AddUint64(&om.bytesReadTotal, bytes)
+}
+
+// RecordReadOp records completion of a read operation, updating op count, error status, and latency.
+func (om *OperationMetrics) RecordReadOp(durationMs float64, err error) {
+	if om == nil {
+		return
+	}
+	atomic.AddUint64(&om.readOpsTotal, 1)
+	if err != nil {
+		atomic.AddUint64(&om.errorsTotal, 1)
+		atomic.AddUint64(&om.failedReadsTotal, 1)
 	}
 	if durationMs >= 0 {
 		om.readLatency.Add(durationMs)

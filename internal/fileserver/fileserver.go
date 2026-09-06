@@ -118,10 +118,38 @@ func (fs *FileServer) RecordWrite(bytes uint64, durationMs float64, err error) {
 	}
 }
 
+// AddBytesWritten increments the running total of bytes written in real time.
+func (fs *FileServer) AddBytesWritten(bytes uint64) {
+	if fs.opMetrics != nil {
+		fs.opMetrics.AddBytesWritten(bytes)
+	}
+}
+
+// RecordWriteOp records completion of a write operation into operation metrics.
+func (fs *FileServer) RecordWriteOp(durationMs float64, err error) {
+	if fs.opMetrics != nil {
+		fs.opMetrics.RecordWriteOp(durationMs, err)
+	}
+}
+
 // RecordRead records read bytes, duration in ms, and error status into operation metrics.
 func (fs *FileServer) RecordRead(bytes uint64, durationMs float64, err error) {
 	if fs.opMetrics != nil {
 		fs.opMetrics.RecordRead(bytes, durationMs, err)
+	}
+}
+
+// AddBytesRead increments the running total of bytes read in real time.
+func (fs *FileServer) AddBytesRead(bytes uint64) {
+	if fs.opMetrics != nil {
+		fs.opMetrics.AddBytesRead(bytes)
+	}
+}
+
+// RecordReadOp records completion of a read operation into operation metrics.
+func (fs *FileServer) RecordReadOp(durationMs float64, err error) {
+	if fs.opMetrics != nil {
+		fs.opMetrics.RecordReadOp(durationMs, err)
 	}
 }
 
