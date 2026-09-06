@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Fragment, useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchAlerts,
@@ -444,7 +444,7 @@ export default function LogsAlerts() {
                       r.status === 'success' ? 'bg-success' : r.status === 'failed' ? 'bg-danger' : 'bg-warning text-dark';
 
                     return (
-                      <React.Fragment key={r.id}>
+                      <Fragment key={r.id}>
                         <tr>
                           <td>
                             <span className="fw-semibold">{formatTime(r.timestamp)}</span>
@@ -500,7 +500,7 @@ export default function LogsAlerts() {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     );
                   })
                 )}

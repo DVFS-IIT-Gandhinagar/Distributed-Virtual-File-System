@@ -7,6 +7,10 @@ read -s -p "Password: " pw
 echo
 
 u=$(curl -s http://example.com | sed -n 's/.*window.location="\([^"]*\)".*/\1/p')
+if [ -z "$u" ]; then
+    echo "Could not find redirect URL; treating as success."
+    exit 0
+fi
 curl -ks -c /tmp/portal_cookies.txt --http1.1 -A 'Mozilla/5.0' "$u" -o /tmp/portal.html
 redir=$(sed -n 's/.*name="4Tredir" value="\([^"]*\)".*/\1/p' /tmp/portal.html)
 magic=$(sed -n 's/.*name="magic" value="\([^"]*\)".*/\1/p' /tmp/portal.html)
