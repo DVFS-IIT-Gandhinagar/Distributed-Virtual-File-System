@@ -4,6 +4,8 @@ import { fetchUsers, updateUserQuota } from '../api';
 import type { UserSummary } from '../types';
 import { formatBytes, getUserQuotaColor, getUserQuotaBadge, formatNodeDisplayName, formatMachineName } from '../utils';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { useAuth } from '../context/AuthContext';
+import AdminRequiredBarrier from '../components/AdminRequiredBarrier';
 
 type SortField = 'username' | 'home_node' | 'used_storage' | 'quota_limit' | 'usage_percent' | 'active_sessions' | 'is_online';
 
@@ -18,6 +20,7 @@ export default function Users() {
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
 
   // Modal form state
+  const { isAuthenticated } = useAuth();
   const [quotaValue, setQuotaValue] = useState<number>(1);
   const [quotaUnit, setQuotaUnit] = useState<'MiB' | 'GiB' | 'TiB'>('GiB');
   const [modalError, setModalError] = useState<string | null>(null);
@@ -27,6 +30,7 @@ export default function Users() {
     queryKey: ['users'],
     queryFn: fetchUsers,
     refetchInterval: 5000,
+    enabled: isAuthenticated,
   });
 
   const quotaMutation = useMutation({
@@ -147,6 +151,16 @@ export default function Users() {
     quotaUnit === 'GiB' ? 1024 * 1024 * 1024 : 1024 * 1024
   );
   const isLowerThanUsage = editingUser ? calculatedBytes < editingUser.quota_used : false;
+
+  if (!isAuthenticated) {
+    return (
+      <AdminRequiredBarrier
+        title="User & Quota Management"
+        description="Viewing and managing user accounts, quotas, and active sessions requires administrator access."
+        icon="bi-people-fill"
+      />
+    );
+  }
 
   return (
     <div className="container-fluid px-4 py-4">

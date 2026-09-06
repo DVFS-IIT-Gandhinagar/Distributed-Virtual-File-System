@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchCluster, fetchActionPresets, fetchCommandHistory } from '../api';
 import type { ActionType, ActionRequest, NodeRestartParams, CommandRecord, ActionEvent } from '../types';
 import { getStatusBadgeClass, formatUptime, formatNodeDisplayName, formatMachineName } from '../utils';
+import { useAuth } from '../context/AuthContext';
+import AdminRequiredBarrier from '../components/AdminRequiredBarrier';
 
 interface NodeExecutionStatus {
   status: 'pending' | 'running' | 'success' | 'failed';
@@ -15,6 +17,7 @@ interface NodeExecutionStatus {
 export default function Actions() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const { isAuthenticated } = useAuth();
 
   // Queries
   const { data: cluster } = useQuery({
@@ -27,12 +30,14 @@ export default function Actions() {
     queryKey: ['action_presets'],
     queryFn: fetchActionPresets,
     refetchInterval: 10000,
+    enabled: isAuthenticated,
   });
 
   const { data: history = [], refetch: refetchHistory } = useQuery({
     queryKey: ['action_history'],
     queryFn: fetchCommandHistory,
     refetchInterval: 5000,
+    enabled: isAuthenticated,
   });
 
   // Selected Nodes
@@ -238,12 +243,13 @@ export default function Actions() {
 
   // Connect WebSocket on mount with auto-reconnect cleanup
   useEffect(() => {
+    if (!isAuthenticated) return;
     connectWebSocket();
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, isAuthenticated]);
 
   const dispatchAction = () => {
     const payload: ActionRequest = {
@@ -314,6 +320,16 @@ export default function Actions() {
     navigator.clipboard.writeText(terminalLines.join('\n'));
     alert('Terminal output copied to clipboard!');
   };
+
+  if (!isAuthenticated) {
+    return (
+      <AdminRequiredBarrier
+        title="Cluster Orchestration & Actions"
+        description="Executing remote maintenance commands (git, build, reboot, restart) and streaming live node orchestration requires administrator access."
+        icon="bi-terminal-fill"
+      />
+    );
+  }
 
   return (
     <div className="container-fluid px-4 py-4">

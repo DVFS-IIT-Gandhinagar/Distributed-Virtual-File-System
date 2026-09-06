@@ -1,5 +1,6 @@
 import type { NodeInfo } from '../types';
 import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getStorageBarClass, getStorageBarColor, getCpuTempColor, formatNodeDisplayName, formatMachineName } from '../utils';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   node: NodeInfo;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function NodeCard({ node, onClick }: Props) {
+  const { isAuthenticated } = useAuth();
   const m = node.metrics;
   const statusColor = getStatusColor(node.status);
 
@@ -129,11 +131,17 @@ export default function NodeCard({ node, onClick }: Props) {
 
       <div className="card-footer bg-white border-top py-2">
         <div className="d-flex justify-content-between align-items-center small text-muted">
-          <span title="Users assigned">
-            <i className="bi bi-people me-1"></i>{m.users_assigned_count} users
-          </span>
+          {isAuthenticated ? (
+            <span title="Users assigned">
+              <i className="bi bi-people me-1"></i>{m.users_assigned_count} users
+            </span>
+          ) : (
+            <span title="Public telemetry">
+              <i className="bi bi-shield-check me-1 text-info"></i>Healthy
+            </span>
+          )}
           <span
-            title={m.active_users && m.active_users.length > 0 ? `Active: ${m.active_users.join(', ')}` : 'Active connections'}
+            title={isAuthenticated && m.active_users && m.active_users.length > 0 ? `Active: ${m.active_users.join(', ')}` : 'Active connections'}
             className={m.active_connections > 0 ? 'text-success fw-semibold' : ''}
           >
             <i className={`bi bi-link-45deg me-1 ${m.active_connections > 0 ? 'text-success' : ''}`}></i>

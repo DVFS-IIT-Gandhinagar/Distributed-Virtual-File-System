@@ -10,9 +10,12 @@ import {
   fetchCluster,
 } from '../api';
 import type { Alert, AlertSeverity, CommandRecord } from '../types';
+import { useAuth } from '../context/AuthContext';
+import AdminRequiredBarrier from '../components/AdminRequiredBarrier';
 
 export default function LogsAlerts() {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<'alerts' | 'history' | 'tail'>('alerts');
 
   // === Tab 1: Alerts State ===
@@ -28,12 +31,14 @@ export default function LogsAlerts() {
         unresolved: unresolvedOnly,
       }),
     refetchInterval: 5000,
+    enabled: isAuthenticated,
   });
 
   const { data: summary } = useQuery({
     queryKey: ['alertSummary'],
     queryFn: fetchAlertSummary,
     refetchInterval: 5000,
+    enabled: isAuthenticated,
   });
 
   const resolveMutation = useMutation({
@@ -75,7 +80,7 @@ export default function LogsAlerts() {
     queryKey: ['commandHistory'],
     queryFn: fetchCommandHistory,
     refetchInterval: 5000,
-    enabled: activeTab === 'history',
+    enabled: isAuthenticated && activeTab === 'history',
   });
 
   const filteredHistory = useMemo(() => {
@@ -109,7 +114,7 @@ export default function LogsAlerts() {
     queryKey: ['logTail', selectedNodeId, selectedService, logLines],
     queryFn: () => fetchLogTail(selectedNodeId, logLines, selectedService),
     refetchInterval: isStreaming ? 4000 : false,
-    enabled: activeTab === 'tail' && !!selectedNodeId,
+    enabled: isAuthenticated && activeTab === 'tail' && !!selectedNodeId,
   });
 
   useEffect(() => {
@@ -143,6 +148,16 @@ export default function LogsAlerts() {
         return 'bg-secondary';
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <AdminRequiredBarrier
+        title="Logs & Alerts Console"
+        description="Viewing system alerts, command execution logs, and streaming live SSH service logs requires administrator access."
+        icon="bi-journal-text"
+      />
+    );
+  }
 
   return (
     <div className="container-fluid py-4 px-4">

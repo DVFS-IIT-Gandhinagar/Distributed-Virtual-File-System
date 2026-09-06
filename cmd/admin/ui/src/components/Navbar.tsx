@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ClusterResponse } from '../types';
 import { fetchAlertSummary } from '../api';
 import { getStatusBadgeClass, getStatusColor } from '../utils';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   cluster?: ClusterResponse;
@@ -21,6 +22,7 @@ function worstStatus(cluster?: ClusterResponse): string {
 }
 
 export default function AppNavbar({ cluster, lastUpdated }: Props) {
+  const { isAuthenticated, openLoginModal, logout } = useAuth();
   const { data: alertSummary } = useQuery({
     queryKey: ['alertSummary'],
     queryFn: fetchAlertSummary,
@@ -94,6 +96,9 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 }
               >
                 <i className="bi bi-people me-1"></i>Users
+                {!isAuthenticated && (
+                  <i className="bi bi-lock-fill ms-1 text-secondary" style={{ fontSize: '0.7rem' }} title="Admin login required"></i>
+                )}
               </NavLink>
             </li>
             <li className="nav-item">
@@ -104,6 +109,9 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 }
               >
                 <i className="bi bi-play-circle me-1"></i>Actions
+                {!isAuthenticated && (
+                  <i className="bi bi-lock-fill ms-1 text-secondary" style={{ fontSize: '0.7rem' }} title="Admin login required"></i>
+                )}
               </NavLink>
             </li>
             <li className="nav-item">
@@ -114,6 +122,9 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 }
               >
                 <i className="bi bi-bell me-1"></i>Logs &amp; Alerts
+                {!isAuthenticated && (
+                  <i className="bi bi-lock-fill ms-1 text-secondary" style={{ fontSize: '0.7rem' }} title="Admin login required"></i>
+                )}
                 {alertSummary && (alertSummary.critical_count > 0 || alertSummary.warning_count > 0) && (
                   <span
                     className={`badge rounded-pill ms-1 ${
@@ -128,7 +139,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             </li>
           </ul>
 
-          {/* Right side: health pill + last updated */}
+          {/* Right side: health pill + last updated + Admin Auth Button */}
           <div className="d-flex align-items-center gap-3">
             {cluster && (
               <span
@@ -140,10 +151,41 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
               </span>
             )}
             {secsAgo !== null && (
-              <span className="text-secondary small">
+              <span className="text-secondary small d-none d-md-inline">
                 <i className="bi bi-arrow-clockwise me-1"></i>
                 {secsAgo < 5 ? 'Just updated' : `Updated ${secsAgo}s ago`}
               </span>
+            )}
+
+            {/* Admin Authentication Control */}
+            {isAuthenticated ? (
+              <div className="d-flex align-items-center gap-2">
+                <span className="badge bg-success px-2 py-1 small d-flex align-items-center gap-1 shadow-sm">
+                  <i className="bi bi-shield-check"></i>
+                  <span>Admin Mode</span>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-outline-light btn-sm d-flex align-items-center gap-1 py-1 px-2"
+                  onClick={logout}
+                  title="Logout from Admin Console"
+                  style={{ fontSize: '0.78rem' }}
+                >
+                  <i className="bi bi-box-arrow-right"></i>
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-warning btn-sm text-dark fw-bold d-flex align-items-center gap-1 py-1 px-3 shadow-sm"
+                onClick={openLoginModal}
+                title="Enter password to unlock admin console"
+                style={{ fontSize: '0.8rem' }}
+              >
+                <i className="bi bi-shield-lock-fill"></i>
+                Admin
+              </button>
             )}
           </div>
         </div>
