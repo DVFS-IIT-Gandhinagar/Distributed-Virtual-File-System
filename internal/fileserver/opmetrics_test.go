@@ -162,3 +162,75 @@ func TestOperationMetricsConcurrency(t *testing.T) {
 		t.Errorf("expected BytesReadTotal=%d, got %d", expectedReads*200, snap.BytesReadTotal)
 	}
 }
+
+func TestOperationMetrics_StreamingChunkIncrements(t *testing.T) {
+	om := NewOperationMetrics()
+
+	// 1. Stream write in 5 chunks of 1000 bytes each
+	chunkSize := uint64(1000)
+	for i := 1; i <= 5; i++ {
+		om.AddBytesWritten(chunkSize)
+		snap := om.Snapshot()
+		if snap.BytesWrittenTotal != uint64(i)*chunkSize {
+			t.Fatalf("chunk %d: expected BytesWrittenTotal=%d, got %d", i, uint64(i)*chunkSize, snap.BytesWrittenTotal)
+		}
+		// WriteOpsTotal must remain 0 while transfer is streaming
+		if snap.WriteOpsTotal != 0 {
+			t.Fatalf("expected WriteOpsTotal to remain 0 during streaming, got %d", snap.WriteOpsTotal)
+		}
+	}
+
+	// Now complete the write op
+	om.RecordWriteOp(45.2, nil)
+	snap := om.Snapshot()
+	if snap.WriteOpsTotal != 1 {
+		t.Errorf("expected WriteOpsTotal=1 after RecordWriteOp, got %d", snap.WriteOpsTotal)
+	}
+	if snap.BytesWrittenTotal != 5000 {
+		t.Errorf("expected BytesWrittenTotal=5000, got %d", snap.BytesWrittenTotal)
+	}
+	if snap.OpLatencyWriteMsP50 <= 0 {
+		t.Errorf("expected positive write latency percentile, got %f", snap.OpLatencyWriteMsP50)
+	}
+
+	// 2. Stream read in 4 chunks of 500 bytes each
+	readChunkSize := uint64(500)
+	for i := 1; i <= 4; i++ {
+		om.AddBytesRead(readChunkSize)
+		snap = om.Snapshot()
+		if snap.BytesReadTotal != uint64(i)*readChunkSize {
+			t.Fatalf("read chunk %d: expected BytesReadTotal=%d, got %d", i, uint64(i)*readChunkSize, snap.BytesReadTotal)
+		}
+		// ReadOpsTotal must remain 0 while transfer is streaming
+		if snap.ReadOpsTotal != 0 {
+			t.Fatalf("expected ReadOpsTotal to remain 0 during streaming, got %d", snap.ReadOpsTotal)
+		}
+	}
+
+	// Now complete the read op
+	om.RecordReadOp(12.8, nil)
+	snap = om.Snapshot()
+	if snap.ReadOpsTotal != 1 {
+		t.Errorf("expected ReadOpsTotal=1 after RecordReadOp, got %d", snap.ReadOpsTotal)
+	}
+	if snap.BytesReadTotal != 2000 {
+		t.Errorf("expected BytesReadTotal=2000, got %d", snap.BytesReadTotal)
+	}
+	if snap.OpLatencyReadMsP50 <= 0 {
+		t.Errorf("expected positive read latency percentile, got %f", snap.OpLatencyReadMsP50)
+	}
+
+	// 3. Failed operations
+	om.RecordWriteOp(10.0, errors.New("disk full"))
+	om.RecordReadOp(5.0, errors.New("read error"))
+	snap = om.Snapshot()
+	if snap.FailedWritesTotal != 1 {
+		t.Errorf("expected FailedWritesTotal=1, got %d", snap.FailedWritesTotal)
+	}
+	if snap.FailedReadsTotal != 1 {
+		t.Errorf("expected FailedReadsTotal=1, got %d", snap.FailedReadsTotal)
+	}
+	if snap.ErrorsTotal != 2 {
+		t.Errorf("expected ErrorsTotal=2, got %d", snap.ErrorsTotal)
+	}
+}
