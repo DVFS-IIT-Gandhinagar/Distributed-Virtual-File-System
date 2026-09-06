@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,6 +35,7 @@ type FileServer struct {
 	startTime   time.Time
 	quotas      map[string]uint64 // username -> quota in bytes
 	inodeStore  *InodeStore
+	opMetrics   *OperationMetrics
 }
 
 type trashEntry struct {
@@ -72,6 +74,7 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertP
 		sessions:    make(map[string]*clientSession),
 		startTime:   time.Now(),
 		quotas:      make(map[string]uint64),
+		opMetrics:   NewOperationMetrics(),
 	}
 
 	// Load custom quota configuration if present
@@ -106,6 +109,28 @@ func NewFileServer(serverID, rootDir string, useTLS bool, msAddr string, caCertP
 	}
 
 	return fs, nil
+}
+
+// RecordWrite records write bytes, duration in ms, and error status into operation metrics.
+func (fs *FileServer) RecordWrite(bytes uint64, durationMs float64, err error) {
+	if fs.opMetrics != nil {
+		fs.opMetrics.RecordWrite(bytes, durationMs, err)
+	}
+}
+
+// RecordRead records read bytes, duration in ms, and error status into operation metrics.
+func (fs *FileServer) RecordRead(bytes uint64, durationMs float64, err error) {
+	if fs.opMetrics != nil {
+		fs.opMetrics.RecordRead(bytes, durationMs, err)
+	}
+}
+
+// OpMetricsSnapshot returns a point-in-time snapshot of operation metrics.
+func (fs *FileServer) OpMetricsSnapshot() OpMetricsSnapshot {
+	if fs.opMetrics != nil {
+		return fs.opMetrics.Snapshot()
+	}
+	return OpMetricsSnapshot{}
 }
 
 // GetUserRoot returns the root FID for a user, creating it if necessary
@@ -735,7 +760,7 @@ func (fs *FileServer) checkStorageQuotaWithAdditional(username string, additiona
 		return fmt.Errorf("internal error: root inode not found for user %s", username)
 	}
 	quota := fs.getUserQuotaLocked(username)
-	if rootInode.Size+additionalBytes > quota {
+	if additionalBytes > quota || rootInode.Size > quota-additionalBytes {
 		freeSpace := uint64(0)
 		if quota > rootInode.Size {
 			freeSpace = quota - rootInode.Size
@@ -1158,8 +1183,11 @@ func (fs *FileServer) CreateFile(parentFID *domain.FID, name, root_user string, 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	log.Printf("Creating %s with name %s under parent FID %s", fileType.String(), name, parentFID.String())
-	if name == trashDirName {
-		return nil, fmt.Errorf("'%s' is a reserved name", trashDirName)
+	if name == "" || name == "." || name == ".." || strings.Contains(name, "/") || strings.Contains(name, "\\") || filepath.Clean(name) != name || filepath.IsAbs(name) || filepath.Base(name) != name {
+		return nil, fmt.Errorf("invalid filename: path separators and traversal components not allowed: %s", name)
+	}
+	if name == trashDirName || name == inodeIndexFilename || name == quotaConfigFile || strings.HasPrefix(name, ".dvfs_") {
+		return nil, fmt.Errorf("reserved system filename cannot be created by user: %s", name)
 	}
 	// check if already exists in parent
 	parentInode, err := fs.GetInode(parentFID)
@@ -1273,13 +1301,33 @@ func (fs *FileServer) ReadFile(parentFID *domain.FID, name string, offset, lengt
 		return nil, fmt.Errorf("not a file, %s", name)
 	}
 
-	// read the whole file for now
-	fmt.Println(inode.OSPath)
-	data, err := os.ReadFile(inode.OSPath)
+	f, err := os.Open(inode.OSPath)
 	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	fileSize := uint64(stat.Size())
+	if offset >= fileSize {
+		return []byte{}, nil
+	}
+
+	readLen := length
+	if readLen == 0 || offset+readLen > fileSize {
+		readLen = fileSize - offset
+	}
+
+	buf := make([]byte, readLen)
+	n, err := f.ReadAt(buf, int64(offset))
+	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	return data, nil
+	return buf[:n], nil
 }
 
 // GetFileHash computes and returns the hash of a file's contents.
@@ -1341,6 +1389,9 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 	defer f.Close()
 
 	// track size changes to update inode size after write
+	if math.MaxUint64-offset < uint64(len(data)) {
+		return fmt.Errorf("write offset and data length overflow maximum addressable file size")
+	}
 	var newSize uint64
 	if offset+uint64(len(data)) > inode.Size {
 		newSize = offset + uint64(len(data))
@@ -1355,8 +1406,9 @@ func (fs *FileServer) WriteFile(parentFID *domain.FID, name string, offset uint6
 		for root.Parent != nil && root.Parent != root {
 			root = root.Parent
 		}
+		diffUint := uint64(sizeDiff)
 		quota := fs.getUserQuotaLocked(root.Name)
-		if root.Size+uint64(sizeDiff) > quota {
+		if diffUint > quota || root.Size > quota-diffUint {
 			freeSpace := uint64(0)
 			if quota > root.Size {
 				freeSpace = quota - root.Size

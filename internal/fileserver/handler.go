@@ -2,6 +2,7 @@ package fileserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
@@ -160,10 +162,17 @@ func (h *GRPCHandler) UnregisterClient(ctx context.Context, req *pb.UnregisterCl
 
 // GetAttr gets file attributes
 func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.GetAttrResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordRead(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("GetAttr: FID=%v", req.Fid)
 
 	if req.Fid == nil {
 		log.Printf("GetAttr: error - FID is required")
+		opErr = errors.New("FID is required")
 		return &pb.GetAttrResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -174,6 +183,7 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 	inode, err := h.fileServer.GetInode(fid)
 	if err != nil {
 		log.Printf("GetAttr: error getting inode - %v", err)
+		opErr = err
 		return &pb.GetAttrResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -239,8 +249,15 @@ func (h *GRPCHandler) Unshare(ctx context.Context, req *pb.UnshareRequest) (*pb.
 
 // Returns current path
 func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordRead(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	if req.Fid == nil {
 		log.Printf("Path: error - FID is required")
+		opErr = errors.New("FID is required")
 		return &pb.PathResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -251,6 +268,7 @@ func (h *GRPCHandler) Path(ctx context.Context, req *pb.PathRequest) (*pb.PathRe
 	path, err := h.fileServer.Path(fid)
 	if err != nil {
 		log.Printf("Path: error getting pwd - %v", err)
+		opErr = err
 		return &pb.PathResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -304,10 +322,17 @@ func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (
 
 // ListDir lists directory contents
 func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.ListDirResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordRead(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("ListDir: FID=%v", req.Fid)
 
 	if req.Fid == nil {
 		log.Printf("ListDir: error - FID is required")
+		opErr = errors.New("FID is required")
 		return &pb.ListDirResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -318,6 +343,7 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 	children, err := h.fileServer.ListDirectory(fid)
 	if err != nil {
 		log.Printf("ListDir: error listing directory - %v", err)
+		opErr = err
 		return &pb.ListDirResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -344,10 +370,17 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 
 // CreateFile creates a new file or directory
 func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest) (*pb.CreateFileResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordWrite(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("CreateFile: name=%s, user=%s, type=%v", req.Name, req.RootUser, req.Type)
 
 	if req.Name == "" || req.RootUser == "" {
 		log.Printf("CreateFile: error - name and user are required")
+		opErr = errors.New("name and user are required")
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   "name and user are required",
@@ -357,14 +390,16 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	err := h.fileServer.checkStorageQuotaWithAdditional(req.RootUser, req.Size) // check if user has exceeded storage quota before allowing upload
 	if err != nil {
 		log.Println(err)
+		opErr = err
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
-	if strings.Contains(req.Name, "/") || strings.Contains(req.Name, "\\") {
+	if strings.Contains(req.Name, "/") || strings.Contains(req.Name, "\\") || req.Name == ".." || req.Name == "." || filepath.Clean(req.Name) != req.Name || filepath.IsAbs(req.Name) {
 		log.Printf("CreateFile: error - nested paths are not supported")
+		opErr = errors.New("nested paths are not supported")
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   "nested paths are not supported",
@@ -379,6 +414,7 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	fid, err := h.fileServer.CreateFile(parentFID, req.Name, req.RootUser, fileType)
 	if err != nil {
 		log.Printf("CreateFile: error - %v", err)
+		opErr = err
 		return &pb.CreateFileResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -419,6 +455,13 @@ func (h *GRPCHandler) cleanupFailedUpload(parentFID *domain.FID, name string, us
 
 // UploadFile uploads the file chunk by chunk
 func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
+	start := time.Now()
+	var totalBytes uint64
+	var opErr error
+	defer func() {
+		h.fileServer.RecordWrite(totalBytes, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	var name string
 	first := true
 	var parentFID *domain.FID
@@ -435,6 +478,7 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 			// check new hash to check if content has changed
 			newHash, err := h.fileServer.GetFileHash(parentFID, name)
 			if err != nil {
+				opErr = err
 				return stream.SendAndClose(&pb.UploadFileResponse{
 					Success: false,
 					Error:   err.Error(),
@@ -454,6 +498,7 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 			})
 		}
 		if err != nil {
+			opErr = err
 			if !first && name != "" && parentFID != nil {
 				log.Printf("UploadFile: stream error on file %s: %v. Scrapping partial file.", name, err)
 				h.cleanupFailedUpload(parentFID, name, uploadUser)
@@ -462,6 +507,7 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 		}
 
 		if req.ParentFid == nil {
+			opErr = errors.New("missing parentFid")
 			return stream.SendAndClose(&pb.UploadFileResponse{
 				Success: false,
 				Error:   "missing parentFid",
@@ -479,6 +525,7 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 			name = req.Name
 			ogHash, err = h.fileServer.GetFileHash(parentFID, name) // hash of the original file before upload
 			if err != nil {
+				opErr = err
 				return stream.SendAndClose(&pb.UploadFileResponse{
 					Success: false,
 					Error:   err.Error(),
@@ -487,8 +534,10 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 			first = false
 		}
 
+		totalBytes += uint64(len(req.Chunk))
 		err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
 		if err != nil {
+			opErr = err
 			log.Printf("UploadFile: write error on file %s: %v. Scrapping partial file.", name, err)
 			h.cleanupFailedUpload(parentFID, name, uploadUser)
 			return stream.SendAndClose(&pb.UploadFileResponse{
@@ -501,21 +550,31 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 
 // DownloadFile downloads the file by it's name in cwd
 func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileServer_DownloadFileServer) error {
+	start := time.Now()
+	var totalBytes uint64
+	var opErr error
+	defer func() {
+		h.fileServer.RecordRead(totalBytes, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("DownloadFile: Name=%s", req.Name)
 	parentFID := domain.FIDFromProto(req.ParentFid)
 	parentInode, err := h.fileServer.GetInode(parentFID)
 	if err != nil {
+		opErr = err
 		return err
 	}
 
 	inode, err := h.fileServer.GetChildInodeByName(parentInode, req.Name)
 	if err != nil {
 		log.Printf("DownloadFile: error getting child inode - %v", err)
+		opErr = err
 		return err
 	}
 
 	if inode.Type != domain.InodeTypeFile {
 		err := fmt.Errorf("Only files can be downloaded")
+		opErr = err
 		return stream.Send(&pb.DownloadFileResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -525,6 +584,7 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 	path := inode.OSPath
 	file, err := os.Open(path)
 	if err != nil {
+		opErr = err
 		return stream.Send(&pb.DownloadFileResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -547,16 +607,19 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 			}
 
 			if err := stream.Send(res); err != nil {
+				opErr = err
 				return err
 			}
 
 			offset += uint64(n)
+			totalBytes += uint64(n)
 		}
 
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
+			opErr = err
 			return err
 		}
 	}
@@ -566,11 +629,19 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 
 // ReadFile reads data from a file
 func (h *GRPCHandler) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+	start := time.Now()
+	var bytesRead uint64
+	var opErr error
+	defer func() {
+		h.fileServer.RecordRead(bytesRead, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	parentFID := domain.FIDFromProto(req.ParentFid)
 
 	log.Printf("ReadFile: Name=%s, offset=%d, length=%d", req.Name, req.Offset, req.Length)
 	if req.Name == "" {
 		log.Printf("ReadFile: error - Name is required")
+		opErr = errors.New("Name is required")
 		return &pb.ReadFileResponse{
 			Success: false,
 			Error:   "Name is required",
@@ -580,12 +651,14 @@ func (h *GRPCHandler) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*p
 	data, err := h.fileServer.ReadFile(parentFID, req.Name, req.Offset, req.Length)
 	if err != nil {
 		log.Printf("ReadFile: error reading file - %v", err)
+		opErr = err
 		return &pb.ReadFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
+	bytesRead = uint64(len(data))
 	return &pb.ReadFileResponse{
 		Success: true,
 		Data:    data,
@@ -594,10 +667,18 @@ func (h *GRPCHandler) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*p
 
 // WriteFile writes data to a file
 func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (*pb.WriteFileResponse, error) {
+	start := time.Now()
+	var bytesWritten uint64
+	var opErr error
+	defer func() {
+		h.fileServer.RecordWrite(bytesWritten, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	parentFID := domain.FIDFromProto(req.ParentFid)
 	log.Printf("WriteFile: Name=%s, data length=%d", req.Name, len(req.Data))
 	if req.Name == "" {
 		log.Printf("WriteFile: error - Name is required")
+		opErr = errors.New("Name is required")
 		return &pb.WriteFileResponse{
 			Success: false,
 			Error:   "Name is required",
@@ -607,12 +688,14 @@ func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (
 	err := h.fileServer.WriteFile(parentFID, req.Name, req.Offset, req.Data)
 	if err != nil {
 		log.Printf("WriteFile: error writing file - %v", err)
+		opErr = err
 		return &pb.WriteFileResponse{
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
+	bytesWritten = uint64(len(req.Data))
 	h.fileServer.NotifyFileUpdated(parentFID, req.Name, "")
 
 	return &pb.WriteFileResponse{
@@ -622,11 +705,18 @@ func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (
 
 // DeleteFile deletes a file or directory
 func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest) (*pb.DeleteFileResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordWrite(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("DeleteFile: FID=%v, user=%s", req.Fid, req.RootUser)
 
 	// Validate request
 	if req.Fid == nil {
 		log.Printf("DeleteFile: error - FID is required")
+		opErr = errors.New("FID is required")
 		return &pb.DeleteFileResponse{
 			Success: false,
 			Error:   "FID is required",
@@ -635,6 +725,7 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 
 	if req.RootUser == "" {
 		log.Printf("DeleteFile: error - user is required")
+		opErr = errors.New("user is required")
 		return &pb.DeleteFileResponse{
 			Success: false,
 			Error:   "user is required",
@@ -666,6 +757,7 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 	err := h.fileServer.DeleteFile(fid, req.RootUser, recursive)
 	if err != nil {
 		log.Printf("DeleteFile: error deleting file - %v", err)
+		opErr = err
 		return &pb.DeleteFileResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -682,12 +774,20 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 
 // TrashFile moves a file or directory into the user's trash (soft delete)
 func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (*pb.TrashFileResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordWrite(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("TrashFile: FID=%v, user=%s", req.Fid, req.RootUser)
 
 	if req.Fid == nil {
+		opErr = errors.New("FID is required")
 		return &pb.TrashFileResponse{Success: false, Error: "FID is required"}, nil
 	}
 	if req.RootUser == "" {
+		opErr = errors.New("user is required")
 		return &pb.TrashFileResponse{Success: false, Error: "user is required"}, nil
 	}
 
@@ -695,6 +795,7 @@ func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (
 	trashedName, err := h.fileServer.TrashFile(fid, req.RootUser, req.Recursive)
 	if err != nil {
 		log.Printf("TrashFile: error - %v", err)
+		opErr = err
 		return &pb.TrashFileResponse{Success: false, Error: err.Error()}, nil
 	}
 
@@ -703,15 +804,24 @@ func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (
 
 // RestoreFile restores a file or directory from trash back to its original location
 func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileRequest) (*pb.RestoreFileResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordWrite(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	log.Printf("RestoreFile: FID=%v, user=%s", req.Fid, req.RootUser)
 
 	if req.Fid == nil {
+		opErr = errors.New("FID is required")
 		return &pb.RestoreFileResponse{Success: false, Error: "FID is required"}, nil
 	}
 	if req.RootUser == "" {
+		opErr = errors.New("user is required")
 		return &pb.RestoreFileResponse{Success: false, Error: "user is required"}, nil
 	}
 	if req.Username == "" {
+		opErr = errors.New("username is required")
 		return &pb.RestoreFileResponse{Success: false, Error: "username is required"}, nil
 	}
 
@@ -719,6 +829,7 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser, req.Username)
 	if err != nil {
 		log.Printf("RestoreFile: error - %v", err)
+		opErr = err
 		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
 	}
 
@@ -727,16 +838,25 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 
 // ShowTrash lists the current user's trash directory contents.
 func (h *GRPCHandler) ShowTrash(ctx context.Context, req *pb.ShowTrashRequest) (*pb.ShowTrashResponse, error) {
+	start := time.Now()
+	var opErr error
+	defer func() {
+		h.fileServer.RecordRead(0, time.Since(start).Seconds()*1000.0, opErr)
+	}()
+
 	if req.RootUser == "" {
+		opErr = errors.New("user is required")
 		return &pb.ShowTrashResponse{Success: false, Error: "user is required"}, nil
 	}
 	if req.Username == "" {
+		opErr = errors.New("username is required")
 		return &pb.ShowTrashResponse{Success: false, Error: "username is required"}, nil
 	}
 
 	entries, err := h.fileServer.ShowTrash(req.RootUser, req.Username)
 	if err != nil {
 		log.Printf("ShowTrash: error - %v", err)
+		opErr = err
 		return &pb.ShowTrashResponse{Success: false, Error: err.Error()}, nil
 	}
 
