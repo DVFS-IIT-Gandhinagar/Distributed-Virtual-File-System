@@ -190,6 +190,9 @@ func (m *MockSSHExecutor) Run(ctx context.Context, host string, port int, user s
 
 	resp, ok := m.Responses[command]
 	if !ok {
+		resp, ok = m.Responses[host]
+	}
+	if !ok {
 		resp = m.Default
 	}
 	m.mu.Unlock()

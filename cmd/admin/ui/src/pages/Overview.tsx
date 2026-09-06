@@ -119,28 +119,31 @@ export default function Overview() {
         <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
             title="Write Throughput"
-            value="—"
-            subtitle="Phase 4 instrumentation"
+            value={`${(cluster.cluster_write_mbps ?? 0).toFixed(2)} MiB/s`}
+            subtitle={`${(cluster.cluster_write_iops ?? 0).toFixed(1)} IOPS`}
             icon="bi-lightning-charge"
             iconColor="#ffc107"
+            onClick={() => navigate('/performance')}
           />
         </div>
         <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
             title="Read Throughput"
-            value="—"
-            subtitle="Phase 4 instrumentation"
+            value={`${(cluster.cluster_read_mbps ?? 0).toFixed(2)} MiB/s`}
+            subtitle={`${(cluster.cluster_read_iops ?? 0).toFixed(1)} IOPS`}
             icon="bi-book"
             iconColor="#0dcaf0"
+            onClick={() => navigate('/performance')}
           />
         </div>
         <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
             title="Error Rate"
-            value="0.0%"
-            subtitle="Phase 4 instrumentation"
+            value={`${(cluster.cluster_error_rate_pct ?? 0).toFixed(2)}%`}
+            subtitle={(cluster.cluster_error_rate_pct ?? 0) > 0 ? "errors detected" : "nominal"}
             icon="bi-exclamation-octagon"
             iconColor="#dc3545"
+            onClick={() => navigate('/performance')}
           />
         </div>
       </div>

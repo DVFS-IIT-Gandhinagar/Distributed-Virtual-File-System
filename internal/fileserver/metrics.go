@@ -28,9 +28,22 @@ type Metrics struct {
 	LoadAvg5m         float64           `json:"load_avg_5m"`
 	UptimeSeconds     float64           `json:"uptime_seconds"`
 	LastRestartUnix   int64             `json:"last_restart_unix"`
-	ActiveConnections int               `json:"active_connections"`
-	ActiveUsers       []string          `json:"active_users"`
-	UsersAssigned     int               `json:"users_assigned_count"`
+	ActiveConnections   int               `json:"active_connections"`
+	ActiveUsers         []string          `json:"active_users"`
+	UsersAssigned       int               `json:"users_assigned_count"`
+	BytesWrittenTotal   uint64            `json:"bytes_written_total"`
+	BytesReadTotal      uint64            `json:"bytes_read_total"`
+	WriteOpsTotal       uint64            `json:"write_ops_total"`
+	ReadOpsTotal        uint64            `json:"read_ops_total"`
+	ErrorsTotal         uint64            `json:"errors_total"`
+	FailedWritesTotal   uint64            `json:"failed_writes_total"`
+	FailedReadsTotal    uint64            `json:"failed_reads_total"`
+	OpLatencyWriteMsP50 float64           `json:"op_latency_write_ms_p50"`
+	OpLatencyWriteMsP95 float64           `json:"op_latency_write_ms_p95"`
+	OpLatencyWriteMsP99 float64           `json:"op_latency_write_ms_p99"`
+	OpLatencyReadMsP50  float64           `json:"op_latency_read_ms_p50"`
+	OpLatencyReadMsP95  float64           `json:"op_latency_read_ms_p95"`
+	OpLatencyReadMsP99  float64           `json:"op_latency_read_ms_p99"`
 }
 
 // CollectMetrics gathers a full metrics snapshot from the fileserver.
@@ -82,7 +95,9 @@ func (fs *FileServer) CollectMetrics() Metrics {
 	var memUsed uint64
 	var memPct float64
 	if memTotal > 0 {
-		memUsed = memTotal - memAvail
+		if memTotal > memAvail {
+			memUsed = memTotal - memAvail
+		}
 		memPct = float64(memUsed) / float64(memTotal) * 100.0
 	}
 
@@ -92,26 +107,42 @@ func (fs *FileServer) CollectMetrics() Metrics {
 	// CPU usage
 	cpuUsage := readCPUUsage()
 
+	// Operation metrics and latency percentiles
+	opSnap := fs.OpMetricsSnapshot()
+
 	return Metrics{
-		DiskTotalBytes:    diskTotal,
-		DiskUsedBytes:     diskUsed,
-		DiskFreeBytes:     diskFree,
-		DiskUsagePercent:  diskPct,
-		PerUserStorage:    perUserStorage,
-		PerUserQuota:      perUserQuota,
-		ChunkCount:        chunkCount,
-		CPUTempCelsius:    cpuTemp,
-		CPUUsagePercent:   cpuUsage,
-		MemUsedBytes:      memUsed,
-		MemTotalBytes:     memTotal,
-		MemUsagePercent:   memPct,
-		LoadAvg1m:         load1m,
-		LoadAvg5m:         load5m,
-		UptimeSeconds:     time.Since(startTime).Seconds(),
-		LastRestartUnix:   startTime.Unix(),
-		ActiveConnections: activeConns,
-		ActiveUsers:       activeUsers,
-		UsersAssigned:     usersAssigned,
+		DiskTotalBytes:      diskTotal,
+		DiskUsedBytes:       diskUsed,
+		DiskFreeBytes:       diskFree,
+		DiskUsagePercent:    diskPct,
+		PerUserStorage:      perUserStorage,
+		PerUserQuota:        perUserQuota,
+		ChunkCount:          chunkCount,
+		CPUTempCelsius:      cpuTemp,
+		CPUUsagePercent:     cpuUsage,
+		MemUsedBytes:        memUsed,
+		MemTotalBytes:       memTotal,
+		MemUsagePercent:     memPct,
+		LoadAvg1m:           load1m,
+		LoadAvg5m:           load5m,
+		UptimeSeconds:       time.Since(startTime).Seconds(),
+		LastRestartUnix:     startTime.Unix(),
+		ActiveConnections:   activeConns,
+		ActiveUsers:         activeUsers,
+		UsersAssigned:       usersAssigned,
+		BytesWrittenTotal:   opSnap.BytesWrittenTotal,
+		BytesReadTotal:      opSnap.BytesReadTotal,
+		WriteOpsTotal:       opSnap.WriteOpsTotal,
+		ReadOpsTotal:        opSnap.ReadOpsTotal,
+		ErrorsTotal:         opSnap.ErrorsTotal,
+		FailedWritesTotal:   opSnap.FailedWritesTotal,
+		FailedReadsTotal:    opSnap.FailedReadsTotal,
+		OpLatencyWriteMsP50: opSnap.OpLatencyWriteMsP50,
+		OpLatencyWriteMsP95: opSnap.OpLatencyWriteMsP95,
+		OpLatencyWriteMsP99: opSnap.OpLatencyWriteMsP99,
+		OpLatencyReadMsP50:  opSnap.OpLatencyReadMsP50,
+		OpLatencyReadMsP95:  opSnap.OpLatencyReadMsP95,
+		OpLatencyReadMsP99:  opSnap.OpLatencyReadMsP99,
 	}
 }
 
@@ -229,8 +260,20 @@ func readCPUUsage() float64 {
 	if totalDelta == 0 {
 		return 0.0
 	}
-	idleDelta := s2.idle - s1.idle
-	return (1.0 - float64(idleDelta)/float64(totalDelta)) * 100.0
+	if s2.idle > s2.total || s1.idle > s1.total {
+		return 0.0
+	}
+	idleDelta := int64(s2.idle) - int64(s1.idle)
+	if idleDelta < 0 {
+		idleDelta = 0
+	}
+	usage := (1.0 - float64(idleDelta)/float64(totalDelta)) * 100.0
+	if usage < 0.0 {
+		usage = 0.0
+	} else if usage > 100.0 {
+		usage = 100.0
+	}
+	return usage
 }
 
 // readFileserverDiskStats reads disk statistics and applies the 20 GiB safety buffer,

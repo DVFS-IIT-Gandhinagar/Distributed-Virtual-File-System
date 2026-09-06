@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import type { ClusterResponse } from '../types';
+import { fetchAlertSummary } from '../api';
 import { getStatusBadgeClass, getStatusColor } from '../utils';
 
 interface Props {
@@ -19,6 +21,12 @@ function worstStatus(cluster?: ClusterResponse): string {
 }
 
 export default function AppNavbar({ cluster, lastUpdated }: Props) {
+  const { data: alertSummary } = useQuery({
+    queryKey: ['alertSummary'],
+    queryFn: fetchAlertSummary,
+    refetchInterval: 5000,
+  });
+
   const status = worstStatus(cluster);
   const badgeClass = getStatusBadgeClass(status);
   const borderColor = getStatusColor(status);
@@ -70,6 +78,16 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             </li>
             <li className="nav-item">
               <NavLink
+                to="/performance"
+                className={({ isActive }) =>
+                  'nav-link' + (isActive ? ' active fw-semibold' : '')
+                }
+              >
+                <i className="bi bi-graph-up me-1"></i>Performance
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
                 to="/users"
                 className={({ isActive }) =>
                   'nav-link' + (isActive ? ' active fw-semibold' : '')
@@ -86,6 +104,26 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 }
               >
                 <i className="bi bi-play-circle me-1"></i>Actions
+              </NavLink>
+            </li>
+            <li className="nav-item">
+              <NavLink
+                to="/logs"
+                className={({ isActive }) =>
+                  'nav-link position-relative' + (isActive ? ' active fw-semibold' : '')
+                }
+              >
+                <i className="bi bi-bell me-1"></i>Logs &amp; Alerts
+                {alertSummary && (alertSummary.critical_count > 0 || alertSummary.warning_count > 0) && (
+                  <span
+                    className={`badge rounded-pill ms-1 ${
+                      alertSummary.critical_count > 0 ? 'bg-danger' : 'bg-warning text-dark'
+                    }`}
+                    style={{ fontSize: '0.65rem' }}
+                  >
+                    {alertSummary.critical_count + alertSummary.warning_count}
+                  </span>
+                )}
               </NavLink>
             </li>
           </ul>

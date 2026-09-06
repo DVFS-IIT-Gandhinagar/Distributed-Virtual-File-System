@@ -215,12 +215,15 @@ func (c *Client) ReRegister() error {
 // and shuts down the callback listener.
 func (c *Client) Disconnect() {
 	if c.serverConn != nil && c.username != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_, _ = c.serverConn.UnregisterClient(ctx, &pb.UnregisterClientRequest{
-			ClientId: c.clientID,
-			Username: c.username,
-		})
+		func() {
+			defer func() { _ = recover() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_, _ = c.serverConn.UnregisterClient(ctx, &pb.UnregisterClientRequest{
+				ClientId: c.clientID,
+				Username: c.username,
+			})
+		}()
 		c.serverConn = nil
 	}
 	if c.grpcConn != nil {
