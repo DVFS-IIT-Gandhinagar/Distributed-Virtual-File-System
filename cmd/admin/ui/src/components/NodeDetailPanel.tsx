@@ -7,6 +7,7 @@ import {
 import type { NodeInfo, Snapshot } from '../types';
 import { fetchHistory } from '../api';
 import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getCpuTempColor, formatNodeDisplayName, formatMachineName } from '../utils';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   node: NodeInfo;
@@ -20,6 +21,16 @@ function bytesToGB(b: number) {
 
 export default function NodeDetailPanel({ node, show, onClose }: Props) {
   const navigate = useNavigate();
+  const { isAuthenticated, openLoginModal } = useAuth();
+
+  const handleProtectedAction = (path: string) => {
+    if (!isAuthenticated) {
+      openLoginModal();
+      return;
+    }
+    onClose();
+    navigate(path);
+  };
   const m = node.metrics;
 
   const { data: history } = useQuery<Snapshot[]>({
@@ -87,10 +98,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             <button
               type="button"
               className="btn btn-outline-primary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
-              onClick={() => {
-                onClose();
-                navigate(`/actions?node=${node.fsID}&action=restart`);
-              }}
+              onClick={() => handleProtectedAction(`/actions?node=${node.fsID}&action=restart`)}
               title={`Restart Node ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-arrow-repeat"></i>Restart
@@ -98,10 +106,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             <button
               type="button"
               className="btn btn-outline-danger btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
-              onClick={() => {
-                onClose();
-                navigate(`/actions?node=${node.fsID}&action=reboot`);
-              }}
+              onClick={() => handleProtectedAction(`/actions?node=${node.fsID}&action=reboot`)}
               title={`Reboot Machine for ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-power"></i>Reboot
@@ -109,10 +114,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             <button
               type="button"
               className="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
-              onClick={() => {
-                onClose();
-                navigate(`/actions?node=${node.fsID}&action=pull`);
-              }}
+              onClick={() => handleProtectedAction(`/actions?node=${node.fsID}&action=pull`)}
               title={`Pull repo on Node ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-git"></i>Git Pull
@@ -120,10 +122,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             <button
               type="button"
               className="btn btn-outline-success btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
-              onClick={() => {
-                onClose();
-                navigate(`/actions?node=${node.fsID}&action=apt`);
-              }}
+              onClick={() => handleProtectedAction(`/actions?node=${node.fsID}&action=apt`)}
               title={`APT Update on ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-arrow-up-circle"></i>APT
@@ -131,10 +130,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             <button
               type="button"
               className="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center gap-1"
-              onClick={() => {
-                onClose();
-                navigate(`/actions?node=${node.fsID}&action=logs`);
-              }}
+              onClick={() => handleProtectedAction(`/actions?node=${node.fsID}&action=logs`)}
               title={`View logs for Node ${formatNodeDisplayName(node)}`}
             >
               <i className="bi bi-journal-text"></i>Logs
@@ -160,7 +156,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
                   { label: 'Files Stored', value: m.chunk_count, icon: 'bi-file-earmark' },
                   {
                     label: 'Connections',
-                    value: m.active_users && m.active_users.length > 0
+                    value: isAuthenticated && m.active_users && m.active_users.length > 0
                       ? `${m.active_connections} (${m.active_users.join(', ')})`
                       : m.active_connections,
                     icon: 'bi-diagram-2'
@@ -220,42 +216,58 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
               </div>
 
               {/* Per-User Storage */}
-              {perUserData.length > 0 && (
-                <div className="mb-4">
-                  <h6 className="fw-semibold mb-2">
-                    <i className="bi bi-people me-1 text-primary"></i>Per-User Storage
-                  </h6>
-                  <ResponsiveContainer width="100%" height={Math.max(perUserData.length * 40, 80)}>
-                    <BarChart
-                      data={perUserData}
-                      layout="vertical"
-                      margin={{ top: 0, right: 50, left: 40, bottom: 0 }}
-                    >
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={50} />
-                      <Tooltip
-                        formatter={(val: number, name: string) => [
-                          `${val} GiB`,
-                          name === 'used' ? 'Used' : 'Quota',
-                        ]}
-                      />
-                      <Bar dataKey="quota" name="Quota" fill="#dee2e6" radius={[4, 4, 4, 4]} />
-                      <Bar dataKey="used" name="Used" fill="#0d6efd" radius={[4, 4, 4, 4]}>
-                        {perUserData.map((entry, i) => (
-                          <Cell
-                            key={i}
-                            fill={entry.pct >= 90 ? '#dc3545' : entry.pct >= 75 ? '#ffc107' : '#0d6efd'}
-                          />
-                        ))}
-                        <LabelList
-                          dataKey="pct"
-                          position="right"
-                          formatter={(v: number) => `${v.toFixed(0)}%`}
-                          style={{ fontSize: 11, fill: '#6c757d' }}
+              {isAuthenticated ? (
+                perUserData.length > 0 && (
+                  <div className="mb-4">
+                    <h6 className="fw-semibold mb-2">
+                      <i className="bi bi-people me-1 text-primary"></i>Per-User Storage
+                    </h6>
+                    <ResponsiveContainer width="100%" height={Math.max(perUserData.length * 40, 80)}>
+                      <BarChart
+                        data={perUserData}
+                        layout="vertical"
+                        margin={{ top: 0, right: 50, left: 40, bottom: 0 }}
+                      >
+                        <XAxis type="number" hide />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={50} />
+                        <Tooltip
+                          formatter={(val: number, name: string) => [
+                            `${val} GiB`,
+                            name === 'used' ? 'Used' : 'Quota',
+                          ]}
                         />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                        <Bar dataKey="quota" name="Quota" fill="#dee2e6" radius={[4, 4, 4, 4]} />
+                        <Bar dataKey="used" name="Used" fill="#0d6efd" radius={[4, 4, 4, 4]}>
+                          {perUserData.map((entry, i) => (
+                            <Cell
+                              key={i}
+                              fill={entry.pct >= 90 ? '#dc3545' : entry.pct >= 75 ? '#ffc107' : '#0d6efd'}
+                            />
+                          ))}
+                          <LabelList
+                            dataKey="pct"
+                            position="right"
+                            formatter={(v: number) => `${v.toFixed(0)}%`}
+                            style={{ fontSize: 11, fill: '#6c757d' }}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )
+              ) : (
+                <div className="mb-4 p-3 border rounded bg-light text-center">
+                  <i className="bi bi-shield-lock text-muted fs-4 d-block mb-1"></i>
+                  <div className="small fw-semibold text-secondary mb-1">Per-User Storage Locked</div>
+                  <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                    User storage telemetry is protected.
+                  </div>
+                  <button
+                    className="btn btn-sm btn-outline-primary mt-2"
+                    onClick={openLoginModal}
+                  >
+                    <i className="bi bi-key me-1"></i>Admin Login
+                  </button>
                 </div>
               )}
             </>

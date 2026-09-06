@@ -8,8 +8,10 @@ import Users from './pages/Users';
 import Actions from './pages/Actions';
 import Performance from './pages/Performance';
 import LogsAlerts from './pages/LogsAlerts';
+import { AuthProvider } from './context/AuthContext';
+import AdminLoginModal from './components/AdminLoginModal';
 
-export default function App() {
+function AppContent() {
   const { data, dataUpdatedAt } = useQuery({
     queryKey: ['cluster'],
     queryFn: fetchCluster,
@@ -29,9 +31,18 @@ export default function App() {
           <Route path="/logs" element={<LogsAlerts />} />
         </Routes>
       </main>
+      <AdminLoginModal />
       <footer className="py-3 text-center text-muted small border-top bg-white">
         DVFS Admin Console &mdash; Distributed Virtual File System
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

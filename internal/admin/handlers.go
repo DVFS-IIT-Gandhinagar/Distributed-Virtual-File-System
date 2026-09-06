@@ -93,20 +93,52 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 		return nodes[i].FsID < nodes[j].FsID
 	})
 
-	usersCopy := make(map[string]string, len(a.users))
-	for u, id := range a.users {
-		usersCopy[u] = id
+	isAuthed := true
+	if a.authManager != nil {
+		isAuthed = a.authManager.IsAuthenticated(r)
+	}
+
+	var usersCopy map[string]string
+	var totalUsersCount int
+	var onlineUsersCount int
+	var outputNodes []*NodeState
+
+	if isAuthed {
+		usersCopy = make(map[string]string, len(a.users))
+		for u, id := range a.users {
+			usersCopy[u] = id
+		}
+		totalUsersCount = len(usersCopy)
+		onlineUsersCount = len(onlineUsersMap)
+		outputNodes = nodes
+	} else {
+		usersCopy = make(map[string]string)
+		totalUsersCount = 0
+		onlineUsersCount = 0
+		outputNodes = make([]*NodeState, len(nodes))
+		for i, n := range nodes {
+			nodeCopy := *n
+			if n.Metrics != nil {
+				mCopy := *n.Metrics
+				mCopy.PerUserStorage = make(map[string]uint64)
+				mCopy.PerUserQuota = make(map[string]uint64)
+				mCopy.ActiveUsers = []string{}
+				mCopy.UsersAssigned = 0
+				nodeCopy.Metrics = &mCopy
+			}
+			outputNodes[i] = &nodeCopy
+		}
 	}
 
 	resp := ClusterResponse{
-		Nodes:               nodes,
+		Nodes:               outputNodes,
 		Users:               usersCopy,
 		NodeCount:           len(nodes),
 		OnlineCount:         onlineCount,
 		TotalStorageBytes:   totalStorage,
 		UsedStorageBytes:    usedStorage,
-		TotalUsers:          len(usersCopy),
-		OnlineUsers:         len(onlineUsersMap),
+		TotalUsers:          totalUsersCount,
+		OnlineUsers:         onlineUsersCount,
 		ClusterWriteMbps:    clusterWriteMbps,
 		ClusterReadMbps:     clusterReadMbps,
 		ClusterWriteIOPS:    clusterWriteIOPS,
@@ -739,6 +771,17 @@ func (a *AdminServer) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	if alerts == nil {
 		alerts = []Alert{}
 	}
+	if a.authManager != nil && !a.authManager.IsAuthenticated(r) {
+		sanitized := make([]Alert, 0, len(alerts))
+		for _, al := range alerts {
+			if al.Type == AlertTypeQuotaExceeded {
+				continue
+			}
+			al.Username = ""
+			sanitized = append(sanitized, al)
+		}
+		alerts = sanitized
+	}
 	if err := json.NewEncoder(w).Encode(alerts); err != nil {
 		log.Printf("[ADMIN] handleAlerts encode error: %v", err)
 	}
@@ -865,6 +908,116 @@ func (a *AdminServer) handleLogTail(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *AdminServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	if a.authManager == nil {
+		return next
+	}
+	return a.authManager.RequireAuth(next)
+}
+
+type authLoginRequest struct {
+	Password string `json:"password"`
+}
+
+type authLoginResponse struct {
+	Success bool   `json:"success"`
+	Token   string `json:"token,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+func (a *AdminServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == http.MethodOptions {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req authLoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(authLoginResponse{
+			Success: false,
+			Error:   "invalid request body",
+		})
+		return
+	}
+
+	if a.authManager == nil || !a.authManager.VerifyPassword(req.Password) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(authLoginResponse{
+			Success: false,
+			Error:   "invalid admin password",
+		})
+		return
+	}
+
+	token := a.authManager.CreateSession()
+	http.SetCookie(w, &http.Cookie{
+		Name:     adminCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(sessionTTL.Seconds()),
+	})
+
+	_ = json.NewEncoder(w).Encode(authLoginResponse{
+		Success: true,
+		Token:   token,
+	})
+}
+
+func (a *AdminServer) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == http.MethodOptions {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if a.authManager != nil {
+		token := a.authManager.ExtractToken(r)
+		a.authManager.RevokeSession(token)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     adminCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+	})
+}
+
+func (a *AdminServer) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == http.MethodOptions {
+		return
+	}
+
+	authed := false
+	if a.authManager != nil {
+		authed = a.authManager.IsAuthenticated(r)
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"authenticated": authed,
+	})
+}
+
 // Run starts the background pollers and the HTTP API/UI server.
 func (a *AdminServer) Run(port int) error {
 	a.refreshNodes()
@@ -893,23 +1046,26 @@ func (a *AdminServer) Run(port int) error {
 	}()
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/login", a.handleAuthLogin)
+	mux.HandleFunc("/api/auth/logout", a.handleAuthLogout)
+	mux.HandleFunc("/api/auth/status", a.handleAuthStatus)
 	mux.HandleFunc("/api/cluster", a.handleCluster)
 	mux.HandleFunc("/api/cluster/summary", a.handleCluster)
 	mux.HandleFunc("/api/performance", a.handlePerformance)
 	mux.HandleFunc("/api/performance/export", a.handlePerformanceExport)
 	mux.HandleFunc("/api/history/", a.handleHistory)
-	mux.HandleFunc("/api/users", a.handleUsers)
-	mux.HandleFunc("/api/users/", a.handleUserQuota)
-	mux.HandleFunc("/api/actions/presets", a.handleActionPresets)
-	mux.HandleFunc("/api/actions/history", a.handleActionHistory)
-	mux.HandleFunc("/api/actions/execute", a.handleActionExecute)
+	mux.HandleFunc("/api/users", a.requireAuth(a.handleUsers))
+	mux.HandleFunc("/api/users/", a.requireAuth(a.handleUserQuota))
+	mux.HandleFunc("/api/actions/presets", a.requireAuth(a.handleActionPresets))
+	mux.HandleFunc("/api/actions/history", a.requireAuth(a.handleActionHistory))
+	mux.HandleFunc("/api/actions/execute", a.requireAuth(a.handleActionExecute))
 	mux.HandleFunc("/api/alerts", a.handleAlerts)
 	mux.HandleFunc("/api/alerts/summary", a.handleAlertSummary)
-	mux.HandleFunc("/api/alerts/resolve", a.handleResolveAlert)
-	mux.HandleFunc("/api/alerts/resolve-all", a.handleResolveAllAlerts)
-	mux.HandleFunc("/api/logs/tail", a.handleLogTail)
+	mux.HandleFunc("/api/alerts/resolve", a.requireAuth(a.handleResolveAlert))
+	mux.HandleFunc("/api/alerts/resolve-all", a.requireAuth(a.handleResolveAllAlerts))
+	mux.HandleFunc("/api/logs/tail", a.requireAuth(a.handleLogTail))
 	if a.orchestrator != nil {
-		mux.Handle("/ws/actions", NewWebSocketHandler(a.orchestrator))
+		mux.Handle("/ws/actions", NewWebSocketHandler(a.orchestrator, a.authManager))
 	}
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

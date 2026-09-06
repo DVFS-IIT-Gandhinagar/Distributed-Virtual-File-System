@@ -51,6 +51,7 @@ type AdminServer struct {
 	orchestrator *Orchestrator
 	alertManager *AlertManager
 	snapshotPath string
+	authManager  *AuthManager
 }
 
 // NewAdminServer creates a new AdminServer instance.
@@ -74,6 +75,7 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 		},
 		stopCh:       make(chan struct{}),
 		snapshotPath: snapshotPath,
+		authManager:  NewAuthManager(".env", "../.env", "../../.env"),
 	}
 	history := NewCommandHistory(100, historyPath)
 	ssh := NewRemoteSSHExecutor()
@@ -82,6 +84,16 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 	srv.alertManager = NewAlertManager(500, alertsPath)
 	_ = srv.LoadMetricsSnapshot(srv.snapshotPath)
 	return srv
+}
+
+// SetAuthManager sets the authentication manager (useful for testing).
+func (a *AdminServer) SetAuthManager(am *AuthManager) {
+	a.authManager = am
+}
+
+// AuthManager returns the current authentication manager.
+func (a *AdminServer) AuthManager() *AuthManager {
+	return a.authManager
 }
 
 // SetOrchestrator configures the orchestration engine (useful for injecting mock SSH executors in tests).

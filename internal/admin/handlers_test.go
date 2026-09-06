@@ -11,6 +11,7 @@ import (
 
 func TestHandleCluster(t *testing.T) {
 	admin := NewAdminServer("", "")
+	admin.authManager = nil
 	admin.users["alice"] = "0"
 	admin.users["bob"] = "0"
 

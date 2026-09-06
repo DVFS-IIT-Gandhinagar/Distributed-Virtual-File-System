@@ -7,9 +7,11 @@ import {
 import { fetchCluster } from '../api';
 import StatCard from '../components/StatCard';
 import { formatBytes, getStatusColor, getStatusBadgeClass, getStorageBarClass, getStorageBarColor, formatNodeDisplayName, formatMachineName } from '../utils';
+import { useAuth } from '../context/AuthContext';
 
 export default function Overview() {
   const navigate = useNavigate();
+  const { isAuthenticated, openLoginModal } = useAuth();
   const { data: cluster, isLoading, isError } = useQuery({
     queryKey: ['cluster'],
     queryFn: fetchCluster,
@@ -107,14 +109,25 @@ export default function Overview() {
           </StatCard>
         </div>
         <div className="col-sm-6 col-md-4 col-xl-2">
-          <StatCard
-            title="Cluster Users"
-            value={`${cluster.online_users ?? 0} / ${cluster.total_users}`}
-            subtitle={`${cluster.online_users ?? 0} online / ${cluster.total_users} total`}
-            icon="bi-people"
-            iconColor="#198754"
-            onClick={() => navigate('/users')}
-          />
+          {isAuthenticated ? (
+            <StatCard
+              title="Cluster Users"
+              value={`${cluster.online_users ?? 0} / ${cluster.total_users}`}
+              subtitle={`${cluster.online_users ?? 0} online / ${cluster.total_users} total`}
+              icon="bi-people"
+              iconColor="#198754"
+              onClick={() => navigate('/users')}
+            />
+          ) : (
+            <StatCard
+              title="Cluster Users"
+              value="Locked"
+              subtitle="Admin login required"
+              icon="bi-shield-lock"
+              iconColor="#ffc107"
+              onClick={openLoginModal}
+            />
+          )}
         </div>
         <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
