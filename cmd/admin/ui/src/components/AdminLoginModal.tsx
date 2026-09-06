@@ -35,7 +35,7 @@ export default function AdminLoginModal() {
     setSubmitting(false);
 
     if (!res.success) {
-      setError(res.error || 'Invalid password. Check the password hash configured in .env.');
+      setError(res.error || 'Invalid administrator password. Please try again.');
     }
   };
 
@@ -110,9 +110,6 @@ export default function AdminLoginModal() {
                     >
                       <i className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
                     </button>
-                  </div>
-                  <div className="form-text text-muted small" style={{ fontSize: '0.75rem' }}>
-                    Verified via secure SHA-256 hash in <code>.env</code>.
                   </div>
                 </div>
               </div>

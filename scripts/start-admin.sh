@@ -52,17 +52,16 @@ else
     echo "[STARTUP WARNING] npm not found and $STATIC_DIR/index.html does not exist. API will start, but web UI may be unavailable."
 fi
 
-# Ensure binary is built
-if [ ! -f "./bin/admin" ]; then
-    echo "[STARTUP] ./bin/admin not found. Building..."
-    if command -v go >/dev/null 2>&1; then
-        go build -o ./bin/admin cmd/admin/main.go
-    elif command -v make >/dev/null 2>&1; then
-        make build
-    else
-        echo "[STARTUP ERROR] Binary ./bin/admin not found and neither go nor make is available." >&2
-        exit 1
-    fi
+# Ensure binary is built and up to date
+if command -v go >/dev/null 2>&1; then
+    echo "[STARTUP] Compiling admin server binary..."
+    go build -o ./bin/admin cmd/admin/main.go || echo "[STARTUP WARNING] go build failed, continuing with existing binary..."
+elif command -v make >/dev/null 2>&1; then
+    echo "[STARTUP] Building admin server via make..."
+    make build || echo "[STARTUP WARNING] make build failed, continuing with existing binary..."
+elif [ ! -f "./bin/admin" ]; then
+    echo "[STARTUP ERROR] Binary ./bin/admin not found and neither go nor make is available." >&2
+    exit 1
 fi
 
 echo "[STARTUP] Starting DVFS Admin Console..."
