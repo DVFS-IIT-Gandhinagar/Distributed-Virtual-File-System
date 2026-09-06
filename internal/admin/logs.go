@@ -21,7 +21,7 @@ type LogTailResponse struct {
 }
 
 // FetchNodeLogs queries the remote node via SSH to tail recent system or file logs.
-func (a *AdminServer) FetchNodeLogs(ctx context.Context, nodeID string, service string, lines int, mode string) (*LogTailResponse, error) {
+func (a *AdminServer) FetchNodeLogs(ctx context.Context, nodeID string, service string, lines int, mode string, extraOpts ...string) (*LogTailResponse, error) {
 	if lines <= 0 {
 		lines = 100
 	}
@@ -61,13 +61,19 @@ func (a *AdminServer) FetchNodeLogs(ctx context.Context, nodeID string, service 
 		logFileName = "admin.log"
 	}
 
+	repoPath := "~/Distributed-Virtual-File-System"
+	if a.orchestrator != nil && a.orchestrator.defaultRepoPath != "" {
+		repoPath = a.orchestrator.defaultRepoPath
+	}
+	repoLog := fmt.Sprintf("%s/%s", repoPath, logFileName)
+
 	var cmd string
 	if mode == "tail" {
-		cmd = fmt.Sprintf("tail -n %d %s 2>/dev/null || tail -n %d /var/log/%s 2>/dev/null || journalctl -u %s -n %d --no-pager",
-			lines, logFileName, lines, logFileName, serviceName, lines)
+		cmd = fmt.Sprintf("tail -n %d %s 2>/dev/null || tail -n %d %s 2>/dev/null || tail -n %d /var/log/%s 2>/dev/null || journalctl -u %s -n %d --no-pager 2>/dev/null",
+			lines, repoLog, lines, logFileName, lines, logFileName, serviceName, lines)
 	} else {
-		cmd = fmt.Sprintf("journalctl -u %s -n %d --no-pager 2>/dev/null || tail -n %d %s",
-			serviceName, lines, lines, logFileName)
+		cmd = fmt.Sprintf("(journalctl -u %s -n %d --no-pager 2>/dev/null | grep -v '^--' | grep .) || tail -n %d %s 2>/dev/null || tail -n %d %s 2>/dev/null || journalctl -u %s -n %d --no-pager",
+			serviceName, lines, lines, repoLog, lines, logFileName, serviceName, lines)
 	}
 
 	now := time.Now().Unix()
@@ -78,14 +84,47 @@ func (a *AdminServer) FetchNodeLogs(ctx context.Context, nodeID string, service 
 		if err != nil {
 			host = node.Address
 		}
+
 		sshPort := 22
+		if a.orchestrator.defaultSSHPort > 0 {
+			sshPort = a.orchestrator.defaultSSHPort
+		}
+		presets := a.orchestrator.GetPresets()
+		if presets != nil && presets[node.FsID] != nil && presets[node.FsID].SSHPort > 0 {
+			sshPort = presets[node.FsID].SSHPort
+		}
+
+		// Resolve SSH User matching Actions logic
 		sshUser := a.orchestrator.defaultSSHUser
+		if presets != nil && presets[node.FsID] != nil && presets[node.FsID].SSHUser != "" {
+			sshUser = presets[node.FsID].SSHUser
+		} else if sshUser == "" || strings.HasPrefix(sshUser, "dvfs") {
+			if node.MachineName != "" {
+				sshUser = node.MachineName
+			} else if num, parseErr := strconv.Atoi(node.FsID); parseErr == nil {
+				sshUser = fmt.Sprintf("dvfs%d", num+1)
+			}
+		}
 		if sshUser == "" {
 			sshUser = "ubuntu"
 		}
+
 		sshKey := a.orchestrator.defaultSSHKey
 		if sshKey == "" {
-			sshKey = "~/.ssh/id_rsa"
+			sshKey = "~/.ssh/id_ed25519"
+		}
+
+		// Apply optional overrides if provided
+		if len(extraOpts) > 0 && extraOpts[0] != "" {
+			sshUser = extraOpts[0]
+		}
+		if len(extraOpts) > 1 && extraOpts[1] != "" {
+			sshKey = extraOpts[1]
+		}
+		if len(extraOpts) > 2 && extraOpts[2] != "" {
+			if p, pErr := strconv.Atoi(extraOpts[2]); pErr == nil && p > 0 {
+				sshPort = p
+			}
 		}
 
 		var stdoutBuf, stderrBuf bytes.Buffer

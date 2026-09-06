@@ -850,8 +850,11 @@ func (a *AdminServer) handleLogTail(w http.ResponseWriter, r *http.Request) {
 	}
 	service := q.Get("service")
 	mode := q.Get("mode")
+	user := q.Get("user")
+	key := q.Get("key")
+	port := q.Get("port")
 
-	resp, err := a.FetchNodeLogs(r.Context(), nodeID, service, lines, mode)
+	resp, err := a.FetchNodeLogs(r.Context(), nodeID, service, lines, mode, user, key, port)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
