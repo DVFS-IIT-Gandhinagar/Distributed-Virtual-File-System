@@ -39,6 +39,8 @@ Download/
 # Development and temporary files
 *.tmp
 *.log
+.env
+.env.local
 
 # TLS Certificates
 certs/*.crt

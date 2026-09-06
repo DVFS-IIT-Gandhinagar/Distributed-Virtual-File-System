@@ -14,17 +14,28 @@ import (
 // WebSocketHandler manages real-time streaming connections for orchestration commands.
 type WebSocketHandler struct {
 	orchestrator *Orchestrator
+	authManager  *AuthManager
 }
 
 // NewWebSocketHandler creates a new WebSocketHandler.
-func NewWebSocketHandler(orchestrator *Orchestrator) *WebSocketHandler {
+func NewWebSocketHandler(orchestrator *Orchestrator, authManager ...*AuthManager) *WebSocketHandler {
+	var am *AuthManager
+	if len(authManager) > 0 {
+		am = authManager[0]
+	}
 	return &WebSocketHandler{
 		orchestrator: orchestrator,
+		authManager:  am,
 	}
 }
 
 // ServeHTTP handles incoming WebSocket client connections at /ws/actions.
 func (h *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.authManager != nil && !h.authManager.IsAuthenticated(r) {
+		http.Error(w, "admin authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: []string{"*"},
 	})
