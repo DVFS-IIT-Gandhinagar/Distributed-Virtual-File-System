@@ -18,6 +18,19 @@ export interface NodeMetrics {
   active_connections: number;
   active_users?: string[];
   users_assigned_count: number;
+  bytes_written_total?: number;
+  bytes_read_total?: number;
+  write_ops_total?: number;
+  read_ops_total?: number;
+  errors_total?: number;
+  failed_writes_total?: number;
+  failed_reads_total?: number;
+  op_latency_write_ms_p50?: number;
+  op_latency_write_ms_p95?: number;
+  op_latency_write_ms_p99?: number;
+  op_latency_read_ms_p50?: number;
+  op_latency_read_ms_p95?: number;
+  op_latency_read_ms_p99?: number;
 }
 
 export interface NodeInfo {
@@ -30,6 +43,13 @@ export interface NodeInfo {
   status: string;
   lastSeen: number;
   metrics: NodeMetrics;
+  writeThroughputBps?: number;
+  readThroughputBps?: number;
+  writeMbps?: number;
+  readMbps?: number;
+  writeIOPS?: number;
+  readIOPS?: number;
+  errorRatePct?: number;
 }
 
 export interface ClusterResponse {
@@ -41,11 +61,53 @@ export interface ClusterResponse {
   used_storage_bytes: number;
   total_users: number;
   online_users?: number;
+  cluster_write_mbps?: number;
+  cluster_read_mbps?: number;
+  cluster_write_iops?: number;
+  cluster_read_iops?: number;
+  cluster_error_rate_pct?: number;
 }
 
 export interface Snapshot {
   timestamp: number;
   metrics: NodeMetrics;
+  write_throughput_bps?: number;
+  read_throughput_bps?: number;
+  write_mbps?: number;
+  read_mbps?: number;
+  write_iops?: number;
+  read_iops?: number;
+  error_rate_pct?: number;
+}
+
+export interface NodePerformance {
+  fsID: string;
+  display_id?: number;
+  display_name: string;
+  machine_name: string;
+  address: string;
+  status: string;
+  write_mbps: number;
+  read_mbps: number;
+  write_iops: number;
+  read_iops: number;
+  error_rate_pct: number;
+  latency_write_p50: number;
+  latency_write_p95: number;
+  latency_write_p99: number;
+  latency_read_p50: number;
+  latency_read_p95: number;
+  latency_read_p99: number;
+  active_connections: number;
+}
+
+export interface PerformanceResponse {
+  cluster_write_mbps: number;
+  cluster_read_mbps: number;
+  cluster_write_iops: number;
+  cluster_read_iops: number;
+  cluster_error_rate_pct: number;
+  nodes: NodePerformance[];
 }
 
 export interface NodeUserStorage {
@@ -137,6 +199,55 @@ export interface ActionEvent {
   duration_ms?: number;
   status?: string;
   error?: string;
+}
+
+export interface ClusterHistorySnapshot {
+  timestamp: number;
+  write_mbps: number;
+  read_mbps: number;
+  write_iops: number;
+  read_iops: number;
+  active_connections: number;
+  error_rate_pct?: number;
+}
+
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+
+export interface Alert {
+  id: string;
+  timestamp: number;
+  severity: AlertSeverity;
+  type: string;
+  title: string;
+  message: string;
+  node_id?: string;
+  node_name?: string;
+  username?: string;
+  resolved: boolean;
+  resolved_at?: number;
+}
+
+export interface AlertSummary {
+  critical_count: number;
+  warning_count: number;
+  info_count: number;
+  total_unresolved: number;
+}
+
+export interface AlertFilters {
+  severity?: string;
+  node_id?: string;
+  unresolved?: boolean;
+  limit?: number;
+}
+
+export interface LogTailResponse {
+  node_id: string;
+  address: string;
+  service: string;
+  lines: number;
+  content: string;
+  timestamp: number;
 }
 
 
