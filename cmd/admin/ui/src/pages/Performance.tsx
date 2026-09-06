@@ -5,8 +5,8 @@ import {
 } from 'recharts';
 import { fetchPerformance, fetchHistory, fetchClusterHistory, getPerformanceExportUrl } from '../api';
 import StatCard from '../components/StatCard';
-import { getStatusBadgeClass, getStatusColor } from '../utils';
-import type { NodePerformance, Snapshot, ClusterHistorySnapshot } from '../types';
+import { getStatusBadgeClass } from '../utils';
+import type { Snapshot, ClusterHistorySnapshot } from '../types';
 
 export default function Performance() {
   const [selectedNodeId, setSelectedNodeId] = useState<string>('all');
