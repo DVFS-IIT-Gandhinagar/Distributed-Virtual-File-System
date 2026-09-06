@@ -19,7 +19,20 @@ type FileserverMetrics struct {
 	LoadAvg5m         float64           `json:"load_avg_5m"`
 	UptimeSeconds     float64           `json:"uptime_seconds"`
 	LastRestartUnix   int64             `json:"last_restart_unix"`
-	ActiveConnections int               `json:"active_connections"`
-	ActiveUsers       []string          `json:"active_users"`
-	UsersAssigned     int               `json:"users_assigned_count"`
+	ActiveConnections   int               `json:"active_connections"`
+	ActiveUsers         []string          `json:"active_users"`
+	UsersAssigned       int               `json:"users_assigned_count"`
+	BytesWrittenTotal   uint64            `json:"bytes_written_total"`
+	BytesReadTotal      uint64            `json:"bytes_read_total"`
+	WriteOpsTotal       uint64            `json:"write_ops_total"`
+	ReadOpsTotal        uint64            `json:"read_ops_total"`
+	ErrorsTotal         uint64            `json:"errors_total"`
+	FailedWritesTotal   uint64            `json:"failed_writes_total"`
+	FailedReadsTotal    uint64            `json:"failed_reads_total"`
+	OpLatencyWriteMsP50 float64           `json:"op_latency_write_ms_p50"`
+	OpLatencyWriteMsP95 float64           `json:"op_latency_write_ms_p95"`
+	OpLatencyWriteMsP99 float64           `json:"op_latency_write_ms_p99"`
+	OpLatencyReadMsP50  float64           `json:"op_latency_read_ms_p50"`
+	OpLatencyReadMsP95  float64           `json:"op_latency_read_ms_p95"`
+	OpLatencyReadMsP99  float64           `json:"op_latency_read_ms_p99"`
 }

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,14 +15,19 @@ import (
 )
 
 type ClusterResponse struct {
-	Nodes             []*NodeState      `json:"nodes"`
-	Users             map[string]string `json:"users"`
-	NodeCount         int               `json:"node_count"`
-	OnlineCount       int               `json:"online_count"`
-	TotalStorageBytes uint64            `json:"total_storage_bytes"`
-	UsedStorageBytes  uint64            `json:"used_storage_bytes"`
-	TotalUsers        int               `json:"total_users"`
-	OnlineUsers       int               `json:"online_users"`
+	Nodes               []*NodeState      `json:"nodes"`
+	Users               map[string]string `json:"users"`
+	NodeCount           int               `json:"node_count"`
+	OnlineCount         int               `json:"online_count"`
+	TotalStorageBytes   uint64            `json:"total_storage_bytes"`
+	UsedStorageBytes    uint64            `json:"used_storage_bytes"`
+	TotalUsers          int               `json:"total_users"`
+	OnlineUsers         int               `json:"online_users"`
+	ClusterWriteMbps    float64           `json:"cluster_write_mbps"`
+	ClusterReadMbps     float64           `json:"cluster_read_mbps"`
+	ClusterWriteIOPS    float64           `json:"cluster_write_iops"`
+	ClusterReadIOPS     float64           `json:"cluster_read_iops"`
+	ClusterErrorRatePct float64           `json:"cluster_error_rate_pct"`
 }
 
 func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +48,13 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 	var usedStorage uint64
 	onlineUsersMap := make(map[string]struct{})
 
+	var clusterWriteMbps float64
+	var clusterReadMbps float64
+	var clusterWriteIOPS float64
+	var clusterReadIOPS float64
+	var totalErrorOps float64
+	var totalOps float64
+
 	for _, n := range a.nodes {
 		nodes = append(nodes, n)
 		if n.Status == StatusOnline || n.Status == StatusWarning || n.Status == StatusDegraded || n.Status == StatusCritical {
@@ -51,11 +64,23 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 					onlineUsersMap[u] = struct{}{}
 				}
 			}
+			clusterWriteMbps += n.WriteMbps
+			clusterReadMbps += n.ReadMbps
+			clusterWriteIOPS += n.WriteIOPS
+			clusterReadIOPS += n.ReadIOPS
+			nodeOps := n.WriteIOPS + n.ReadIOPS
+			totalOps += nodeOps
+			totalErrorOps += nodeOps * (n.ErrorRatePct / 100.0)
 		}
 		if n.Metrics != nil {
 			totalStorage += n.Metrics.DiskTotalBytes
 			usedStorage += n.Metrics.DiskUsedBytes
 		}
+	}
+
+	var clusterErrorRatePct float64
+	if totalOps > 0 {
+		clusterErrorRatePct = (totalErrorOps / totalOps) * 100.0
 	}
 
 	// Deterministically sort nodes by numerical ID (0, 1, ... 8)
@@ -74,14 +99,19 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := ClusterResponse{
-		Nodes:             nodes,
-		Users:             usersCopy,
-		NodeCount:         len(nodes),
-		OnlineCount:       onlineCount,
-		TotalStorageBytes: totalStorage,
-		UsedStorageBytes:  usedStorage,
-		TotalUsers:        len(usersCopy),
-		OnlineUsers:       len(onlineUsersMap),
+		Nodes:               nodes,
+		Users:               usersCopy,
+		NodeCount:           len(nodes),
+		OnlineCount:         onlineCount,
+		TotalStorageBytes:   totalStorage,
+		UsedStorageBytes:    usedStorage,
+		TotalUsers:          len(usersCopy),
+		OnlineUsers:         len(onlineUsersMap),
+		ClusterWriteMbps:    clusterWriteMbps,
+		ClusterReadMbps:     clusterReadMbps,
+		ClusterWriteIOPS:    clusterWriteIOPS,
+		ClusterReadIOPS:     clusterReadIOPS,
+		ClusterErrorRatePct: clusterErrorRatePct,
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -100,6 +130,16 @@ func (a *AdminServer) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 	fsID := strings.TrimPrefix(r.URL.Path, "/api/history/")
 	fsID = strings.TrimSpace(fsID)
+
+	if fsID == "cluster" || fsID == "all" || fsID == "" {
+		a.mu.RLock()
+		clusterHistory := a.aggregateClusterHistoryLocked()
+		a.mu.RUnlock()
+		if err := json.NewEncoder(w).Encode(clusterHistory); err != nil {
+			log.Printf("[ADMIN] handleHistory cluster encode error: %v", err)
+		}
+		return
+	}
 
 	a.mu.RLock()
 	node, exists := a.nodes[fsID]
@@ -432,6 +472,396 @@ func (a *AdminServer) handleActionExecute(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(record)
 }
 
+// NodePerformance holds current throughput, IOPS, and latency stats for a fileserver node.
+type NodePerformance struct {
+	FsID              string  `json:"fsID"`
+	DisplayID         int     `json:"display_id"`
+	DisplayName       string  `json:"display_name"`
+	MachineName       string  `json:"machine_name"`
+	Address           string  `json:"address"`
+	Status            string  `json:"status"`
+	WriteMbps         float64 `json:"write_mbps"`
+	ReadMbps          float64 `json:"read_mbps"`
+	WriteIOPS         float64 `json:"write_iops"`
+	ReadIOPS          float64 `json:"read_iops"`
+	ErrorRatePct      float64 `json:"error_rate_pct"`
+	LatencyWriteP50   float64 `json:"latency_write_p50"`
+	LatencyWriteP95   float64 `json:"latency_write_p95"`
+	LatencyWriteP99   float64 `json:"latency_write_p99"`
+	LatencyReadP50    float64 `json:"latency_read_p50"`
+	LatencyReadP95    float64 `json:"latency_read_p95"`
+	LatencyReadP99    float64 `json:"latency_read_p99"`
+	ActiveConnections int     `json:"active_connections"`
+}
+
+// PerformanceResponse summarizes cluster and per-node throughput, IOPS, and latencies.
+type PerformanceResponse struct {
+	ClusterWriteMbps    float64           `json:"cluster_write_mbps"`
+	ClusterReadMbps     float64           `json:"cluster_read_mbps"`
+	ClusterWriteIOPS    float64           `json:"cluster_write_iops"`
+	ClusterReadIOPS     float64           `json:"cluster_read_iops"`
+	ClusterErrorRatePct float64           `json:"cluster_error_rate_pct"`
+	Nodes               []NodePerformance `json:"nodes"`
+}
+
+func (a *AdminServer) handlePerformance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	var clusterWriteMbps float64
+	var clusterReadMbps float64
+	var clusterWriteIOPS float64
+	var clusterReadIOPS float64
+	var totalErrorOps float64
+	var totalOps float64
+
+	perfNodes := make([]NodePerformance, 0, len(a.nodes))
+	for _, n := range a.nodes {
+		var wp50, wp95, wp99 float64
+		var rp50, rp95, rp99 float64
+		activeConns := 0
+		if n.Metrics != nil {
+			wp50 = n.Metrics.OpLatencyWriteMsP50
+			wp95 = n.Metrics.OpLatencyWriteMsP95
+			wp99 = n.Metrics.OpLatencyWriteMsP99
+			rp50 = n.Metrics.OpLatencyReadMsP50
+			rp95 = n.Metrics.OpLatencyReadMsP95
+			rp99 = n.Metrics.OpLatencyReadMsP99
+			activeConns = n.Metrics.ActiveConnections
+		}
+
+		if n.Status == StatusOnline || n.Status == StatusWarning || n.Status == StatusDegraded || n.Status == StatusCritical {
+			clusterWriteMbps += n.WriteMbps
+			clusterReadMbps += n.ReadMbps
+			clusterWriteIOPS += n.WriteIOPS
+			clusterReadIOPS += n.ReadIOPS
+			nodeOps := n.WriteIOPS + n.ReadIOPS
+			totalOps += nodeOps
+			totalErrorOps += nodeOps * (n.ErrorRatePct / 100.0)
+		}
+
+		perfNodes = append(perfNodes, NodePerformance{
+			FsID:              n.FsID,
+			DisplayID:         n.DisplayID,
+			DisplayName:       n.DisplayName,
+			MachineName:       n.MachineName,
+			Address:           n.Address,
+			Status:            string(n.Status),
+			WriteMbps:         n.WriteMbps,
+			ReadMbps:          n.ReadMbps,
+			WriteIOPS:         n.WriteIOPS,
+			ReadIOPS:          n.ReadIOPS,
+			ErrorRatePct:      n.ErrorRatePct,
+			LatencyWriteP50:   wp50,
+			LatencyWriteP95:   wp95,
+			LatencyWriteP99:   wp99,
+			LatencyReadP50:    rp50,
+			LatencyReadP95:    rp95,
+			LatencyReadP99:    rp99,
+			ActiveConnections: activeConns,
+		})
+	}
+
+	sort.Slice(perfNodes, func(i, j int) bool {
+		id1, err1 := strconv.Atoi(perfNodes[i].FsID)
+		id2, err2 := strconv.Atoi(perfNodes[j].FsID)
+		if err1 == nil && err2 == nil {
+			return id1 < id2
+		}
+		return perfNodes[i].FsID < perfNodes[j].FsID
+	})
+
+	var clusterErrorRatePct float64
+	if totalOps > 0 {
+		clusterErrorRatePct = (totalErrorOps / totalOps) * 100.0
+	}
+
+	resp := PerformanceResponse{
+		ClusterWriteMbps:    clusterWriteMbps,
+		ClusterReadMbps:     clusterReadMbps,
+		ClusterWriteIOPS:    clusterWriteIOPS,
+		ClusterReadIOPS:     clusterReadIOPS,
+		ClusterErrorRatePct: clusterErrorRatePct,
+		Nodes:               perfNodes,
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("[ADMIN] handlePerformance encode error: %v", err)
+	}
+}
+
+func (a *AdminServer) handlePerformanceExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	targetNodeID := r.URL.Query().Get("node_id")
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	filename := fmt.Sprintf("dvfs_performance_%d.csv", time.Now().Unix())
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	a.mu.RLock()
+	var exportNodes []*NodeState
+	for _, n := range a.nodes {
+		if targetNodeID != "" && n.FsID != targetNodeID {
+			continue
+		}
+		exportNodes = append(exportNodes, n)
+	}
+
+	sort.Slice(exportNodes, func(i, j int) bool {
+		id1, err1 := strconv.Atoi(exportNodes[i].FsID)
+		id2, err2 := strconv.Atoi(exportNodes[j].FsID)
+		if err1 == nil && err2 == nil {
+			return id1 < id2
+		}
+		return exportNodes[i].FsID < exportNodes[j].FsID
+	})
+
+	type rowItem struct {
+		node *NodeState
+		snap Snapshot
+	}
+	var allRows []rowItem
+	for _, n := range exportNodes {
+		snaps := n.History.GetAll()
+		for _, s := range snaps {
+			allRows = append(allRows, rowItem{node: n, snap: s})
+		}
+	}
+	a.mu.RUnlock()
+
+	sort.Slice(allRows, func(i, j int) bool {
+		if allRows[i].snap.Timestamp == allRows[j].snap.Timestamp {
+			return allRows[i].node.FsID < allRows[j].node.FsID
+		}
+		return allRows[i].snap.Timestamp < allRows[j].snap.Timestamp
+	})
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	_ = writer.Write([]string{
+		"timestamp",
+		"iso_time",
+		"node_id",
+		"node_display",
+		"machine",
+		"address",
+		"write_mbps",
+		"read_mbps",
+		"write_iops",
+		"read_iops",
+		"error_rate_pct",
+		"latency_write_p50_ms",
+		"latency_write_p95_ms",
+		"latency_write_p99_ms",
+		"latency_read_p50_ms",
+		"latency_read_p95_ms",
+		"latency_read_p99_ms",
+		"bytes_written_total",
+		"bytes_read_total",
+		"write_ops_total",
+		"read_ops_total",
+		"errors_total",
+		"active_connections",
+	})
+
+	for _, item := range allRows {
+		s := item.snap
+		m := s.Metrics
+		isoTime := time.Unix(s.Timestamp, 0).UTC().Format(time.RFC3339)
+		_ = writer.Write([]string{
+			strconv.FormatInt(s.Timestamp, 10),
+			isoTime,
+			item.node.FsID,
+			item.node.DisplayName,
+			item.node.MachineName,
+			item.node.Address,
+			fmt.Sprintf("%.4f", s.WriteMbps),
+			fmt.Sprintf("%.4f", s.ReadMbps),
+			fmt.Sprintf("%.2f", s.WriteIOPS),
+			fmt.Sprintf("%.2f", s.ReadIOPS),
+			fmt.Sprintf("%.2f", s.ErrorRatePct),
+			fmt.Sprintf("%.2f", m.OpLatencyWriteMsP50),
+			fmt.Sprintf("%.2f", m.OpLatencyWriteMsP95),
+			fmt.Sprintf("%.2f", m.OpLatencyWriteMsP99),
+			fmt.Sprintf("%.2f", m.OpLatencyReadMsP50),
+			fmt.Sprintf("%.2f", m.OpLatencyReadMsP95),
+			fmt.Sprintf("%.2f", m.OpLatencyReadMsP99),
+			strconv.FormatUint(m.BytesWrittenTotal, 10),
+			strconv.FormatUint(m.BytesReadTotal, 10),
+			strconv.FormatUint(m.WriteOpsTotal, 10),
+			strconv.FormatUint(m.ReadOpsTotal, 10),
+			strconv.FormatUint(m.ErrorsTotal, 10),
+			strconv.Itoa(m.ActiveConnections),
+		})
+	}
+}
+
+func (a *AdminServer) handleAlerts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if a.alertManager == nil {
+		_ = json.NewEncoder(w).Encode([]Alert{})
+		return
+	}
+
+	q := r.URL.Query()
+	f := AlertFilters{
+		Severity:   q.Get("severity"),
+		NodeID:     q.Get("node_id"),
+		Unresolved: q.Get("unresolved") == "true",
+	}
+	if limitStr := q.Get("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			f.Limit = limit
+		}
+	}
+
+	alerts := a.alertManager.GetAll(f)
+	if alerts == nil {
+		alerts = []Alert{}
+	}
+	if err := json.NewEncoder(w).Encode(alerts); err != nil {
+		log.Printf("[ADMIN] handleAlerts encode error: %v", err)
+	}
+}
+
+func (a *AdminServer) handleAlertSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if a.alertManager == nil {
+		_ = json.NewEncoder(w).Encode(AlertSummary{})
+		return
+	}
+
+	summary := a.alertManager.Summary()
+	if err := json.NewEncoder(w).Encode(summary); err != nil {
+		log.Printf("[ADMIN] handleAlertSummary encode error: %v", err)
+	}
+}
+
+type resolveAlertPayload struct {
+	ID string `json:"id"`
+}
+
+func (a *AdminServer) handleResolveAlert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if a.alertManager == nil {
+		http.Error(w, "alert manager not configured", http.StatusInternalServerError)
+		return
+	}
+
+	var payload resolveAlertPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.ID == "" {
+		payload.ID = r.URL.Query().Get("id")
+	}
+	if payload.ID == "" {
+		http.Error(w, "missing alert id", http.StatusBadRequest)
+		return
+	}
+
+	success := a.alertManager.ResolveAlert(payload.ID)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": success,
+		"id":      payload.ID,
+	})
+}
+
+func (a *AdminServer) handleResolveAllAlerts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if a.alertManager == nil {
+		http.Error(w, "alert manager not configured", http.StatusInternalServerError)
+		return
+	}
+
+	count := a.alertManager.ResolveAll()
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":        true,
+		"resolved_count": count,
+	})
+}
+
+func (a *AdminServer) handleLogTail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	q := r.URL.Query()
+	nodeID := q.Get("node")
+	if nodeID == "" {
+		nodeID = q.Get("node_id")
+	}
+	if nodeID == "" {
+		a.mu.RLock()
+		for id := range a.nodes {
+			nodeID = id
+			break
+		}
+		a.mu.RUnlock()
+	}
+	if nodeID == "" {
+		http.Error(w, "no nodes available", http.StatusNotFound)
+		return
+	}
+
+	lines := 100
+	if lStr := q.Get("lines"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil && l > 0 {
+			lines = l
+		}
+	}
+	service := q.Get("service")
+	mode := q.Get("mode")
+
+	resp, err := a.FetchNodeLogs(r.Context(), nodeID, service, lines, mode)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("[ADMIN] handleLogTail encode error: %v", err)
+	}
+}
+
 // Run starts the background pollers and the HTTP API/UI server.
 func (a *AdminServer) Run(port int) error {
 	a.refreshNodes()
@@ -439,6 +869,7 @@ func (a *AdminServer) Run(port int) error {
 
 	pollTicker := time.NewTicker(5 * time.Second)
 	refreshTicker := time.NewTicker(10 * time.Second)
+	snapshotTicker := time.NewTicker(60 * time.Second)
 
 	go func() {
 		for {
@@ -446,11 +877,14 @@ func (a *AdminServer) Run(port int) error {
 			case <-a.stopCh:
 				pollTicker.Stop()
 				refreshTicker.Stop()
+				snapshotTicker.Stop()
 				return
 			case <-pollTicker.C:
 				a.pollAllNodes()
 			case <-refreshTicker.C:
 				a.refreshNodes()
+			case <-snapshotTicker.C:
+				_ = a.SaveMetricsSnapshot(a.snapshotPath)
 			}
 		}
 	}()
@@ -458,12 +892,19 @@ func (a *AdminServer) Run(port int) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/cluster", a.handleCluster)
 	mux.HandleFunc("/api/cluster/summary", a.handleCluster)
+	mux.HandleFunc("/api/performance", a.handlePerformance)
+	mux.HandleFunc("/api/performance/export", a.handlePerformanceExport)
 	mux.HandleFunc("/api/history/", a.handleHistory)
 	mux.HandleFunc("/api/users", a.handleUsers)
 	mux.HandleFunc("/api/users/", a.handleUserQuota)
 	mux.HandleFunc("/api/actions/presets", a.handleActionPresets)
 	mux.HandleFunc("/api/actions/history", a.handleActionHistory)
 	mux.HandleFunc("/api/actions/execute", a.handleActionExecute)
+	mux.HandleFunc("/api/alerts", a.handleAlerts)
+	mux.HandleFunc("/api/alerts/summary", a.handleAlertSummary)
+	mux.HandleFunc("/api/alerts/resolve", a.handleResolveAlert)
+	mux.HandleFunc("/api/alerts/resolve-all", a.handleResolveAllAlerts)
+	mux.HandleFunc("/api/logs/tail", a.handleLogTail)
 	if a.orchestrator != nil {
 		mux.Handle("/ws/actions", NewWebSocketHandler(a.orchestrator))
 	}
@@ -483,11 +924,12 @@ func (a *AdminServer) Run(port int) error {
 	return http.ListenAndServe(addr, mux)
 }
 
-// Stop shuts down background tickers.
+// Stop shuts down background tickers and flushes metrics snapshot.
 func (a *AdminServer) Stop() {
 	select {
 	case <-a.stopCh:
 	default:
 		close(a.stopCh)
+		_ = a.SaveMetricsSnapshot(a.snapshotPath)
 	}
 }

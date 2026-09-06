@@ -19,7 +19,7 @@ func deriveMetricsURL(address string) string {
 		return ""
 	}
 	port, err := strconv.Atoi(portStr)
-	if err != nil {
+	if err != nil || port <= 41000 || port > 65535 {
 		return ""
 	}
 	metricsPort := port - 41000
@@ -74,6 +74,19 @@ func (a *AdminServer) refreshNodes() {
 				History:     NewRingBuffer(720),
 			}
 			log.Printf("[ADMIN] Discovered fileserver %s (%s / %s) at %s (metrics: %s)", fsID, displayName, machineName, fsInfo.Address, metricsURL)
+		}
+	}
+
+	if a.alertManager != nil {
+		for username, homeFsID := range a.users {
+			if homeNode, exists := a.nodes[homeFsID]; exists && homeNode.Metrics != nil {
+				quota := uint64(1024 * 1024 * 1024)
+				if q, ok := homeNode.Metrics.PerUserQuota[username]; ok && q > 0 {
+					quota = q
+				}
+				used := homeNode.Metrics.PerUserStorage[username]
+				a.alertManager.CheckUserQuota(username, used, quota, homeNode.FsID, homeNode.DisplayName)
+			}
 		}
 	}
 }
@@ -135,18 +148,92 @@ func (a *AdminServer) pollNode(node *NodeState) {
 	now := time.Now().Unix()
 
 	a.mu.Lock()
+	var writeThroughputBps, readThroughputBps float64
+	var writeMbps, readMbps float64
+	var writeIOPS, readIOPS float64
+	var errorRatePct float64
+
+	prevSnap, hasPrev := node.History.GetLast()
+	if hasPrev && now > prevSnap.Timestamp && (now-prevSnap.Timestamp) <= 60 {
+		deltaSec := float64(now - prevSnap.Timestamp)
+		if m.BytesWrittenTotal >= prevSnap.Metrics.BytesWrittenTotal {
+			deltaBytesWritten := float64(m.BytesWrittenTotal - prevSnap.Metrics.BytesWrittenTotal)
+			writeThroughputBps = deltaBytesWritten / deltaSec
+			writeMbps = deltaBytesWritten / deltaSec / (1024 * 1024)
+		}
+		if m.BytesReadTotal >= prevSnap.Metrics.BytesReadTotal {
+			deltaBytesRead := float64(m.BytesReadTotal - prevSnap.Metrics.BytesReadTotal)
+			readThroughputBps = deltaBytesRead / deltaSec
+			readMbps = deltaBytesRead / deltaSec / (1024 * 1024)
+		}
+		if m.WriteOpsTotal >= prevSnap.Metrics.WriteOpsTotal {
+			deltaWriteOps := float64(m.WriteOpsTotal - prevSnap.Metrics.WriteOpsTotal)
+			writeIOPS = deltaWriteOps / deltaSec
+		}
+		if m.ReadOpsTotal >= prevSnap.Metrics.ReadOpsTotal {
+			deltaReadOps := float64(m.ReadOpsTotal - prevSnap.Metrics.ReadOpsTotal)
+			readIOPS = deltaReadOps / deltaSec
+		}
+		totalOpsDelta := 0.0
+		if m.WriteOpsTotal >= prevSnap.Metrics.WriteOpsTotal && m.ReadOpsTotal >= prevSnap.Metrics.ReadOpsTotal {
+			totalOpsDelta = float64((m.WriteOpsTotal - prevSnap.Metrics.WriteOpsTotal) + (m.ReadOpsTotal - prevSnap.Metrics.ReadOpsTotal))
+		}
+		if totalOpsDelta > 0 && m.ErrorsTotal >= prevSnap.Metrics.ErrorsTotal {
+			deltaErrors := float64(m.ErrorsTotal - prevSnap.Metrics.ErrorsTotal)
+			errorRatePct = (deltaErrors / totalOpsDelta) * 100.0
+		}
+	}
+
+	snap := Snapshot{
+		Timestamp:          now,
+		Metrics:            m,
+		WriteThroughputBps: writeThroughputBps,
+		ReadThroughputBps:  readThroughputBps,
+		WriteMbps:          writeMbps,
+		ReadMbps:           readMbps,
+		WriteIOPS:          writeIOPS,
+		ReadIOPS:           readIOPS,
+		ErrorRatePct:       errorRatePct,
+	}
+
+	prevLastSeen := node.LastSeen
+	var prevUptime float64
+	if node.Metrics != nil {
+		prevUptime = node.Metrics.UptimeSeconds
+	}
+
 	node.Metrics = &m
 	node.LastSeen = now
 	node.Status = computeNodeStatus(&m, now)
-	node.History.Push(Snapshot{
-		Timestamp: now,
-		Metrics:   m,
-	})
+	node.WriteThroughputBps = writeThroughputBps
+	node.ReadThroughputBps = readThroughputBps
+	node.WriteMbps = writeMbps
+	node.ReadMbps = readMbps
+	node.WriteIOPS = writeIOPS
+	node.ReadIOPS = readIOPS
+	node.ErrorRatePct = errorRatePct
+	node.History.Push(snap)
+
+	if a.alertManager != nil {
+		a.alertManager.CheckNodeHealth(node, prevLastSeen, prevUptime)
+	}
 	a.mu.Unlock()
 }
 
 func (a *AdminServer) updateNodeFailure(node *NodeState) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	prevLastSeen := node.LastSeen
 	node.Status = computeNodeStatus(node.Metrics, node.LastSeen)
+	node.WriteThroughputBps = 0
+	node.ReadThroughputBps = 0
+	node.WriteMbps = 0
+	node.ReadMbps = 0
+	node.WriteIOPS = 0
+	node.ReadIOPS = 0
+	node.ErrorRatePct = 0
+
+	if a.alertManager != nil {
+		a.alertManager.CheckNodeHealth(node, prevLastSeen, 0)
+	}
 }
