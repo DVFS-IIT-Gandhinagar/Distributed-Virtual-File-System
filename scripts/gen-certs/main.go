@@ -18,14 +18,36 @@ import (
 )
 
 func main() {
+	force := false
+	var filteredArgs []string
+	for _, arg := range os.Args[1:] {
+		if arg == "-force" || arg == "--force" {
+			force = true
+		} else {
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+
 	hostName := "localhost"
-	if len(os.Args) > 1 {
-		hostName = os.Args[1]
+	if len(filteredArgs) > 0 {
+		hostName = filteredArgs[0]
 	}
 
 	certsDir := "certs"
 	caCertPath := filepath.Join(certsDir, "ca.crt")
 	caKeyPath := filepath.Join(certsDir, "ca.key")
+	serverCertPath := filepath.Join(certsDir, "server.crt")
+	serverKeyPath := filepath.Join(certsDir, "server.key")
+
+	// If certificates already exist and not forced, skip generation
+	if !force && hostName != "ca" && hostName != "--ca-only" {
+		if _, errCert := os.Stat(serverCertPath); errCert == nil {
+			if _, errKey := os.Stat(serverKeyPath); errKey == nil {
+				log.Printf("TLS certificates already exist in %s (server.crt, server.key). Skipping generation. Use -force to regenerate.", certsDir)
+				return
+			}
+		}
+	}
 
 	// 1. Load or Generate Root CA
 	var ca *pki.RootCA
@@ -117,8 +139,8 @@ func main() {
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
 
-	serverCertPath := filepath.Join(certsDir, "server.crt")
-	serverKeyPath := filepath.Join(certsDir, "server.key")
+	serverCertPath = filepath.Join(certsDir, "server.crt")
+	serverKeyPath = filepath.Join(certsDir, "server.key")
 
 	if err := os.WriteFile(serverCertPath, certPEM, 0644); err != nil {
 		log.Fatalf("Failed to write server cert: %v", err)

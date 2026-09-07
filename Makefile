@@ -1,4 +1,4 @@
-.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help
+.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help certs certs-force certs-nodes certs-root-ca
 
 # Variables
 BINARY_DIR=bin
@@ -20,7 +20,7 @@ PROTOC=protoc
 all: build
 
 # Build all binaries
-build: certs
+build:
 	@echo "Building file server..."
 	@$(GO) build -o $(FILESERVER_BINARY) cmd/fileserver/main.go
 	@echo "Building client..."
@@ -106,19 +106,19 @@ vet:
 	@echo "Vet complete!"
 
 # Run unit tests
-test: certs
+test:
 	@echo "Running unit tests..."
 	@$(GO) test ./... -count=1 -v
 	@echo "Tests complete!"
 
 # Run client-focused tests
-test-client: certs
+test-client:
 	@echo "Running client test suite..."
 	@$(GO) test ./internal/client -count=1 -v
 	@echo "Client tests complete!"
 
 # Run edge-case tests
-test-edge: certs
+test-edge:
 	@echo "Running edge-case test suite..."
 	@$(GO) test ./internal/fileserver ./internal/metaserver -count=1 -v
 	@echo "Edge-case tests complete!"
@@ -130,13 +130,13 @@ test-admin:
 	@echo "Admin tests complete!"
 
 # Run integration and end-to-end tests
-test-integration: certs
+test-integration:
 	@echo "Running integration/e2e test suite..."
 	@$(GO) test ./integration -count=1 -v
 	@echo "Integration tests complete!"
 
 # Run unit tests with coverage
-test-cover: certs
+test-cover:
 	@echo "Running unit tests with coverage..."
 	@$(GO) test ./... -count=1 -coverprofile=coverage.out -covermode=atomic
 	@$(GO) tool cover -func=coverage.out
@@ -147,7 +147,10 @@ help:
 	@echo "Available targets:"
 	@echo "  make build        - Build all binaries"
 	@echo "  make proto        - Generate protobuf code"
-	@echo "  make certs        - Generate TLS certificates"
+	@echo "  make certs        - Generate local development certificates (one-time setup)"
+	@echo "  make certs-force  - Force regenerate local development certificates"
+	@echo "  make certs-nodes  - Generate production multi-node certificates (dvfs1-dvfs9)"
+	@echo "  make certs-root-ca - Generate Root CA"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make run-server   - Build and run file server"
 	@echo "  make run-client   - Build and run client (default user: alice)"
@@ -162,9 +165,16 @@ help:
 	@echo "  make test-cover   - Run unit tests with coverage"
 	@echo "  make help         - Show this help message"
 
-# Generate TLS certificates
+# Generate TLS certificates (on-demand / one-time setup)
 SERVER ?= localhost
 certs:
-	@echo "Generating TLS certificates..."
 	@$(GO) run scripts/gen-certs/main.go $(SERVER)
-	@echo "Certificates generated!"
+
+certs-force:
+	@$(GO) run scripts/gen-certs/main.go -force $(SERVER)
+
+certs-nodes:
+	@$(GO) run scripts/gen-certs/cmd/gen_node_certs/main.go
+
+certs-root-ca:
+	@$(GO) run scripts/gen-certs/cmd/gen_root_ca/main.go

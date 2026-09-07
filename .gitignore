@@ -46,7 +46,9 @@ Download/
 certs/*.crt
 certs/*.key
 certs/*.srl
-
+root_ca/
+deploy_certs/
+dep.bat
 # Personal notes
 jaskirat/
 

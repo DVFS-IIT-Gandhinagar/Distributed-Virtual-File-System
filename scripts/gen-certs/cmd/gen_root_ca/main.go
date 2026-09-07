@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	outDir := flag.String("out", "./root_ca", "Output directory for ca.crt and ca.key")
+	outDir := flag.String("out", "./certs", "Output directory for ca.crt and ca.key")
 	cn := flag.String("cn", pki.DefaultCACommonName, "Common Name for the Root CA")
 	org := flag.String("org", pki.DefaultCAOrganization, "Organization for the Root CA")
 	days := flag.Int("days", pki.DefaultCAValidityDays, "Validity duration in days (>= 3650 for 10+ years)")
@@ -38,7 +38,7 @@ func main() {
 	opts.KeyBits = *bits
 
 	log.Printf("=================================================================")
-	log.Printf("       DVFS AIR-GAPPED ROOT CA GENERATION CEREMONY              ")
+	log.Printf("                     DVFS ROOT CA GENERATION                     ")
 	log.Printf("=================================================================")
 	log.Printf("Generating %d-bit RSA Root CA key pair...", opts.KeyBits)
 	log.Printf("Validity: %d days (~%.1f years)", opts.ValidityDays, float64(opts.ValidityDays)/365.25)
