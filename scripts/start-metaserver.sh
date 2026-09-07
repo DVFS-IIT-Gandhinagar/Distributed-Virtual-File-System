@@ -12,6 +12,8 @@ META_PORT="${META_PORT:-50051}"
 STATE_FILE="${STATE_FILE:-./bin/metaserver_state.json}"
 HEARTBEAT_TIMEOUT="${HEARTBEAT_TIMEOUT:-30s}"
 HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5s}"
+TLS_CERT="${TLS_CERT:-certs/server.crt}"
+TLS_KEY="${TLS_KEY:-certs/server.key}"
 
 # Ensure state directory exists
 STATE_DIR="$(dirname "$STATE_FILE")"
@@ -37,10 +39,14 @@ echo "[STARTUP] Port:               ${META_PORT}"
 echo "[STARTUP] State File:         ${STATE_FILE}"
 echo "[STARTUP] Heartbeat Timeout:  ${HEARTBEAT_TIMEOUT}"
 echo "[STARTUP] Heartbeat Interval: ${HEARTBEAT_INTERVAL}"
+echo "[STARTUP] TLS Cert:           ${TLS_CERT}"
+echo "[STARTUP] TLS Key:            ${TLS_KEY}"
 
 exec ./bin/metaserver \
   -port="${META_PORT}" \
   -state_file="${STATE_FILE}" \
   -heartbeat_timeout="${HEARTBEAT_TIMEOUT}" \
   -heartbeat_check_interval="${HEARTBEAT_INTERVAL}" \
+  -tls_cert="${TLS_CERT}" \
+  -tls_key="${TLS_KEY}" \
   "$@"

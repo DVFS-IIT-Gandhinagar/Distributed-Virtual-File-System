@@ -25,6 +25,11 @@ func (fs *FileServer) dialMetaServer() (*grpc.ClientConn, error) {
 
 	var opts []grpc.DialOption
 	caPath := "certs/ca.crt"
+	if _, err := os.Stat(caPath); os.IsNotExist(err) {
+		if _, errDev := os.Stat("deploy_certs/ca.crt"); errDev == nil {
+			caPath = "deploy_certs/ca.crt"
+		}
+	}
 	if _, err := os.Stat(caPath); err == nil {
 		caBytes, err := os.ReadFile(caPath)
 		if err == nil {
@@ -34,7 +39,11 @@ func (fs *FileServer) dialMetaServer() (*grpc.ClientConn, error) {
 				if err != nil {
 					host = fs.msAddr
 				}
-				creds := credentials.NewClientTLSFromCert(cp, host)
+				serverName := host
+				if net.ParseIP(host) != nil {
+					serverName = "dvfs1"
+				}
+				creds := credentials.NewClientTLSFromCert(cp, serverName)
 				opts = append(opts, grpc.WithTransportCredentials(creds))
 			}
 		}

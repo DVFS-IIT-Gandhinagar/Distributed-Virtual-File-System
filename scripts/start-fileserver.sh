@@ -99,6 +99,8 @@ fi
 
 FS_PORT="${FS_PORT:-50052}"
 DATA_DIR="${DATA_DIR:-./fileserver_data}"
+TLS_CERT="${TLS_CERT:-certs/server.crt}"
+TLS_KEY="${TLS_KEY:-certs/server.key}"
 
 echo "[STARTUP] Starting DVFS Fileserver..."
 echo "[STARTUP] ID:        ${FS_ID}"
@@ -106,6 +108,8 @@ echo "[STARTUP] Port:      ${FS_PORT}"
 echo "[STARTUP] Data Dir:  ${DATA_DIR}"
 echo "[STARTUP] Meta Addr: ${META_ADDR}"
 echo "[STARTUP] Own IP:    ${OWN_IP}"
+echo "[STARTUP] TLS Cert:  ${TLS_CERT}"
+echo "[STARTUP] TLS Key:   ${TLS_KEY}"
 
 # Ensure data directory exists
 mkdir -p "${DATA_DIR}"
@@ -116,4 +120,6 @@ exec ./bin/fileserver \
   -data="${DATA_DIR}" \
   -meta_addr="${META_ADDR}" \
   -own_ip="${OWN_IP}" \
+  -tls_cert="${TLS_CERT}" \
+  -tls_key="${TLS_KEY}" \
   "$@"
