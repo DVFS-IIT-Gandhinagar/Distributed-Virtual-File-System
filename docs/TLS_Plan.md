@@ -440,50 +440,56 @@ User Password -> SHA-256 (Single pass, unsalted) -> ConstantTimeCompare -> 32-By
 
 ## 6. Implementation Checklist & Verification Plan
 
-### 6.1 Code Changes Required
-- [ ] `scripts/gen-certs/gen_root_ca.go` — Air-gapped 10+ year Root CA generator.
-- [ ] `scripts/gen-certs/gen_node_certs.go` — Multi-node certificate generator with DNS SANs (`dvfs1`-`dvfs9`).
-- [ ] `internal/client/ca.go` — Hardcoded Root CA public key constant and isolated `CertPool`.
-- [ ] `internal/client/discovery.go` — Dynamic GitHub Gist polling, node IP caching, and resolver.
-- [ ] `internal/client/client.go` & `msclient.go` — Update gRPC dial options to use isolated `CertPool` and SNI.
-- [ ] `internal/fileserver/callback_server.go` — Update `sendInvalidate` to dial client callbacks with `grpc.WithInsecure()` (Option A) to resolve callback TLS deadlock.
-- [ ] `cmd/admin/main.go` & `internal/admin/handlers.go` — Bind Admin Console port to TLS with `http.ListenAndServeTLS` and enable `Secure: true` on cookies.
-- [ ] `scripts/start-metaserver.sh` & `scripts/start-fileserver.sh` — Enable `-tls=true` in startup scripts.
-- [ ] `internal/admin/auth.go` — Add rate-limiting middleware to `/api/auth/login`.
+### 6.1 Code Changes Required (✅ ALL COMPLETE)
+- [x] `scripts/gen-certs/cmd/gen_root_ca/main.go` — Air-gapped 10+ year Root CA generator.
+- [x] `scripts/gen-certs/cmd/gen_node_certs/main.go` — Multi-node certificate generator with DNS SANs (`dvfs1`-`dvfs9`).
+- [x] `internal/client/ca.go` — Hardcoded Root CA public key constant and isolated `CertPool`.
+- [x] `internal/client/discovery.go` — Dynamic GitHub Gist polling, node IP caching, and resolver.
+- [x] `internal/client/client.go` & `msclient.go` — Update gRPC dial options to use isolated `CertPool` and SNI.
+- [x] `internal/fileserver/callback_server.go` — `sendInvalidate` dials client callbacks with `grpc.WithInsecure()` (Option A) to resolve callback TLS deadlock.
+- [x] `cmd/admin/main.go` & `internal/admin/handlers.go` — Admin Console binds port to TLS with `http.ListenAndServeTLS`; `Secure: true` on cookies.
+- [x] `scripts/start-metaserver.sh` & `scripts/start-fileserver.sh` — Read `TLS_CERT`/`TLS_KEY` env vars; pass `-tls_cert`/`-tls_key` flags.
+- [ ] `internal/admin/auth.go` — Add rate-limiting middleware to `/api/auth/login`. *(Deferred to Auth Audit phase)*
 
 ### 6.2 Test & Verification Procedure
 
 #### Step 1: Root CA & Node Cert Verification
 ```bash
-go run scripts/gen-certs/gen_root_ca.go
-go run scripts/gen-certs/gen_node_certs.go
+# Generate Root CA (one-time; writes to certs/)
+go run scripts/gen-certs/cmd/gen_root_ca/main.go
+
+# Generate all node certs (writes to deploy_certs/)
+go run scripts/gen-certs/cmd/gen_node_certs/main.go
+
+# Verify
 openssl x509 -in deploy_certs/ca.crt -text -noout | grep -E "(Issuer|Subject|Not After|CA:TRUE)"
 openssl verify -CAfile deploy_certs/ca.crt deploy_certs/dvfs1/server.crt
 ```
 *Expected Result:* `deploy_certs/dvfs1/server.crt: OK`. Expiration >= 10 years for CA.
 
-#### Step 2: Client Hardcoded CA Isolation Test
-Create a unit test `internal/client/tls_isolation_test.go`:
-- Verify `NewDVFSUniversalCertPool()` loads the embedded PEM.
-- Attempt to verify a certificate issued by Let's Encrypt or Google Trust Services against this pool; assert verification **FAILS**.
-- Verify a certificate issued by the DVFS Root CA succeeds.
+#### Step 2: Client Hardcoded CA Isolation Test ✅ (Done)
+`internal/client/tls_isolation_test.go` — 3 passing tests:
+- `NewDVFSUniversalCertPool()` loads the embedded PEM.
+- Rogue cert (self-signed, not from DVFS CA) is rejected.
+- Root cert self-verifies.
 
-#### Step 3: Dynamic Gist Discovery Test
-Create `internal/client/discovery_test.go`:
-- Mock HTTP server serving `machines.json`.
-- Verify `DiscoveryResolver` parses IPs and maps `dvfs1` -> `10.0.171.38`.
-- Test fallback behavior when HTTP request times out.
+#### Step 3: Dynamic Gist Discovery Test ✅ (Done)
+`internal/client/discovery_test.go` — 4 passing tests:
+- Mock HTTP server serving `machines.json` — `dvfs1` → `10.0.171.38`.
+- `ResolveServerName` returns correct hostname for a known IP.
+- Disk cache fallback when HTTP request fails.
+- `ResolveMetaAddress` resolves the metaserver address.
 
 #### Step 4: End-to-End TLS Handshake & Data Transfer
 ```bash
-# Start Metaserver with TLS
-./bin/metaserver -port=50051 -tls=true -tls_cert=certs/dvfs1.crt -tls_key=certs/dvfs1.key
+# Start Metaserver with TLS (cert auto-detected from env vars)
+TLS_CERT=certs/server.crt TLS_KEY=certs/server.key ./scripts/start-metaserver.sh
 
 # Start Fileserver with TLS
-./bin/fileserver -id=fs1 -port=50052 -meta_addr=127.0.0.1:50051 -own_ip=127.0.0.1 -tls=true -tls_cert=certs/dvfs2.crt -tls_key=certs/dvfs2.key -ca_cert=certs/ca.crt
+TLS_CERT=certs/server.crt TLS_KEY=certs/server.key ./scripts/start-fileserver.sh
 
-# Run Client with TLS enabled against discovered node
-./bin/client -username=alice -tls=true
+# Run Client (TLS always on; no flags needed)
+./bin/client -username=alice
 ```
 *Verification:* Client authenticates, navigates, uploads a 10MB test file, and downloads it without TLS errors. Wire inspection via `tcpdump` confirms binary gRPC frames are wrapped in TLS 1.3 records.
 
@@ -503,6 +509,14 @@ Create `internal/client/discovery_test.go`:
    - Enforces `Secure: true` on the `dvfs_admin_token` session cookie.
 
 3. **Server SAN Naming Scheme:**
-   - Server certificates will be minted with canonical DNS SANs `dvfs1` through `dvfs9`, along with `dvfsX.local` and `localhost`.
+   - Server certificates are minted with canonical DNS SANs `dvfs1` through `dvfs9`, along with `dvfsX.local` and `localhost`.
    - Clients resolve the target IP from the Gist and dial the IP directly while specifying `ServerName: "dvfsX"`, making TLS verification resilient against dynamic DHCP IP reassignments.
+
+4. **Folder Layout (Final):**
+
+| Folder | Purpose | Gitignored? |
+|---|---|---|
+| `certs/` | Local dev certs: `ca.crt`, `ca.key`, `server.crt`, `server.key` (localhost) | `*.key`, `*.crt` rules |
+| `deploy_certs/` | Production node bundles: `dvfs1/`–`dvfs9/` and `ca.crt`. `scp` to each node. | Yes (`deploy_certs/`) |
+| `root_ca/` | **Stale/legacy** — old default output dir of gen_root_ca before it was fixed to `certs/`. Safe to delete. | Yes (`root_ca/`) |
 

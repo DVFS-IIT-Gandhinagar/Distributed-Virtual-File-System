@@ -241,7 +241,7 @@ sequenceDiagram
     participant MS as MetaServer
 
     Note over FS: cmd/fileserver/main.go starts
-    FS->>FS: NewFileServer(serverID, rootDir, useTLS, msAddr)
+    FS->>FS: NewFileServer(serverID, rootDir, msAddr)
     Note over FS: FileScanner walks rootDir tree,\nrebuilds inodes + ACL from disk
     FS->>FS: LoadDirShares() → fs.Shared from fileserver_shares.json
     FS->>MS: RegisterFileServer{address, users[], shared[]}

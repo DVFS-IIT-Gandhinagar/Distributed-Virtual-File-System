@@ -329,24 +329,46 @@ On restart:
 
 ## 15. Security (TLS)
 
-The system uses gRPC over TLS for secure communication between clients and servers. By default, TLS is disabled (`--tls=false`) for easy local testing.
+All gRPC communication (client↔metaserver, client↔fileserver) and the Admin Console are secured with mutual TLS using a private Root CA. TLS is **always on** — there is no `--tls=true/false` flag. Certificates are loaded automatically when present on each node.
 
-### 15.1 Managing Certificates
-We use standard filesystem-based certificates. The system looks for certificates in a root `certs/` directory.
+### 15.1 Certificate Architecture
 
-- **File Server & Meta Server**: Require `--tls_cert` (default: `./certs/server.crt`) and `--tls_key` (default: `./certs/server.key`).
-- **Client**: Requires `--ca_cert` (default: `./certs/ca.crt`) to verify the server's identity.
+| Component | Role |
+|---|---|
+| **Root CA** (`certs/ca.crt` + `certs/ca.key`) | 4096-bit RSA CA. `ca.key` never leaves the admin machine. |
+| **Node certs** (`deploy_certs/<hostname>/server.crt` + `server.key`) | 2-year leaf certs signed by the Root CA, with DNS SANs for each cluster hostname. |
+| **Client trust** | `RootCAPEM` is hardcoded at compile-time in `internal/client/ca.go` — no CA file needed on client machines. |
 
-To enable TLS, pass the `--tls=true` flag when running the servers and the client.
+### 15.2 One-Time PKI Setup (Admin Machine Only)
 
-### 15.2 Generating Certificates
-You can generate or regenerate local certificates using the provided script:
 ```bash
-make certs
-```
-This will run the generation script and output the files (`ca.crt`, `ca.key`, `server.crt`, `server.key`) directly into the `certs/` directory. 
+# 1. Generate Root CA (writes certs/ca.crt + certs/ca.key — run ONCE, keep ca.key offline)
+make certs-root-ca
 
-*Note: If you run a client on a different laptop with TLS enabled, you **must** copy the `ca.crt` file to that laptop so it can trust the server.*
+# 2. Generate localhost dev cert (idempotent — skips if server.crt/server.key already exist)
+make certs
+
+# 3. Generate all cluster node certs (dvfs1–dvfs9) into deploy_certs/
+make certs-nodes
+```
+
+> **See [`docs/TLS_Setup_Guide.md`](docs/TLS_Setup_Guide.md) for the complete deployment checklist**, including how to `scp` certs to each node and verify them with `openssl`.
+
+### 15.3 Server Startup with TLS
+
+Servers auto-detect TLS: if `TLS_CERT` and `TLS_KEY` environment variables (or `-tls_cert`/`-tls_key` flags) point to valid cert/key files, TLS is enabled automatically.
+
+```bash
+# Metaserver on dvfs1
+TLS_CERT=certs/server.crt TLS_KEY=certs/server.key ./scripts/start-metaserver.sh
+
+# Admin Console with TLS
+TLS_CERT=certs/server.crt TLS_KEY=certs/server.key ./scripts/start-admin.sh
+```
+
+### 15.4 Client — No Configuration Needed
+
+The Root CA public cert is embedded in the client binary. Clients discover server IPs dynamically via a GitHub Gist (configurable with `-gist_url`) and automatically resolve the correct TLS `ServerName` for SNI. No cert files need to be copied to client machines.
 
 ---
 
@@ -366,7 +388,8 @@ Other flags and defaults:
 - port = 50052
 - id = fs1
 - data = fileserver_data
-- tls = false
+- tls_cert = certs/server.crt (TLS auto-enabled when cert+key files exist)
+- tls_key = certs/server.key
 
 ### For Metadata Server (from project root)
 
@@ -377,7 +400,8 @@ go run .\cmd\metaserver\main.go
 Other flags and defaults:
 
 - port = 50051
-- tls = false
+- tls_cert = certs/server.crt (TLS auto-enabled when cert+key files exist)
+- tls_key = certs/server.key
 
 ### For Client (from root)
 
@@ -388,8 +412,8 @@ go run .\cmd\client\main.go --username <username> --ip_addr <mds/fs ip address>
 Other flags and defaults
 
 - port = 50051
-- tls = false
 - meta = true (whether to go to mds or not)
+- use_gist = true (fetch server IP map from GitHub Gist for dynamic discovery)
 
 ### For Admin Console (from project root)
 

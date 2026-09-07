@@ -118,7 +118,7 @@ type Client struct {
   rootFID    *domain.FID
   currentFID *domain.FID
   serverConn pb.FileServerClient
-  useTLS     bool
+  resolver   *DiscoveryResolver // Dynamic IP→hostname resolver for TLS SNI
 }
 
 // New methods (implemented in msclient.go)
