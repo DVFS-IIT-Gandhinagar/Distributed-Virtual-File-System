@@ -75,6 +75,11 @@ func main() {
 		if err := ca.Save(certsDir); err != nil {
 			log.Fatalf("Failed to save Root CA: %v", err)
 		}
+		if err := pki.SyncClientCA(ca.CertPEM); err != nil {
+			log.Printf("[WARN] Failed to automatically sync internal/client/ca.go: %v", err)
+		} else {
+			log.Printf("Successfully synced new Root CA into internal/client/ca.go")
+		}
 		log.Printf("Root CA saved to %s", certsDir)
 	}
 
