@@ -28,8 +28,9 @@ type InodeStore struct {
 }
 
 // normalizePath converts OS-specific path separators to forward slashes
-// and cleans up relative prefixes.
+// and cleans up relative prefixes across all platforms.
 func normalizePath(p string) string {
+	p = strings.ReplaceAll(p, "\\", "/")
 	clean := filepath.ToSlash(filepath.Clean(p))
 	clean = strings.TrimPrefix(clean, "./")
 	clean = strings.TrimPrefix(clean, "/")
