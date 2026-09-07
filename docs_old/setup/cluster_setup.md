@@ -1,5 +1,7 @@
 # Distributed Virtual File System (DVFS) - Setup Guide
 
+[← Back to Documentation Index](../README.md)
+
 This document outlines the setup and configuration process for the Distributed Virtual File System (DVFS).
 
 The system components include:
@@ -35,6 +37,8 @@ sudo systemctl enable --now fortinet.timer
 ## 2. Dev Machine Setup
 
 Run the following commands on your development machine to generate certificates:
+
+> 🔐 **TLS Deep-Dive**: For detailed PKI architecture, Subject Alternative Name (SAN) mapping, and verification commands, see the [**TLS & PKI Setup Guide**](./tls_setup.md).
 
 ```bash
 go run scripts/gen-certs/cmd/gen_root_ca/main.go
@@ -116,6 +120,9 @@ If the current machine is acting as the **Admin UI Server**, follow these steps.
 
 ### SSH Access
 Generate a key and copy it to all servers:
+
+> 🔑 **SSH & Sudoers**: See the [**SSH & Systemd Setup Guide**](./ssh_and_systemd.md) for full instructions on key generation, connection testing, and passwordless sudoers delegation.
+
 ```bash
 ssh-keygen
 ssh-copy-id user@<fileserver_ip>  # Repeat for all servers

@@ -1,462 +1,171 @@
-# Distributed Virtual File System
+# Distributed Virtual File System (DVFS)
 
-## 1. System Overview
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![gRPC](https://img.shields.io/badge/gRPC-v1.62-244c5a?style=flat&logo=grpc)](https://grpc.io)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/Docs-GitHub_Pages-blue?style=flat&logo=materialformkdocs)](https://dvfs-iit-gandhinagar.github.io/Distributed-Virtual-File-System/)
 
-This document describes the final design of a **distributed virtual file system (VFS)** inspired by AFS and implemented **in userspace on top of the host OS filesystem**.
-
-The system consists of:
-- **File Servers (FS)** – store file data and enforce access control
-- **Metadata Server (MDS)** – stores indexing metadata for fast shared-file discovery
-- **Clients** – expose a virtual namespace and interact with FS and MDS
-
-### Design Goals
-- Correct filesystem semantics (`open`, `read`, `write`, `rename`, `ls`)
-- Each user sees exactly **two namespaces**:
-  - **`mydrive`** (private)
-  - **`shared`** (shared with the user)
-- Fast common case (`ls shared`)
-- Clear separation between authority and indexing
+An Andrew File System (AFS)-inspired, high-performance distributed virtual file system implemented in Go, communicating over gRPC, and secured with Zero-Trust mutual TLS. Designed for collaborative environments across Raspberry Pi clusters, Linux workstations, and cloud servers.
 
 ---
 
-## 2. Terminology
-
-### 2.1 Logical Inode
-A **logical inode** is an internal representation of a file or directory.  
-It is **not** an OS inode.
-
-Each logical inode has:
-- a stable identity
-- metadata (name, ACL)
-- a cached OS path
+> **Complete Documentation Portal**: **[dvfs-iit-gandhinagar.github.io/Distributed-Virtual-File-System](https://dvfs-iit-gandhinagar.github.io/Distributed-Virtual-File-System/)**  
+> For in-depth architecture flows, formal security models, multi-node deployment runbooks, and the full 19-command CLI manual, visit our hosted documentation portal or explore the local [`docs/`](docs/index.md) directory.
 
 ---
 
-### 2.2 File Identifier (FID)
-
-A **FID** uniquely identifies a file or directory globally.
+## 1. System Architecture
 
 ```
-FID = <file_server_id, inode_id, generation_number>
-```
-
-- `file_server_id` – which file server owns the file
-- `inode_id` – unique logical inode number on that server
-- `generation_number` – increments on delete + recreate
-
-**FID is the only identity in the system.**
-
----
-
-### 2.3 Access Control List (ACL)
-
-An **ACL** defines which users may access a file or directory.
-
-```
-ACL {
-  read   → users allowed to read file
-  write  → users allowed to modify file
-  lookup → users allowed to traverse directory
-}
-```
-
-Rules:
-- ACLs are stored and enforced only on file servers
-- Metadata server never enforces permissions
-
----
-
-### 2.4 Private vs Shared Files
-- **Private file** – accessible only to the owner
-- **Shared file** – ACL allows additional users
-
----
-
-### 2.5 Shared Index
-A **shared index** is denormalized metadata on the metadata server used only for:
-
-```
-ls shared
+                  +-----------------------------------+
+                  |      MetaServer (Coordinator)     |
+                  |  - Dynamic Root Discovery (MDS)   |
+                  |  - Heartbeat & Liveness Tracker   |
+                  |  - State: metaserver_state.json   |
+                  +-----------------+-----------------+
+                                    ^
+                   Registration &   |   Advisory
+                   Heartbeats       |   Routing
+                                    |
+          +-------------------------+-------------------------+
+          |                                                   |
+          v                                                   v
++-------------------------+                         +-------------------------+
+|    FileServer Node 1    |                         |    FileServer Node 2    |
+| - Authoritative Storage |                         | - Authoritative Storage |
+| - InodeStore (.dvfs...) |                         | - InodeStore (.dvfs...) |
+| - Per-Directory .acl    |                         | - Per-Directory .acl    |
+| - Streaming I/O (4 MB)  |                         | - Streaming I/O (4 MB)  |
+| - Metrics HTTP (:9052)  |                         | - Metrics HTTP (:9053)  |
++------------+------------+                         +------------+------------+
+             ^                                                   ^
+             |                 Push Invalidation                 |
+             |                 Callbacks                         |
+             |                                                   |
+             +--------------------------+------------------------+
+                                        |
+                             +----------+----------+
+                             |       DVFS Client   |
+                             | - Interactive REPL  |
+                             | - Local CNode Cache |
+                             | - Embedded Root CA  |
+                             | - Dynamic Gist SNI  |
+                             +---------------------+
 ```
 
 ---
 
-## 3. High-Level Architecture
+## 2. Core Highlights
 
-![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](./docs/assets/architecture.png)
-
----
-
-## 4. File Server Design (Authoritative)
-
-Each file server stores actual data on the OS filesystem and maintains one authoritative database.
-
-### 4.1 Unified File Server Database
-
-```
-InodeDB {
-  fid                PRIMARY KEY
-  type               ENUM {file, directory}
-  name               STRING
-  os_path            STRING
-  child_fids[]       ARRAY<FID>
-  acl                ACL
-}
-```
-
-**Invariants**
-- FID is identity
-- `os_path` is cached, derived state
-- ACLs are enforced before OS access
-- One inode maps to one OS path
+- **Multi-Root Virtual Namespace**: Users interact with a private home root (`mydrive`) and cluster-shared roots (`[owner]: [folder]`) presented via an interactive root menu (`GetRoots`). Navigating `cd ..` from the top level of any root returns cleanly to root selection.
+- **Whole-File Caching & Push Callbacks**: AFS-style local UUID caching with zero-network reads on cache hits. Authoritative FileServers push gRPC `Invalidate` callbacks directly to connected clients upon file modification or deletion.
+- **Authoritative Storage & Advisory Indexing**: FileServers manage physical disk I/O, enforce ACLs, allocate logical Inode IDs, and execute atomic operations. The MetaServer coordinates cluster routing and indexes shared directories.
+- **Zero-Trust PKI & Dynamic Discovery**: Inter-node communication is strictly encrypted with mutual TLS 1.3 using an air-gapped Root CA. Node certificates use DNS SANs (`dvfs1`–`dvfs9`), decoupling TLS verification from dynamic campus DHCP IP addresses via Tailscale and GitHub Gist.
+- **Soft Deletion Recycle Bin**: `trash` moves files and directories into a hidden `.trash/` container with automatic collision suffixing (`file__<inodeID>`). `restore` reinstates files to their original parent (falling back to user root if the parent was deleted).
+- **Dynamic Multi-Tenant Quotas**: Per-user storage quotas with dynamic adjustment via `SetQuota` gRPC and Admin Web Console, integer overflow protection, and mid-stream chunk scrapping with automatic storage rollback.
+- **Integrated Observability & Remote Orchestration**: FileServers expose `/metrics` HTTP sidecars with streaming throughput, IOPS, and latency percentiles (p50/p95/p99). A centralized React web console monitors cluster health, triggers state-machine alerts, and executes remote SSH batch commands (`systemctl`, `journalctl`, `apt`, `reboot`).
 
 ---
 
-### 4.2 Shared ACL Table (FS-local)
+## 3. Quick Start (Single Machine)
 
-```
-SharedACLTable {
-  fid → users[]
-}
-```
+### Prerequisites
+- **Go**: 1.24+ installed
+- **Make** & **OpenSSL**
 
-Used to:
-- track shared inodes
-- notify metadata server
-- rebuild shared state after crashes
-
----
-
-## 5. Metadata Server Design
-
-The metadata server stores no file data and no ACLs.
-
-### 5.1 Metadata Server Database
-
-```
-SharedIndex {
-  fid           PRIMARY KEY
-  cached_name
-  users[]
-}
-```
-
-- `users[]` represents visibility only
-- access is always validated by file servers
-
----
-
-## 6. Client Namespace (User View)
-
-Each user sees **exactly two directories**:
-
-```
-mydrive/
-shared/
-```
-
-### Semantics
-- **`mydrive`**
-  - User’s private files
-  - Backed by the user’s root directory on a file server
-- **`shared`**
-  - Virtual directory
-  - Contains files and directories shared *with* the user
-  - Backed by metadata server + FIDs
-
----
-
-## 7. Private File Operations (`mydrive`)
-
-### Create Private File
-
-```
-touch mydrive/fileA
-```
-
-File server:
-1. Allocate new FID
-2. Create OS file
-3. Insert entry into `InodeDB`
-4. ACL allows only owner
-
----
-
-### Open Private File
-
-```
-open("mydrive/fileA")
-```
-
-File server:
-1. Resolve path → FID
-2. Check ACL
-3. Use `os_path`
-4. Call OS `open()`
-
----
-
-## 8. Sharing Operations
-
-### Share a File
-
-```
-setacl mydrive/fileA alice read
-```
-
-File server:
-1. Update `InodeDB[fid].acl`
-2. Update `SharedACLTable`
-3. Notify metadata server
-
-Metadata server updates `SharedIndex`.
-
----
-
-## 9. Shared File Discovery (`shared`)
-
-### List Shared Files
-
-```
-ls shared
-```
-
-Client queries metadata server:
-
-```
-SELECT * FROM SharedIndex
-WHERE user ∈ users[]
-```
-
-Result:
-- List of `(fid, cached_name, fs_id)`
-- No file-server RPCs required
-
----
-
-## 10. Open Shared File
-
-```
-open("shared/fileA")
-```
-
-Client:
-- Resolves name → FID using metadata server
-
-File server:
-1. Validate generation number
-2. Check ACL
-3. Use cached `os_path`
-4. Call OS `open()`
-
-Client never sees real OS paths.
-
----
-
-## 11. Rename and Move
-
-### Rename File (Private or Shared)
-
-```
-mv mydrive/fileA mydrive/fileX
-```
-
-File server:
-- updates `name`
-- updates `os_path`
-- FID unchanged
-- metadata server notified if shared
-
----
-
-### Move Directory (Rare, Expensive)
-
-```
-mv mydrive/project mydrive/archive/project
-```
-
-File server:
-- updates directory `os_path`
-- recursively updates children `os_path`
-- notifies metadata server for shared FIDs only
-
----
-
-## 12. Delete / Unshare with Cascade
-
-```
-rm -r mydrive/project
-```
-
-File server:
-1. DFS using `child_fids`
-2. Remove each FID from `SharedACLTable`
-3. Notify metadata server
-4. Delete OS files and DB entries
-
-Guarantee:
-- No ghost shared entries
-- No stale visibility
-
----
-
-## 13. Failure Handling
-
-### Metadata Server Failure
-- File servers continue enforcing ACLs
-- `ls shared` may be stale
-- Access remains correct
-
-### File Server Failure
-On restart:
-1. Scan OS filesystem
-2. Rebuild `InodeDB`
-3. Rebuild `SharedACLTable`
-4. Re-register shared FIDs
-
----
-
-## 14. Design Invariants
-
-1. FID is the only identity
-2. ACLs enforced only on file servers
-3. Metadata server is advisory
-4. `os_path` must match OS filesystem
-5. Rename/move updates `os_path`
-6. Shared index staleness is safe
-
----
-
-## 15. Security (TLS)
-
-All gRPC communication (client↔metaserver, client↔fileserver) and the Admin Console are secured with mutual TLS using a private Root CA. TLS is **always on** — there is no `--tls=true/false` flag. Certificates are loaded automatically when present on each node.
-
-### 15.1 Certificate Architecture
-
-| Component | Role |
-|---|---|
-| **Root CA** (`certs/ca.crt` + `certs/ca.key`) | 4096-bit RSA CA. `ca.key` never leaves the admin machine. |
-| **Node certs** (`deploy_certs/<hostname>/server.crt` + `server.key`) | 2-year leaf certs signed by the Root CA, with DNS SANs for each cluster hostname. |
-| **Client trust** | `RootCAPEM` is hardcoded at compile-time in `internal/client/ca.go` — no CA file needed on client machines. |
-
-### 15.2 One-Time PKI Setup (Admin Machine Only)
-
+### 1. Build and Initialize
 ```bash
-# 1. Generate Root CA (writes certs/ca.crt + certs/ca.key — run ONCE, keep ca.key offline)
-make certs-root-ca
+# Clone the repository
+git clone https://github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System.git
+cd Distributed-Virtual-File-System
 
-# 2. Generate localhost dev cert (idempotent — skips if server.crt/server.key already exist)
+# Generate development certificates
 make certs
 
-# 3. Generate all cluster node certs (dvfs1–dvfs9) into deploy_certs/
-make certs-nodes
+# Build all binaries into ./bin/
+make build
 ```
 
-> **See [`docs/TLS_Setup_Guide.md`](docs/TLS_Setup_Guide.md) for the complete deployment checklist**, including how to `scp` certs to each node and verify them with `openssl`.
-
-### 15.3 Server Startup with TLS
-
-Servers auto-detect TLS: if `TLS_CERT` and `TLS_KEY` environment variables (or `-tls_cert`/`-tls_key` flags) point to valid cert/key files, TLS is enabled automatically.
+### 2. Start Cluster Components (Separate Terminals)
 
 ```bash
-# Metaserver on dvfs1
-TLS_CERT=certs/server.crt TLS_KEY=certs/server.key ./scripts/start-metaserver.sh
+# Terminal 1: Start MetaServer Coordinator
+./bin/metaserver -port=50051
 
-# Admin Console with TLS
-TLS_CERT=certs/server.crt TLS_KEY=certs/server.key ./scripts/start-admin.sh
+# Terminal 2: Start Storage FileServer
+./bin/fileserver -id=fs1 -port=50052 -data=./fileserver_data -meta_addr=127.0.0.1:50051 -own_ip=127.0.0.1
+
+# Terminal 3: Start Admin Web Console (Optional)
+./bin/admin -port=8080 -state_file=./metaserver_state.json -static=./cmd/admin/static
+
+# Terminal 4: Launch Interactive Client Shell
+./bin/client -username=alice -ip_addr=127.0.0.1 -port=50051 -meta=true
 ```
 
-### 15.4 Client — No Configuration Needed
-
-The Root CA public cert is embedded in the client binary. Clients discover server IPs dynamically via a GitHub Gist (configurable with `-gist_url`) and automatically resolve the correct TLS `ServerName` for SNI. No cert files need to be copied to client machines.
+Inside the client REPL, type `help` to list all available commands (`ls`, `cd`, `pwd`, `create`, `mkdir`, `read`, `upload`, `download`, `trash`, `restore`, `show_trash`, `clear_trash`, `delete`, `sharewith`, `unsharewith`, `viscache`, `refresh`, `info`, `clear`, `exit`).
 
 ---
 
-## 16. Summary
+## 4. Documentation Index
 
-Each user interacts with exactly two namespaces—`mydrive` for private data and `shared` for shared data. File servers maintain authoritative metadata and enforce ACLs, while the metadata server maintains a denormalized shared index to optimize listing without participating in access control.
-# Commands To Run the Whole Setup
+The complete documentation is organized into modular guides:
 
-### For Fileserver (from project root)
+| Document | Description |
+|---|---|
+| [**Portal Home**](docs/index.md) | Executive overview, design principles, and system topology. |
+| [**Setup & Deployment Guide**](docs/setup.md) | Complete multi-node cluster deployment runbook for Raspberry Pis, Linux servers, systemd daemons, and development hosts. |
+| [**System & Hosting Architecture**](docs/architecture.md) | Inode data structures, FID identity, AFS workflows, 18 architectural design decisions, and IITGN campus workarounds (Fortinet, Gist, SANs). |
+| [**Client CLI Reference**](docs/client_cli.md) | Full syntax, flags, examples, and behavior for all 20 terminal shell commands. |
+| [**Client Caching & Push Callbacks**](docs/features/caching.md) | In-memory CNode tree, UUID cache files, push invalidations, 45s session TTL, and readline prompt protection. |
+| [**Sharing & Access Control Lists**](docs/features/sharing_acls.md) | Authoritative ACL propagation (DFS), `RootShare` protocol, and formal security invariants. |
+| [**Crash Recovery & Inode Persistence**](docs/features/crash_recovery.md) | Persistent InodeStore (`.dvfs_inodes_index.json`), MetaServer state snapshots, heartbeat isolation, and 4-terminal runbooks. |
+| [**Recycle Bin & Trash Subsystem**](docs/features/trash.md) | Two-tier deletion safety, collision-safe renaming, metadata fallback, and 9-case test runbook. |
+| [**Dynamic Storage Quotas**](docs/features/quotas.md) | Per-user quota enforcement, `SetQuota` gRPC protocol, and mid-stream chunk scrapping. |
+| [**Zero-Trust TLS & PKI**](docs/features/tls_security.md) | Offline Root CA ceremony, DNS SAN leaf certificates, and dynamic SNI resolution. |
+| [**Telemetry & Performance Monitoring**](docs/features/admin_telemetry.md) | HTTP metrics sidecars, real-time chunked throughput, latency percentiles, and CSV exports. |
+| [**Remote Cluster Orchestration**](docs/features/cluster_orchestration.md) | Remote SSH execution, live journalctl streaming, deduplicated alerts, and command history. |
+| [**Authentication & Access Control**](docs/features/authentication.md) | SHA-256 password verification, constant-time checks, and cookie-authenticated WebSockets. |
+| [**Project Artifacts & Poster**](docs/artifacts.md) | Academic presentation poster (`Poster.pdf`) and research findings summary. |
 
-```
-go run .\cmd\fileserver\main.go --meta_addr <full ip + port of mds> --own_ip=<this fileservers ip to send to mds>
-```
+---
 
-Other flags and defaults:
-
-- port = 50052
-- id = fs1
-- data = fileserver_data
-- tls_cert = certs/server.crt (TLS auto-enabled when cert+key files exist)
-- tls_key = certs/server.key
-
-### For Metadata Server (from project root)
-
-```
-go run .\cmd\metaserver\main.go
-```
-
-Other flags and defaults:
-
-- port = 50051
-- tls_cert = certs/server.crt (TLS auto-enabled when cert+key files exist)
-- tls_key = certs/server.key
-
-### For Client (from root)
+## 5. Repository Structure
 
 ```
-go run .\cmd\client\main.go --username <username> --ip_addr <mds/fs ip address>
+.
+├── api/                   # Protocol Buffer definitions and generated gRPC stubs
+│   ├── fileserver/        # FileServer service & streaming RPCs
+│   ├── metaserver/        # MetaServer routing & advisory RPCs
+│   └── callback/          # Client push invalidation callback RPCs
+├── cmd/                   # Application entry points
+│   ├── client/            # Interactive Cobra CLI REPL & cache engine
+│   ├── fileserver/        # Authoritative storage daemon & metrics sidecar
+│   ├── metaserver/        # Coordinator & liveness tracking daemon
+│   └── admin/             # Centralized admin console server & React SPA
+├── internal/              # Core business logic and shared domain packages
+│   ├── client/            # CNode tree, cache handler, callback listener
+│   ├── fileserver/        # InodeStore, ACL enforcement, chunk streaming, trash
+│   ├── metaserver/        # Advisory index, state snapshotting, heartbeat monitor
+│   ├── admin/             # Telemetry poller, alert engine, SSH orchestrator
+│   └── domain/            # FID, Inode, and ACL domain types
+├── docs/                  # Full documentation source (Material for MkDocs)
+├── scripts/               # Automation, systemd unit files, PKI, and campus workarounds
+├── Makefile               # Standard build, test, cert generation, and execution targets
+└── mkdocs.yml             # Documentation portal configuration
 ```
 
-Other flags and defaults
+---
 
-- port = 50051
-- meta = true (whether to go to mds or not)
-- use_gist = true (fetch server IP map from GitHub Gist for dynamic discovery)
+## 6. Testing
 
-### For Admin Console (from project root)
-
-The admin console provides a centralized web dashboard to monitor fileserver nodes (storage, CPU temperature, RAM, uptime, per-user usage), active users, and system health in real-time.
-
-#### 1. Building the Frontend (one-time setup)
-The React SPA source is in `cmd/admin/ui`. Build the static assets into `cmd/admin/static`:
-
+Run the automated test suite across all modules:
 ```bash
-cd cmd/admin/ui
-npm install
-npm run build
-cd ../../..
+go test ./...
 ```
 
-*(For live UI development with hot-reload against a running backend, run `npm run dev` inside `cmd/admin/ui`)*
-
-#### 2. Starting the Admin Server
-
+Run test suite with race detection:
 ```bash
-go run .\cmd\admin\main.go --state_file=./metaserver_state.json --port=8080
+go test -race ./...
 ```
 
-Or with `make`:
-```bash
-make run-admin
-```
-
-Other flags and defaults:
-- `port = 8080` (HTTP port for the web dashboard and REST API)
-- `state_file = ./metaserver_state.json` (metaserver state file used for dynamic node discovery)
-- `static = ./cmd/admin/static` (path to frontend build directory)
-
-Open your browser at `http://localhost:8080` to view the dashboard.
-
-#### 3. How Telemetry Scrapes Work
-- Each fileserver automatically starts a lightweight `/metrics` HTTP sidecar on port `port - 41000` (e.g., gRPC port `50052` → metrics HTTP `9052`).
-- The admin backend reads `metaserver_state.json`, discovers active fileserver addresses, scrapes their `/metrics` endpoints every 5 seconds, maintains a 60-minute in-memory ring buffer for historical graphs, and serves the UI.
-
-#### 4. Running Admin Console Tests
-```bash
-make test-admin
-# or
-go test ./internal/admin -v
-```
-
+---

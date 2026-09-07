@@ -9,6 +9,7 @@ metaserver_state.json
 bin/
 dist/
 release/
+site/
 
 # Test binary and coverage
 *.test

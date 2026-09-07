@@ -327,7 +327,7 @@ ls shared
 
 ## 3. High-Level Architecture
 
-![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](./architecture.png)
+![High-level architecture showing client mount-table, AFS-style caching, and MDS callbacks](../assets/architecture.png)
 
 ---
 

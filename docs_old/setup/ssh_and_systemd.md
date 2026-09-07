@@ -1,5 +1,7 @@
 # Passwordless SSH & systemd Setup Guide for DVFS Cluster Nodes
 
+[← Back to Documentation Index](../README.md) | [Cluster Setup Guide](./cluster_setup.md)
+
 This guide documents the setup required on Ubuntu Live Server / Linux machines hosting the DVFS Metaserver, Admin Console, and Fileserver nodes to enable Phase 3 remote orchestration.
 
 ---

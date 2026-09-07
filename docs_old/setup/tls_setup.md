@@ -1,5 +1,7 @@
 # DVFS Zero-Trust TLS Setup & Operations Guide
 
+[← Back to Documentation Index](../README.md) | [Cluster Setup Guide](./cluster_setup.md)
+
 This guide provides step-by-step instructions for generating certificates, distributing secrets, starting services, and verifying TLS across the DVFS cluster.
 
 ---

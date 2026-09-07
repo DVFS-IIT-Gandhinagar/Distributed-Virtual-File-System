@@ -1,239 +1,197 @@
-# Trash / Restore — Run & Test Guide
+# Recycle Bin & Trash Subsystem
 
-This repo supports:
+This document specifies the DVFS deletion architecture, broken down into its safety principles (**In Essence**) and its internal mechanics (**Implementation Quirks**).
 
-- `delete` = **permanent delete** (server-side DFS post-order delete + inode map cleanup)
-- `trash` = **soft delete** (moves item into `.trash`)
-- `restore` = **restore** from `.trash` back to original location (best-effort)
-- `show_trash` = **safe listing** of `.trash` contents without `cd`
-- `clear_trash` = **empty trash** permanently
-- `delete -t <name>` = **permanently delete one item from trash** (recursive implied)
-- Shared users only see/restore trash entries they had ACL access to
+---
 
-## Prerequisites (one-time)
+## 1. In Essence: Two-Tier Deletion Safety
 
-From repo root:
+Distributed filesystems require protection against accidental user deletions. DVFS provides a two-tier deletion lifecycle:
 
-```bash
-make certs
-make proto
-make build
+```
+[Active File]
+      |
+      +---> trash <name> ---> [Soft-Deleted in .trash/] ---> restore <name> ---> [Restored File]
+      |                                |
+      |                                +---> delete -t <name> / clear_trash ---> [Permanently Destroyed]
+      |
+      +---> delete <name> ---> [Permanently Destroyed]
 ```
 
-If `make proto` fails with `protoc-gen-go: program not found`, install plugins:
+1. **Soft Delete (`trash`)**: Moves the file or directory into a protected, hidden `.trash/` container. The item is removed from active directory listings but its data and permissions remain intact on disk, allowing near-instant restoration.
+2. **Permanent Delete (`delete`)**: Executes a recursive depth-first search (DFS) post-order purge from the FileServer, unlinks inodes from memory and persistent stores, removes physical OS files, and broadcasts unsharing notices.
+3. **Trash Isolation Invariant**: The `.trash/` container is strictly protected. Users cannot navigate into `.trash/` with `cd`, nor can they create new files directly inside `.trash/`.
 
-```bash
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-export PATH="$PATH:$(go env GOPATH)/bin"
+---
+
+## 2. Implementation Quirks & Practical Realities
+
+### 2.1 The Physical `.trash/` Directory
+Each user root on a FileServer maintains a dedicated `.trash/` folder:
+- **Automatic Initialization**: Created automatically on user creation or first trash operation.
+- **Reserved Name**: The name `.trash` is reserved by the FileServer. Any attempt to create a file or folder named `.trash` via `create` or `mkdir` is rejected with an error.
+- **Physical Relocation**: Trashing uses `os.Rename` to move the physical file or directory on the host filesystem into `.trash/`. Subtree paths and internal inode parent pointers are updated in memory.
+
+### 2.2 Collision-Safe Renaming in Trash
+If a user trashes a file named `report.pdf` from `mydrive/docs/`, and later trashes another file named `report.pdf` from `mydrive/downloads/`, storing both in `.trash/` would cause an OS collision.
+
+The FileServer resolves this with `uniqueNameInDirLocked`:
+- If `report.pdf` does not exist in `.trash/`, it is moved as `report.pdf`.
+- If a collision occurs, the FileServer appends the inode ID: `report.pdf__42`.
+- When restored, the collision suffix is stripped, restoring the original name.
+
+### 2.3 Restore Metadata & Fallback Rules
+When an item is moved to trash, the FileServer records its restoration context in an in-memory table named `fs.trashMeta`:
+
+```go
+type trashEntry struct {
+    originalParentFID string
+    originalName      string
+    originalRelPath   string
+    sharedSnapshots   []sharedDirSnapshot
+}
 ```
 
-## Start the system
+- **Standard Restoration**: When `restore <name>` is executed, the FileServer looks up `fs.trashMeta`, identifies the original parent directory FID, and re-attaches the inode to its original parent.
+- **Parent Deletion Fallback**: If the original parent directory was deleted while the file was in trash, but the metadata is present, the FileServer gracefully falls back to restoring the item directly into the user's root directory (`mydrive`).
+- **Restart Limitation**: Because `fs.trashMeta` is stored in-memory, if the FileServer process restarts while items remain in trash, attempting to restore them returns:
+  `"restore metadata not available (try restoring before restarting the server)"`.
+  Users should restore required files prior to planned FileServer maintenance restarts.
 
-Open 1–2 terminals.
+### 2.4 Shared-User Trash Scoping
+When multiple users collaborate inside a shared directory:
+- Shared users can move files they have permission to modify into trash.
+- However, when a shared user runs `show_trash`, the FileServer filters the entries using `userCanAccessInode`. A shared user only sees trashed items that were shared with them, and cannot see or restore the owner's private trashed files.
+- Restoring is also strictly ACL-checked; a user cannot restore files from `.trash/` that they do not have permissions to access.
 
-### Option A (direct connect; simplest)
+### 2.5 Complete CLI Deletion Reference
 
-Terminal 1 (file server):
+| Command | Flags | Target | Behavior |
+|---|---|---|---|
+| `trash <name>` | `-r` (recursive) | Active Directory | Soft delete: moves file or directory to `.trash/`. Non-empty directories require `-r`. |
+| `restore <name>` | None | Trash Directory | Restores specified item from `.trash/` back to its original directory. |
+| `show_trash` | None | Trash Directory | Lists all items currently in `.trash/` without requiring directory navigation. |
+| `clear_trash` | None | Trash Directory | Permanently deletes all items currently in `.trash/`. |
+| `delete <name>` | `-r` (recursive) | Active Directory | Permanent hard delete: bypasses trash and destroys file/directory immediately. |
+| `delete -t <name>` | `-t` (from trash) | Trash Directory | Permanently purges a specific item from `.trash/` without clearing other trashed files. |
 
+---
+
+## 3. Manual Trash & Restore Test Runbook
+
+Follow these 9 scenarios inside the client REPL to verify all trash and restore invariants:
+
+### Case 1: Basic File Trash & Restore
 ```bash
-make run-server
-```
-
-Terminal 2 (client):
-
-```bash
-make run-client USER=romit IP_ADDR=127.0.0.1
-```
-
-### Option B (via meta server)
-
-Terminal 1 (meta server):
-
-```bash
-make run-metaserver
-```
-
-Terminal 2 (file server registers with meta server):
-
-```bash
-./bin/fileserver -id=fs1 -port=50051 -data=./fileserver_data -meta_addr=127.0.0.1:50052 -own_ip=127.0.0.1
-```
-
-Terminal 3 (client navigates via meta server):
-
-```bash
-./bin/client -username=romit -ip_addr=127.0.0.1 -port=50051 -meta=true -meta_addr=127.0.0.1:50052
-```
-
-## Manual test cases (run inside the client)
-
-### 1) Basic `trash` + `restore` for a file
-
-```text
-mkdir t
-cd t
-create a.txt
+mkdir test_trash
+cd test_trash
+create doc.txt
 ls
-trash a.txt
-ls
-```
-
-Expected:
-- `a.txt` disappears from the current directory.
-
-Now verify it exists in `.trash`:
-
-```text
-cd ..
-show_trash
-```
-
-You should see `a.txt` (or a collision-safe name like `a.txt__<inodeID>`).
-
-Restore it (you can run `restore` from any directory):
-
-```text
-restore a.txt
-```
-
-Then confirm it’s back:
-
-```text
-cd t
+trash doc.txt
 ls
 ```
-
-### 2) Directory trash requires `-r` if non-empty
-
-```text
-cd ..
-mkdir d
-cd d
-create f
-cd ..
-trash d
-```
-
-Expected:
-- Error complaining the directory is not empty / needs recursive.
-
-Now:
-
-```text
-trash -r d
-```
-
-Expected:
-- Directory is moved to `.trash`.
-
-### 3) `delete` is permanent (does NOT go to trash)
-
-```text
-mkdir p
-cd p
-create x
-cd ..
-delete -r p
-```
-
-Expected:
-- `p` is removed from the filesystem and the inode map (it will NOT appear in `.trash`).
-
-### 4) Collision behavior in `.trash`
-
-If you trash two files with the same name (from different folders), trash may rename one:
-
-```text
-mkdir c1
-mkdir c2
-cd c1
-create same
-cd ..
-cd c2
-create same
-cd ..
-cd c1
-trash same
-cd ..
-cd c2
-trash same
-cd ..
+*Expected*: `doc.txt` is removed from `test_trash/`.
+```bash
 show_trash
 ```
+*Expected*: `doc.txt` appears in `.trash/` listing.
+```bash
+restore doc.txt
+ls
+```
+*Expected*: `doc.txt` is successfully restored back into `test_trash/`.
 
-Expected:
-- One might be stored as `same__<inodeID>`.
-
-### 5) You cannot create inside `.trash`
-
-```text
-mkdir nope
-trash nope
+### Case 2: Non-Empty Directory Trash Requires `-r`
+```bash
+mkdir myfolder
+cd myfolder
+create item.txt
+cd ..
+trash myfolder
+```
+*Expected*: Fails with error: `directory is not empty; use -r to trash recursively`.
+```bash
+trash -r myfolder
 show_trash
 ```
+*Expected*: Succeeded; `myfolder` is moved to trash.
 
-Expected:
-- `show_trash` lists trashed entries.
-- Direct navigation into `.trash` and its subfolders is rejected.
-- Direct file creation inside `.trash` remains blocked.
+### Case 3: Direct Permanent Delete
+```bash
+mkdir perm_dir
+cd perm_dir
+create temp.txt
+cd ..
+delete -r perm_dir
+show_trash
+```
+*Expected*: `perm_dir` is permanently purged; it does NOT appear in `show_trash`.
 
-### 6) Empty trash with `clear_trash`
+### Case 4: Collision-Safe Renaming in `.trash/`
+```bash
+mkdir dirA dirB
+cd dirA
+create report.txt
+cd ../dirB
+create report.txt
+cd ../dirA
+trash report.txt
+cd ../dirB
+trash report.txt
+show_trash
+```
+*Expected*: Both files exist in trash, one with its original name (`report.txt`) and one with its inode ID disambiguator (`report.txt__<inodeID>`).
 
-```text
+### Case 5: Protection of `.trash/` Namespace
+```bash
+mkdir .trash
+create .trash
+```
+*Expected*: FileServer rejects creation of items named `.trash`. Direct navigation (`cd .trash`) is likewise rejected.
+
+### Case 6: Emptying Trash (`clear_trash`)
+```bash
 show_trash
 clear_trash
 show_trash
 ```
+*Expected*: All trashed items are permanently unlinked; `show_trash` outputs `(trash is empty)`.
 
-Expected:
-- `clear_trash` permanently deletes all entries currently listed in trash.
-- A follow-up `show_trash` prints `(trash is empty)`.
-
-### 7) Permanently delete one trash item with `delete -t`
-
-```text
-show_trash
-delete -t same__123
-show_trash
-```
-
-Expected:
-- `delete -t <name>` removes that specific item from trash permanently.
-- For directories in trash, `-r` is not required when `-t` is used.
-
-### 8) Important limitation (current implementation)
-
-Restore requires server-side metadata that is stored **in-memory**.
-
-That means:
-- If you restart the file server after trashing something, `restore` may fail with a message like “restore metadata not available”.
-- Workaround for now: restore before restarting the server.
-
-### 9) Shared-user trash visibility and restore rules
-
-- If `alice` shares a project with `bob`, `bob` does not get full visibility into `alice/.trash`.
-- `show_trash` for `bob` is ACL-filtered and only includes trashed items `bob` had access to.
-- `restore <name>` is also ACL-checked; `bob` cannot restore trashed items that were never shared with `bob`.
-
-## Quick automated check
-
-Run:
-
+### Case 7: Selective Item Deletion from Trash (`delete -t`)
 ```bash
-go test ./...
+create fileA.txt
+create fileB.txt
+trash fileA.txt
+trash fileB.txt
+show_trash
+delete -t fileA.txt
+show_trash
 ```
+*Expected*: Only `fileA.txt` is permanently purged; `fileB.txt` remains intact in `.trash/`.
 
-This includes `internal/fileserver/trash_restore_test.go` which validates:
-- trash + restore path updates
-- recursive requirement for non-empty directories
-- you cannot delete the `.trash` directory
+### Case 8: Server Restart Limitation Verification
+```bash
+create test_restart.txt
+trash test_restart.txt
+show_trash
+# In FileServer terminal, restart the fileserver process
+# Back in client:
+refresh
+restore test_restart.txt
+```
+*Expected*: Fails with: `restore metadata not available (try restoring before restarting the server)`.
 
+### Case 9: Shared-User Trash Scoping & ACL Isolation
+1. User `alice` shares folder `proj` with user `bob`.
+2. `alice` trashes a private file `secret.txt` in `mydrive`.
+3. `bob` trashes `task.txt` inside `proj`.
+4. When `bob` runs `show_trash`, `bob` sees `task.txt` but CANNOT see `secret.txt`.
+5. `bob` attempting `restore secret.txt` is rejected with `permission denied`.
 
+---
 
-
-# doubt - heirarcchal trash or independent trash
-trash folder B from inside folder A and then trash folder A. 
-- When we restore folder B, should it be restored to its original location, or in trash inside A or smwhere else?
-- On removing folder A from trash, should folder B also be removed from trash or not?
-- On restoring folder A, should folder B also be restored or not?
+### Automated Unit & Integration Tests
+Run the automated test suite for trash and restore:
+```bash
+go test ./internal/fileserver -run TestTrashRestore -v
+```
