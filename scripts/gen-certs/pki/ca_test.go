@@ -131,3 +131,13 @@ func TestSaveAndLoadRootCA(t *testing.T) {
 		t.Error("expected non-empty PEM bytes from LoadCACert")
 	}
 }
+
+func TestFindRepoRoot(t *testing.T) {
+	root, err := findRepoRoot()
+	if err != nil {
+		t.Fatalf("findRepoRoot failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Errorf("go.mod not found at returned repo root %s: %v", root, err)
+	}
+}

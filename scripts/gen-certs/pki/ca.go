@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -259,4 +260,57 @@ func LoadCACert(certPath string) (*x509.Certificate, []byte, error) {
 	}
 
 	return cert, certPEM, nil
+}
+
+// SyncClientCA finds the repository root and automatically updates
+// internal/client/ca.go with the provided certPEM.
+func SyncClientCA(certPEM []byte) error {
+	repoRoot, err := findRepoRoot()
+	if err != nil {
+		return fmt.Errorf("failed to locate repo root: %w", err)
+	}
+
+	targetFile := filepath.Join(repoRoot, "internal", "client", "ca.go")
+	content := fmt.Sprintf(`package client
+
+import (
+	"crypto/x509"
+	"fmt"
+)
+
+// RootCAPEM contains the public certificate of the 10-year offline DVFS Root CA.
+// Embedded directly into the client binary; no external ca_cert file required.
+// Automatically updated whenever Root CA is generated.
+const RootCAPEM = %s
+
+// NewDVFSUniversalCertPool creates an isolated x509.CertPool containing strictly
+// the DVFS Root CA, completely ignoring the host operating system's root store.
+func NewDVFSUniversalCertPool() (*x509.CertPool, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(RootCAPEM)) {
+		return nil, fmt.Errorf("failed to append hardcoded DVFS Root CA certificate")
+	}
+	return pool, nil
+}
+`, "`"+strings.TrimSpace(string(certPEM))+"`")
+
+	return os.WriteFile(targetFile, []byte(content), 0644)
+}
+
+func findRepoRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("repository root (go.mod) not found")
 }
