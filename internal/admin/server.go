@@ -52,6 +52,9 @@ type AdminServer struct {
 	alertManager *AlertManager
 	snapshotPath string
 	authManager  *AuthManager
+	tlsCertFile  string
+	tlsKeyFile   string
+	isTLS        bool
 }
 
 // NewAdminServer creates a new AdminServer instance.
@@ -89,6 +92,22 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 // SetAuthManager sets the authentication manager (useful for testing).
 func (a *AdminServer) SetAuthManager(am *AuthManager) {
 	a.authManager = am
+}
+
+// SetTLS configures direct TLS certificates for the admin console.
+func (a *AdminServer) SetTLS(certFile, keyFile string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.tlsCertFile = certFile
+	a.tlsKeyFile = keyFile
+	a.isTLS = true
+}
+
+// IsTLS reports whether direct TLS is active on the admin server.
+func (a *AdminServer) IsTLS() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.isTLS
 }
 
 // AuthManager returns the current authentication manager.

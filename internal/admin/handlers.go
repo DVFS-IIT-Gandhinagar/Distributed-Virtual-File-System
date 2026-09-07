@@ -956,11 +956,13 @@ func (a *AdminServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := a.authManager.CreateSession()
+	isTLS := a.isTLS || r.TLS != nil
 	http.SetCookie(w, &http.Cookie{
 		Name:     adminCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isTLS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sessionTTL.Seconds()),
 	})
@@ -992,6 +994,7 @@ func (a *AdminServer) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   a.isTLS || r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -1079,7 +1082,11 @@ func (a *AdminServer) Run(port int) error {
 	mux.Handle("/", spa)
 
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
-	log.Printf("[ADMIN] Listening on %s, serving static from %s", addr, a.staticDir)
+	if a.isTLS && a.tlsCertFile != "" && a.tlsKeyFile != "" {
+		log.Printf("[ADMIN] Listening on https://%s (Direct TLS), serving static from %s", addr, a.staticDir)
+		return http.ListenAndServeTLS(addr, a.tlsCertFile, a.tlsKeyFile, mux)
+	}
+	log.Printf("[ADMIN] Listening on http://%s, serving static from %s", addr, a.staticDir)
 	return http.ListenAndServe(addr, mux)
 }
 
