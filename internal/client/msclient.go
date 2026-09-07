@@ -26,10 +26,21 @@ func (client *Client) GetRoots(msAddr string) ([]SharedRoot, error) {
 
 		host := client.serverName
 		if host == "" {
-			var splitErr error
-			host, _, splitErr = net.SplitHostPort(msAddr)
-			if splitErr != nil {
-				host = msAddr
+			if client.resolver != nil {
+				host = client.resolver.ResolveServerName(msAddr)
+			} else {
+				var splitErr error
+				host, _, splitErr = net.SplitHostPort(msAddr)
+				if splitErr != nil {
+					host = msAddr
+				}
+			}
+			if net.ParseIP(host) != nil {
+				if net.ParseIP(host).IsLoopback() {
+					host = "localhost"
+				} else {
+					host = "dvfs1"
+				}
 			}
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
@@ -81,10 +92,21 @@ func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 
 		host := client.serverName
 		if host == "" {
-			var splitErr error
-			host, _, splitErr = net.SplitHostPort(msAddr)
-			if splitErr != nil {
-				host = msAddr
+			if client.resolver != nil {
+				host = client.resolver.ResolveServerName(msAddr)
+			} else {
+				var splitErr error
+				host, _, splitErr = net.SplitHostPort(msAddr)
+				if splitErr != nil {
+					host = msAddr
+				}
+			}
+			if net.ParseIP(host) != nil {
+				if net.ParseIP(host).IsLoopback() {
+					host = "localhost"
+				} else {
+					host = "dvfs1"
+				}
 			}
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)

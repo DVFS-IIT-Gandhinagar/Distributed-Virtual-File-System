@@ -34,6 +34,13 @@ func WithServerName(name string) ClientOption {
 	}
 }
 
+// WithDiscovery attaches a custom DiscoveryResolver to the client.
+func WithDiscovery(resolver *DiscoveryResolver) ClientOption {
+	return func(c *Client) {
+		c.resolver = resolver
+	}
+}
+
 // Client provides basic VFS client functionality
 type Client struct {
 	username      string
@@ -46,8 +53,9 @@ type Client struct {
 	currentFID    *domain.FID
 	serverConn    pb.FileServerClient
 	grpcConn      *grpc.ClientConn
-	insecure      bool   // used only for local mock unit tests
-	serverName    string // optional TLS SNI override
+	insecure      bool               // used only for local mock unit tests
+	serverName    string             // optional TLS SNI override
+	resolver      *DiscoveryResolver // dynamic Gist discovery resolver
 	cacheHandler  *CacheHandler
 	stopCallback  func() error
 	notifyWriter  io.Writer // readline-aware writer for notification messages
@@ -79,11 +87,17 @@ func NewClient(username string, opts ...ClientOption) *Client {
 	c := &Client{
 		username: username,
 		clientID: fmt.Sprintf("%s-%d", username, time.Now().UnixNano()),
+		resolver: NewDiscoveryResolver(),
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
 	return c
+}
+
+// Resolver returns the client's discovery resolver.
+func (c *Client) Resolver() *DiscoveryResolver {
+	return c.resolver
 }
 
 // AttachCacheHandler wires cache invalidation callbacks to the active cache handler.
@@ -146,10 +160,17 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 
 		host := c.serverName
 		if host == "" {
-			var splitErr error
-			host, _, splitErr = net.SplitHostPort(serverAddress)
-			if splitErr != nil {
-				host = serverAddress // Fallback if no port specified
+			if c.resolver != nil {
+				host = c.resolver.ResolveServerName(serverAddress)
+			} else {
+				var splitErr error
+				host, _, splitErr = net.SplitHostPort(serverAddress)
+				if splitErr != nil {
+					host = serverAddress // Fallback if no port specified
+				}
+				if net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback() {
+					host = "localhost"
+				}
 			}
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
