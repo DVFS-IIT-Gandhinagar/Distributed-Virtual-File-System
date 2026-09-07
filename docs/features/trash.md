@@ -30,7 +30,7 @@ Distributed filesystems require protection against accidental user deletions. DV
 Each user root on a FileServer maintains a dedicated `.trash/` folder:
 - **Automatic Initialization**: Created automatically on user creation or first trash operation.
 - **Reserved Name**: The name `.trash` is reserved by the FileServer. Any attempt to create a file or folder named `.trash` via `create` or `mkdir` is rejected with an error.
-- **Physical Relocation**: Trashing uses `os.Rename` to move the physical file or directory on the host filesystem into `.trash/`. Subtree paths and internal inode parent pointers are updated in memory.
+- **Physical Relocation**: Trashing uses `os.Rename` to move the physical file or directory on the host filesystem into `.trash/`. Subtree paths and internal inode parent pointers are updated in memory, and the persistent `InodeStore` is updated via `RenamePrefix` to reflect the path changes.
 
 ### 2.2 Collision-Safe Renaming in Trash
 If a user trashes a file named `report.pdf` from `mydrive/docs/`, and later trashes another file named `report.pdf` from `mydrive/downloads/`, storing both in `.trash/` would cause an OS collision.
@@ -195,3 +195,6 @@ Run the automated test suite for trash and restore:
 ```bash
 go test ./internal/fileserver -run TestTrashRestore -v
 ```
+
+## Diagrams
+See the [Trash and Restore Flow](../diagrams/fileserver_engine.md#3-trash-and-restore-flow) in the FileServer Engine architecture document for a visual breakdown of soft deletion and restoration operations.

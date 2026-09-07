@@ -39,7 +39,14 @@ Every FileServer process automatically launches an HTTP sidecar:
   *(Example: gRPC port `50052` launches metrics HTTP on `9052`)*.
 - The Admin Server discovers the FileServer's gRPC address from `metaserver_state.json` and automatically derives the metrics URL.
 - **Endpoints**:
-  - `GET /metrics`: Returns a JSON document containing the complete metrics catalog.
+  - `GET /metrics`: Returns a JSON document containing the complete metrics catalog. The payload strictly maps to the `FileserverMetrics` struct:
+    - **Disk**: `disk_total_bytes`, `disk_used_bytes`, `disk_free_bytes`, `disk_usage_percent`
+    - **Users**: `per_user_storage`, `per_user_quota`, `users_assigned_count`, `active_users`
+    - **System**: `cpu_temp_celsius`, `cpu_usage_percent`, `mem_used_bytes`, `mem_total_bytes`, `mem_usage_percent`, `load_avg_1m`, `load_avg_5m`
+    - **Health**: `uptime_seconds`, `last_restart_unix`, `chunk_count`
+    - **Network**: `active_connections`
+    - **Operations**: `bytes_written_total`, `bytes_read_total`, `write_ops_total`, `read_ops_total`, `errors_total`, `failed_writes_total`, `failed_reads_total`
+    - **Latencies**: `op_latency_write_ms_p50/p95/p99`, `op_latency_read_ms_p50/p95/p99`
   - `GET /health`: Lightweight endpoint returning `{"status": "ok"}` for systemd and load balancer probes.
 
 ### 2.2 Real-Time Chunked Streaming Throughput
@@ -90,3 +97,13 @@ The Admin Console aggregates live and historical performance across the cluster:
   - Overall cluster error percentage (`cluster_error_rate_pct`).
   - Node breakdowns with p50/p95/p99 latency percentiles and active client connections.
 - **`GET /api/performance/export`**: Streams performance data as an RFC-4180 compliant CSV file (`dvfs_performance_<timestamp>.csv`). Supports optional query parameter `?node_id=<id>` to export data for a specific node or all online nodes. Useful for research analysis, benchmarking reports, and offline capacity planning.
+- **`GET /api/history/{fsID}`**: Returns 60 minutes of historical rate and performance snapshots for a specific node (or `cluster` for aggregate history).
+
+## Diagrams
+
+For the complete Admin Architecture, see [Admin System Diagrams](../diagrams/admin_system.md).
+
+### Metrics Polling Pipeline
+
+![Metrics Polling Pipeline](../diagrams/admin_system.md#metrics-polling-pipeline)
+

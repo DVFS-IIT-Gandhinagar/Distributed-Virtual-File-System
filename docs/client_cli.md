@@ -56,12 +56,13 @@ Lists the contents of the current working directory.
   projects             dir                 0
   ```
 
-#### `cd <path>`
+#### `cd <dirname>`
 Changes the current working directory.
-- **Syntax**: `cd <relative_path>`
+- **Syntax**: `cd <dirname>`
 - **Special paths**:
   - `cd /`: Navigates to the root of the active storage tree.
   - `cd ..`: Moves to the parent directory. Running `cd ..` from the top of any root safely exits to the MetaServer root selection menu.
+- **Note**: Multi-segment paths (e.g., `cd dir1/dir2`) are not supported. Only immediate child directories can be navigated to in a single command.
 - **Protection**: Direct navigation into `.trash` is strictly forbidden.
 
 #### `pwd`
@@ -92,9 +93,10 @@ Renders an indented tree visualization of the client's in-memory CNode cache.
 - **Example**:
   ```text
   dvfs> viscache
-  mydrive (dir) [fs1_0_1]
-    |-- .trash (dir) [fs1_1_1]
-    |-- report.txt (file, 2.4 KB, cached) [fs1_3_1]
+  Cache Structure:
+  - mydrive (directory)
+    - .trash (directory)
+    - report.txt (file (cached: true))
   ```
 
 #### `refresh`
@@ -253,3 +255,8 @@ Exits the client gracefully.
   1. Clears local UUID cache files via `ClearCache()`.
   2. Dispatches `UnregisterClient` gRPC RPC to the FileServer, immediately removing the active session and decrementing the active connections counter.
   3. Closes background callback listeners and exits cleanly.
+
+## Diagrams
+
+For visual architecture maps, sequence diagrams, and flowcharts describing the client shell, callback handlers, and interactive state lifecycle, please refer to:
+- [Client System Architecture Diagrams](./diagrams/client_system.md)

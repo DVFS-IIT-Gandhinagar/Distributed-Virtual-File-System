@@ -68,9 +68,16 @@ Privileged endpoints are protected by `RequireAuth` middleware:
   - `GET /api/users` (User quota directory)
   - `PUT /api/users/{username}/quota` (Quota adjustments)
   - `POST /api/actions/*` (Cluster command execution)
+  - `GET /api/actions/presets` (Action presets)
+  - `GET /api/actions/history` (Action history)
   - `POST /api/alerts/resolve` and `POST /api/alerts/resolve-all`
   - `GET /api/logs/tail` (Live journalctl log streaming)
   - `GET /ws/actions` (WebSocket command stream)
+
+- **Unauthenticated Auth Routes**:
+  - `POST /api/auth/login` (Session creation)
+  - `POST /api/auth/logout` (Session revocation)
+  - `GET /api/auth/status` (Check current session validity)
 
 ### 2.3 Automatic Public Data Redaction (`internal/admin/handlers.go`)
 When unauthenticated visitors access telemetry endpoints, the backend automatically sanitizes the response:
@@ -84,6 +91,15 @@ When unauthenticated visitors access telemetry endpoints, the backend automatica
   - Strips user identity strings from alert messages.
 
 ### 2.4 Secure WebSocket Authentication & Token Extraction
-The interactive command execution terminal (`/ws/actions`) and metrics stream (`/ws/metrics`) connect via WebSockets. 
+The interactive command execution terminal (`/ws/actions`) connects via WebSockets. 
 - **Primary Method (HTTP-Only Cookie)**: Standard browser WebSocket clients authenticate seamlessly via the `dvfs_admin_token` cookie sent automatically during the HTTP upgrade handshake, avoiding exposure of session tokens in server URL access logs.
 - **Fallback Support (Query Parameter & Bearer Header)**: For non-browser clients, automated scripts, or environments unable to manipulate WebSocket upgrade cookies, `ExtractToken` in `internal/admin/auth.go` also supports `Authorization: Bearer <token>` and `?token=<token>` query parameter extraction.
+
+## Diagrams
+
+For the complete Admin Architecture, see [Admin System Diagrams](../diagrams/admin_system.md).
+
+### Authentication Flow Diagram
+
+![Authentication Flow](../diagrams/admin_system.md#authentication-flow)
+

@@ -51,4 +51,11 @@ nav:
       - Remote Orchestration & Alerts: features/cluster_orchestration.md
       - Authentication & Security: features/authentication.md
   - Client CLI Reference: client_cli.md
+  - Architecture Diagrams:
+      - Master Overview: diagrams/overview.md
+      - Admin Console: diagrams/admin_system.md
+      - FileServer Engine: diagrams/fileserver_engine.md
+      - MetaServer Coordinator: diagrams/metaserver_coordinator.md
+      - Client & Cache: diagrams/client_system.md
+      - Zero-Trust PKI & Network: diagrams/tls_and_network.md
   - Project Artifacts: artifacts.md

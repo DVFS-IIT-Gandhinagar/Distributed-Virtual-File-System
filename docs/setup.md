@@ -205,7 +205,7 @@ To test the complete DVFS ecosystem locally on a single machine without systemd:
 make certs
 
 # 2. Terminal 1: Start MetaServer
-go run ./cmd/metaserver/main.go -port=50051
+go run ./cmd/metaserver/main.go -port=50051 -tls_cert=certs/server.crt -tls_key=certs/server.key
 
 # 3. Terminal 2: Start FileServer
 go run ./cmd/fileserver/main.go \
@@ -213,7 +213,11 @@ go run ./cmd/fileserver/main.go \
   -port=50052 \
   -data=./fileserver_data \
   -meta_addr=127.0.0.1:50051 \
-  -own_ip=127.0.0.1
+  -own_ip=127.0.0.1 \
+  -meta_retry_interval=3s \
+  -meta_heartbeat_interval=5s \
+  -tls_cert=certs/server.crt \
+  -tls_key=certs/server.key
 
 # 4. Terminal 3: Start Admin Console
 go run ./cmd/admin/main.go \
@@ -269,3 +273,63 @@ The Admin Console features remote cluster orchestration (restarting services, st
 
 ### How Admin Authentication Operates
 The Admin Console reads `ADMIN_PASSWORD_HASH` from `.env`. When an administrator logs in, the backend computes the SHA-256 hash of the submitted password and compares it in constant time via `crypto/subtle.ConstantTimeCompare`. A cryptographically secure 32-byte session token is generated and stored with a 12-hour expiration, set via an `HttpOnly` browser cookie (`dvfs_admin_token`).
+
+---
+
+## 10. Makefile Targets Reference
+
+The root `Makefile` automates building, testing, code generation, TLS certificate minting, and cross-platform packaging.
+
+| Target | Description | Underlying Command |
+|---|---|---|
+| `make build` | Builds all 4 binaries (`fileserver`, `client`, `metaserver`, `admin`) into `bin/`. | `go build -o bin/<binary> cmd/<component>/main.go` |
+| `make proto` | Recompiles all Protocol Buffer `.proto` schemas into Go structs and gRPC interfaces. | `protoc --go_out=. --go-grpc_out=. api/...` |
+| `make clean` | Removes build artifacts (`bin/`, `fileserver_data/`). Cross-platform (PowerShell / rm). | `rm -rf bin fileserver_data` |
+| `make deps` | Downloads and tidies Go module dependencies. | `go mod download && go mod tidy` |
+| `make fmt` | Formats all Go source files. | `go fmt ./...` |
+| `make vet` | Runs `go vet` static analysis across the entire project. | `go vet ./...` |
+| `make test` | Runs the full automated test suite with verbose output. | `go test ./... -count=1 -v` |
+| `make test-client` | Runs client-focused test suite (`internal/client`). | `go test ./internal/client -count=1 -v` |
+| `make test-edge` | Runs edge-case test suite (`internal/fileserver`, `internal/metaserver`). | `go test ./internal/fileserver ./internal/metaserver -count=1 -v` |
+| `make test-admin` | Runs admin console test suite (`internal/admin`). | `go test ./internal/admin -count=1 -v` |
+| `make test-integration` | Runs integration and end-to-end test suite (`integration`). | `go test ./integration -count=1 -v` |
+| `make test-cover` | Runs test suite and outputs coverage profile and function breakdown. | `go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out` |
+| `make certs` | Generates local development certificates with SANs for `localhost` and local LAN IP. | `go run scripts/gen-certs/main.go $(SERVER)` |
+| `make certs-force` | Force regenerates local development certificates even if existing ones are present. | `go run scripts/gen-certs/main.go -force $(SERVER)` |
+| `make certs-root-ca` | Mints air-gapped 10-year RSA 4096-bit Root CA (`certs/ca.crt`, `certs/ca.key`). | `go run scripts/gen-certs/cmd/gen_root_ca/main.go` |
+| `make certs-nodes` | Mints verified 2-year leaf certificates for `dvfs1`–`dvfs9`, `localhost`, `fs1`, `mds`. | `go run scripts/gen-certs/cmd/gen_node_certs/main.go` |
+| `make run-server` | Builds and runs local FileServer (`-id=fs1 -port=50051 -data=./fileserver_data`). | `./bin/fileserver ...` |
+| `make run-metaserver` | Builds and runs local MetaServer (`-port=50052`). | `./bin/metaserver -port=50052` |
+| `make run-admin` | Builds and runs Admin Console (`-port=8080 -state_file=./metaserver_state.json`). | `./bin/admin -port=8080 ...` |
+| `make run-client` | Builds and runs interactive client (`USER=alice IP_ADDR=127.0.0.1`). | `./bin/client -username=$(USER) -ip_addr=$(IP_ADDR)` |
+| `make release` | Cross-compiles client and node packages for all platforms with SHA256 checksums. | `go run scripts/build-release/main.go` |
+| `make release-client` | Builds standalone client archives for Windows, macOS, and Linux (AMD64 & ARM64). | `go run scripts/build-release/main.go -client-only` |
+| `make release-nodes` | Builds cluster node archives for Linux ARM64 (Raspberry Pis) and Linux AMD64. | `go run scripts/build-release/main.go -nodes-only` |
+| `make help` | Displays available Makefile targets and descriptions. | `echo ...` |
+
+---
+
+## 11. Systemd Service Units & Template Architecture
+
+DVFS provides two styles of systemd unit files in `scripts/`:
+
+### 1. Static Unit Files (Auto User Detection)
+These unit files dynamically resolve the primary non-root user (UID 1000, e.g., `ubuntu`, `rpi`, `jsm`) or respect `DVFS_USER` / `DVFS_REPO` overrides:
+- `scripts/dvfs-metaserver.service`: Runs the MetaServer coordinator daemon.
+- `scripts/dvfs-fileserver.service`: Runs the FileServer storage daemon and auto-detects advertised IP via `scripts/start-fileserver.sh`.
+- `scripts/dvfs-admin.service`: Runs the centralized Admin Web Console and orchestration server.
+- `scripts/rp_115/fortinet.service` & `fortinet.timer`: Automated IITGN captive portal re-authentication.
+- `scripts/rp_115/dvfs-gist.service` & `dvfs-gist.timer`: Hourly Tailscale-to-Gist IP synchronization.
+
+### 2. Multi-User Template Units (`@.service`)
+For multi-user environments or systems where explicit user parameterization is required, template units instantiate daemons scoped to a specific Linux username `%i`:
+- `scripts/dvfs-metaserver@.service`: Usage: `sudo systemctl enable --now dvfs-metaserver@<username>`
+- `scripts/dvfs-fileserver@.service`: Usage: `sudo systemctl enable --now dvfs-fileserver@<username>`
+- `scripts/dvfs-admin@.service`: Usage: `sudo systemctl enable --now dvfs-admin@<username>`
+- `scripts/rp_115/fortinet@.service`: Usage: `sudo systemctl enable --now fortinet@<username>`
+
+Each template unit sets `User=%i`, `WorkingDirectory=%h/Distributed-Virtual-File-System`, and resolves state and binary directories relative to the user's home directory (`%h`).
+
+### State File Path Conventions
+- Under systemd execution via `scripts/start-metaserver.sh` and `scripts/start-admin.sh`, `STATE_FILE` defaults to `./bin/metaserver_state.json`.
+- When running binaries directly from the repository root, `-state_file` defaults to `./metaserver_state.json` (for MetaServer) or `./bin/metaserver_state.json` (for Admin Server). Always verify that both daemons are configured with matching `-state_file` parameters.

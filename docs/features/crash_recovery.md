@@ -95,6 +95,7 @@ The MetaServer coordinator persists its complete operational state in `metaserve
 
 - **Startup Reconstitution**: On launch, `NewMetaServer(*stateFile)` parses the JSON snapshot, immediately restoring known fileservers, user-to-fileserver assignments, and shared directory registries.
 - **Heartbeat Evaluation**: Heartbeat timestamps are evaluated against the current Unix time. If a node has not checked in within the timeout window, it transitions to `stale`.
+- **ID Allocation**: `next_fs_id` is an auto-incrementing integer used by the MetaServer to assign unique IDs to newly registered FileServers that are not already known.
 
 ### 2.3 Heartbeat & Stale Transitions
 - **FileServer Heartbeat Loop**: A background goroutine in `internal/fileserver/msclient.go` executes `Heartbeat(address)` to the MetaServer every 5 seconds (configurable via `-meta_heartbeat_interval`).
@@ -102,7 +103,7 @@ The MetaServer coordinator persists its complete operational state in `metaserve
   - Checks each registered server's `now - LastHeartbeatUnix`.
   - If delta > 30 seconds (`-heartbeat_timeout`), the node status transitions from `healthy` to `stale`.
 - **Routing Exclusion**: When a client requests `Navigate(username, rootUser)`, the MetaServer checks the hosting node's status. Stale nodes are rejected with:
-  `"root user 'alice' is on unavailable file server"`.
+  `"root user 'alice' is currently unavailable"`.
 - **Automatic Re-Attachment**: When an offline FileServer comes back online, its registration loop automatically reconnects to the MetaServer, sends a `Heartbeat`, and the MetaServer restores its status to `healthy`.
 
 ### 2.4 Admin Console Cold-Start Recovery
@@ -275,3 +276,24 @@ go test ./internal/metaserver -v
 go test ./internal/fileserver -v -run TestInodeStore
 ```
 
+## Diagrams
+
+### MetaServer Crash Recovery State Machine
+```mermaid
+stateDiagram-v2
+    state "Starting" as Starting
+    state "LoadingState" as LoadingState
+    state "Ready" as Ready
+    state "Serving" as Serving
+    state "Crashed" as Crashed
+    state "Recovering" as Recovering
+
+    [*] --> Starting
+    Starting --> LoadingState : "parse metaserver_state.json"
+    LoadingState --> Ready : "state valid (loadState)"
+    LoadingState --> Ready : "file missing (start fresh)"
+    Ready --> Serving : "Start gRPC server"
+    Serving --> Crashed : "process killed"
+    Crashed --> Recovering : "process restarted"
+    Recovering --> LoadingState : "reload state file"
+```

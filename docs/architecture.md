@@ -4,6 +4,10 @@ This document specifies the architecture of the Distributed Virtual File System 
 - **Level 1: System Architecture & Core Primitives** (Data structures, identity models, locking disciplines, and component responsibilities).
 - **Level 2: Hosting Architecture & IITGN Workarounds** (Network isolation workarounds, captive portal automation, dynamic DHCP IP resolution via Tailscale and GitHub Gist, zero-trust TLS SNI decoupling, and 24/7 hardware persistence).
 
+## System Diagrams Reference
+
+For a comprehensive graphical view of the full system topology, data flows, and component interactions, see the [Master System Architecture Overview](diagrams/overview.md).
+
 ---
 
 ## Level 1: System Architecture & Core Primitives
@@ -163,6 +167,7 @@ sequenceDiagram
     FS->>FS: Create/update clientSession in fs.sessions
     FS-->>CL: RegisterClientResponse{success: true, user_root_fid}
     CL-->>User: Drop into dvfs> prompt
+    Note over FS,MS: MetaServer uses the FileServer's network address for deduplication during RegisterFileServer
 ```
 
 #### Chunked Streaming Upload (`UploadFile`)
@@ -182,9 +187,9 @@ sequenceDiagram
             FS-->>CL: Stream error: storage quota exceeded
         end
     end
-    CL->>FS: Close stream & send expected SHA-256 hash
-    FS->>FS: Verify SHA-256 hash & commit logical inode
-    FS-->>CL: UploadFileResponse{success: true, fid}
+    CL->>FS: Close stream (EOF)
+    FS->>FS: Verify content hash against pre-upload state
+    FS-->>CL: UploadFileResponse{success: true}
     FS--)Other Clients: Push Invalidate (callbackEventFileUpdated)
 ```
 
@@ -196,7 +201,7 @@ sequenceDiagram
     participant FS as FileServer
 
     User->>CL: download report.pdf
-    CL->>FS: DownloadFile(fid)
+    CL->>FS: DownloadFile(parentFID, name)
     loop For each 4 MB chunk
         FS->>FS: Read 4 MB chunk from disk & AddBytesRead(len)
         FS->>CL: Stream chunk bytes
@@ -220,7 +225,7 @@ sequenceDiagram
         CH-->>CL: File content (Zero RPCs / Instant)
         CL-->>User: Display content
     else CNode contentCached == false (Cache Miss)
-        CL->>FS: DownloadFile(fid)
+        CL->>FS: DownloadFile(parentFID, name)
         FS-->>CL: Stream file bytes
         CL->>CH: Save into ./.cache/<UUID> & set contentCached = true
         CL-->>User: Display content
@@ -263,7 +268,7 @@ sequenceDiagram
     FS->>FS: fs.mu.RUnlock()
 
     loop For each target client (concurrent goroutines)
-        FS->>CBT: Invalidate{fid, eventType}
+        FS->>CBT: Invalidate{fid, new_version: eventType}
         alt eventType == FILE_UPDATED
             CBT->>CHA: Delete .cache/<UUID> file & set contentCached=false
             CBT->>CBT: Notify "[NOTIFY] File updated... Cache invalidated"
@@ -304,6 +309,58 @@ The following table documents the core architectural trade-offs and rationale:
 | **Physical Host Disk Safety** | Enforced 20 GiB reserve floor (`DiskSafetyBuffer`) | Authoritatively blocks chunk writes if physical free space on host drops $\le 20\text{ GiB}$, preventing host OS lockups and journaling failure regardless of user logical quotas. |
 | **Remote SSH Orchestration** | Key-based SSH dispatch with scoped sudoers | Admin Console dispatches remote lifecycle and maintenance commands (`systemctl`, `journalctl`, `reboot`) over SSH tunnels without requiring root passwords or cluster-wide daemon daemons. |
 | **Shell Tab Completion** | CobraCompleter queries local CNode children | Provides instant, responsive shell tab completion without issuing network requests. |
+| **Client Callback Port** | Ephemeral `0.0.0.0:0` port allocation | Automatically acquires an available port dynamically, removing the need for manual port/firewall configuration for every client instance. |
+
+## Diagrams
+For a deeper visual dive into the FileServer components, workflows, and state transitions, see the [FileServer Storage Engine Architecture](./diagrams/fileserver_engine.md) document.
+
+### 1.7 Protobuf Service & RPC Inventory
+
+
+DVFS defines three Protocol Buffer service interfaces in `api/`: `FileServer` (`api/fileserver/fileserver.proto`), `MetaServer` (`api/metaserver/metaserver.proto`), and `ClientCallback` (`api/callback/callback.proto`).
+
+#### FileServer Service (`api/fileserver/fileserver.proto`)
+
+| RPC Method | Pattern | Request Type | Response Type | Description |
+|---|---|---|---|---|
+| `RegisterClient` | Unary | `RegisterClientRequest` | `RegisterClientResponse` | Authenticates client, returns root FID, and registers callback address. |
+| `UnregisterClient` | Unary | `UnregisterClientRequest` | `UnregisterClientResponse` | Gracefully terminates client session and callback listener registration. |
+| `CreateFile` | Unary | `CreateFileRequest` | `CreateFileResponse` | Allocates new logical inode (file or directory) with quota pre-flight check. |
+| `OpenFile` | Unary | `OpenFileRequest` | `OpenFileResponse` | Validates client access and returns current file size and version for cache checking. |
+| `ReadFile` | Unary | `ReadFileRequest` | `ReadFileResponse` | Direct offset/length byte slice read (fallback/direct I/O). |
+| `WriteFile` | Unary | `WriteFileRequest` | `WriteFileResponse` | Direct offset byte slice write with version increment. |
+| `CloseFile` | Unary | `CloseFileRequest` | `CloseFileResponse` | Closes active file descriptor reference on server. |
+| `DeleteFile` | Unary | `DeleteFileRequest` | `DeleteFileResponse` | Permanently removes file or directory (supports recursive directory deletion). |
+| `TrashFile` | Unary | `TrashFileRequest` | `TrashFileResponse` | Soft deletes file/directory by moving it into `.trash/` with collision suffixing. |
+| `RestoreFile` | Unary | `RestoreFileRequest` | `RestoreFileResponse` | Restores trashed item back to original parent directory. |
+| `ShowTrash` | Unary | `ShowTrashRequest` | `ShowTrashResponse` | Returns directory entries currently stored in user trash container. |
+| `GetAttr` | Unary | `GetAttrRequest` | `GetAttrResponse` | Queries inode attributes (name, type, size, version). |
+| `ListDir` | Unary | `ListDirRequest` | `ListDirResponse` | Returns listing of child directory entries (DirEntry slice). |
+| `Lookup` | Unary | `LookupRequest` | `LookupResponse` | Resolves child entry name within parent FID to target FID. |
+| `Path` | Unary | `PathRequest` | `PathResponse` | Reconstructs relative path string for display prompt. |
+| `ChangeDir` | Unary | `ChangeDirRequest` | `ChangeDirResponse` | Validates target navigation directory and returns new active FID. |
+| `UploadFile` | Client Streaming | `stream UploadFileRequest` | `UploadFileResponse` | Streams 4 MB chunks to disk; verifies pre/post hashes; scraps partial writes on quota failure. |
+| `DownloadFile` | Server Streaming | `DownloadFileRequest` | `stream DownloadFileResponse` | Streams 4 MB chunks to client for whole-file local caching. |
+| `Share` | Unary | `ShareRequest` | `ShareResponse` | DFS propagates read/write access across directory subtree and persists `.acl` files. |
+| `Unshare` | Unary | `UnshareRequest` | `UnshareResponse` | Revokes shared access across directory subtree. |
+| `SetQuota` | Unary | `SetQuotaRequest` | `SetQuotaResponse` | Sets user storage limit in bytes (dynamically saved to `quota_config.json`). |
+
+#### MetaServer Service (`api/metaserver/metaserver.proto`)
+
+| RPC Method | Pattern | Request Type | Response Type | Description |
+|---|---|---|---|---|
+| `RegisterFileServer` | Unary | `RegisterFileServerRequest` | `RegisterFileServerResponse` | Registers storage node address, managed users, and shared directories. |
+| `Navigate` | Unary | `NavigateRequest` | `NavigateResponse` | Resolves which FileServer node hosts a given root user. |
+| `Heartbeat` | Unary | `HeartbeatRequest` | `HeartbeatResponse` | Periodic ping from storage node to refresh liveness timestamp. |
+| `GetRoots` | Unary | `GetRootsRequest` | `GetRootsResponse` | Returns list of accessible personal and shared roots for interactive client menu. |
+| `RootShare` | Unary | `RootShareRequest` | `RootShareResponse` | Indexes a shared directory mapping in `metaserver_state.json`. |
+| `RootUnshare` | Unary | `RootUnshareRequest` | `RootUnshareResponse` | Removes an indexed shared directory mapping. |
+
+#### ClientCallback Service (`api/callback/callback.proto`)
+
+| RPC Method | Pattern | Request Type | Response Type | Description |
+|---|---|---|---|---|
+| `Invalidate` | Unary | `InvalidateRequest` | `InvalidateResponse` | Pushes cache invalidation event from FileServer to client. The `new_version` field carries the event type (1 = `FILE_UPDATED`, 2 = `DIR_NEW_FILE`, 3 = `FILE_DELETED`). |
 
 ---
 

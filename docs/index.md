@@ -77,6 +77,8 @@ DVFS is designed for multi-user collaboration in cluster and campus environments
 
 Explore the comprehensive guides and references below:
 
+- [**Architecture Diagrams**](diagrams/overview.md): Master system topology, end-to-end data flows, and interactions.
+
 - [**Setup Guide**](setup.md): Complete, all-in-one deployment runbook for development machines, cluster nodes, systemd services, and clients.
 - [**Architecture**](architecture.md):
   - **Level 1 (System Architecture)**: Logical inodes, File Identifiers (FIDs), client CNodes, ACL inheritance, locking discipline, and atomic persistence.
@@ -91,5 +93,22 @@ Explore the comprehensive guides and references below:
   - [Telemetry & Performance](features/admin_telemetry.md): HTTP sidecars, chunked streaming throughput, IOPS, and latency histograms.
   - [Remote Orchestration & Alerts](features/cluster_orchestration.md): Remote SSH management, live log streaming, and deduplicated alerts.
   - [Authentication & Security](features/authentication.md): SHA-256 password hashing, cookie-authenticated WebSockets, and public dashboard mode.
-- [**Client CLI Reference**](client_cli.md): Complete manual for all 19 Cobra CLI commands, flags, syntax, and examples.
+- [**Client CLI Reference**](client_cli.md): Complete manual for all 20 interactive shell commands, flags, syntax, and examples.
 - [**Project Artifacts**](artifacts.md): Downloadable academic poster (`Poster.pdf`), summary of research findings, and cross-compiled release binaries.
+
+---
+
+## Architecture Diagrams
+
+The following Mermaid diagram files provide precise visual documentation of every system component, grounded in the actual codebase. Each file contains multiple diagram types (topology graphs, sequence diagrams, state machines, class diagrams, and flowcharts).
+
+| Diagram File | Component Covered | Diagrams Inside |
+|---|---|---|
+| [System Overview](diagrams/overview.md) | Full system, E2E flows, deployment topology, startup sequence | 6 diagrams |
+| [Admin Console](diagrams/admin_system.md) | Auth flow, alert state machine, metrics pipeline, SSH orchestration | 6 diagrams |
+| [FileServer Engine](diagrams/fileserver_engine.md) | Upload workflow, trash/restore, quota layers, InodeStore states | 6 diagrams |
+| [MetaServer Coordinator](diagrams/metaserver_coordinator.md) | Registration, heartbeat, Navigate flow, crash recovery | 6 diagrams |
+| [Client Shell and Cache](diagrams/client_system.md) | CNode structure, session lifecycle, cache flows, callback handler | 7 diagrams |
+| [TLS PKI and Network](diagrams/tls_and_network.md) | Cert hierarchy, mTLS handshake, Gist IP discovery, campus workarounds | 5 diagrams |
+
+Start with [diagrams/overview.md](diagrams/overview.md) for the complete system topology.

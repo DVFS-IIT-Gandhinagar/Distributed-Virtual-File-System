@@ -43,6 +43,7 @@ Download/
 *.log
 .env
 .env.local
+documentation_audit_log.md
 
 # TLS Certificates
 certs/*.crt

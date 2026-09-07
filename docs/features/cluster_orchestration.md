@@ -72,10 +72,10 @@ type Alert struct {
 To prevent filling the log with identical alerts every 5 seconds, active alerts are indexed by unique condition keys:
 - `node_offline:<fsID>`: Raised when a node ceases responding to `/metrics` probes.
 - `node_online:<fsID>`: Raised when an offline node recovers.
-- `storage_warning:<fsID>`: Raised when disk usage exceeds 90%.
-- `temp_warning:<fsID>`: Raised when CPU temperature exceeds 75°C.
-- `quota_exceeded:<username>`: Raised when a user exceeds 95% of their storage quota.
-- `error_spike:<fsID>`: Raised when handler error rates surge.
+- `storage_warning:<fsID>`: Raised when disk usage exceeds 80% (Warning) or 95% (Critical).
+- `temp_warning:<fsID>`: Raised when CPU temperature exceeds 65°C (Warning) or 85°C (Critical).
+- `quota_exceeded:<username>`: Raised when a user reaches 100% of their storage quota.
+- `error_spike:<fsID>`: Raised when handler error rates exceed 5% (Warning) or 20% (Critical).
 - `service_restart:<fsID>`: Raised when an unexpected daemon restart or uptime reset is detected.
 
 #### Automated Recovery
@@ -83,6 +83,10 @@ When a node responds again or temperatures return below threshold limits:
 1. The active alert is automatically marked `Resolved = true`.
 2. A corresponding `info` level recovery alert is recorded (e.g., `"Node FS-1 returned online"`).
 3. Alerts are persisted to `admin_alerts.json` using atomic temporary file writes.
+
+#### REST Endpoints
+- `GET /api/alerts`: Returns active and historical alerts (supports `severity`, `node_id`, `unresolved` filters).
+- `GET /api/alerts/summary`: Returns current counts of unresolved alerts grouped by severity.
 
 ### 2.3 Live Remote Log Streaming (`internal/admin/logs.go`)
 Administrators can inspect live service logs directly in the web dashboard without opening terminal windows:
@@ -96,4 +100,12 @@ All cluster commands are recorded in `command_history.json`:
 - **Capacity**: Configurable ring buffer (default: 100 records via `-history_limit`).
 - **REST Endpoints**:
   - `GET /api/actions/history`: Returns chronological command audit logs.
-  - `GET /api/actions/status/{actionID}`: Returns live execution state and terminal output for running batch operations.
+
+## Diagrams
+
+For the complete Admin Architecture, see [Admin System Diagrams](../diagrams/admin_system.md).
+
+### SSH Remote Orchestration Flow
+
+![SSH Remote Orchestration Flow](../diagrams/admin_system.md#ssh-remote-orchestration-flow)
+

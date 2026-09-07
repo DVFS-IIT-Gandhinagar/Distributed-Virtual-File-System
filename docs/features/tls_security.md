@@ -57,9 +57,18 @@ scripts/gen-certs/
 ├── cmd/
 │   ├── gen_root_ca/main.go     # Mints 10-year RSA 4096-bit Root CA
 │   └── gen_node_certs/main.go  # Signs 2-year leaf certificates for dvfs1-9
-└── pki/
-    ├── ca.go                   # Root CA generation and validation
-    └── node.go                 # Node CSR creation and SAN injection
+├── pki/
+│   ├── ca.go                   # Root CA generation and validation
+│   └── node.go                 # Node CSR creation and SAN injection
+└── main.go                     # Local dev single-host cert generator (make certs)
+```
+
+#### Step 0: Local Development Certificate Generation (Single Host)
+For rapid single-machine local testing, `scripts/gen-certs/main.go` automates Root CA generation, client trust pool synchronization, and server certificate minting with SANs for `localhost`, `server`, `127.0.0.1`, and local outbound LAN IP:
+```bash
+# Invoked via make targets
+make certs             # Generates certs/ca.crt, certs/ca.key, certs/server.crt, certs/server.key
+make certs-force       # Force regenerates certificates
 ```
 
 #### Step 1: Root CA Generation
@@ -67,7 +76,7 @@ scripts/gen-certs/
 go run scripts/gen-certs/cmd/gen_root_ca/main.go
 ```
 - Creates `certs/ca.crt` (Public Root CA certificate).
-- Creates `certs/ca.key` (RSA 4096-bit private key with `0600` permissions).
+- Creates `certs/ca.key` (RSA 4096-bit private key with `0400` read-only owner permissions).
 - Safeguard: Will abort if `certs/ca.crt` already exists to prevent accidental PKI overwrites (override with `-force`).
 
 #### Step 2: Cluster Node Certificate Generation
@@ -91,19 +100,19 @@ Clients require zero manual certificate setup. The public Root CA PEM block is c
 
 ```go
 const RootCAPEM = `-----BEGIN CERTIFICATE-----
-MIIFazCCA1OgAwIBAgIU...
+MIIF6jCCA9KgAwIBAgIQ...
 -----END CERTIFICATE-----`
 
-func GetCertPool() (*x509.CertPool, error) {
+func NewDVFSUniversalCertPool() (*x509.CertPool, error) {
     pool := x509.NewCertPool()
-    if ok := pool.AppendCertsFromPEM([]byte(RootCAPEM)); !ok {
-        return nil, fmt.Errorf("failed to parse embedded Root CA")
+    if !pool.AppendCertsFromPEM([]byte(RootCAPEM)) {
+        return nil, fmt.Errorf("failed to append hardcoded DVFS Root CA certificate")
     }
     return pool, nil
 }
 ```
 
-When connecting to servers, the client supplies this pool via `credentials.NewTLS(&tls.Config{RootCAs: pool})`.
+When connecting to servers, the client supplies this pool via `client.NewDVFSUniversalCertPool()` and `credentials.NewTLS(&tls.Config{RootCAs: pool})`.
 
 ### 2.3 Dynamic SNI Hostname Resolution
 When dialing a FileServer or MetaServer, `cmd/client/main.go` uses `client.NewDiscoveryResolver()`:
@@ -124,3 +133,7 @@ While client-to-server and server-to-server channels enforce TLS 1.3, client-sid
 - The client starts a lightweight listener on a random local port (`lis, err := net.Listen("tcp", "0.0.0.0:0")`).
 - The FileServer dials the client using `grpc.WithInsecure()`.
 - Rationale: Callback payloads contain only lightweight cache invalidation pulses (`FID`, `eventType`). Running this channel without client-side certificates eliminates the operational burden of minting and distributing client certificates to end-user laptops.
+
+## Diagrams
+
+For a visual overview of the Zero-Trust PKI, mTLS Handshake, Dynamic IP Discovery via Gist, and IITGN Network Workarounds, see the diagrams in [tls_and_network.md](../diagrams/tls_and_network.md).

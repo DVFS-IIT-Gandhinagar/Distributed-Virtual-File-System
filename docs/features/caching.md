@@ -106,7 +106,9 @@ The FileServer callback sender (`internal/fileserver/callback_server.go`) issues
 +--------------------------+------------+--------------------------------------------+
 ```
 
-When an event arrives at the client's callback listener (`internal/client/callback_server.go`):
+In the Protocol Buffer schema (`api/callback/callback.proto`), these event codes are transmitted over the `uint64 new_version` field of `InvalidateRequest`, allowing backward compatibility with standard version invalidation semantics while delivering rich event notifications to active client sessions.
+
+When an event arrives at the client's callback listener (which binds to an ephemeral `0.0.0.0:0` port, `internal/client/callback_server.go`):
 1. **`FILE_UPDATED`**: Searches the active directory for the matching FID, deletes the local `./.cache/<contentUID>` file, sets `contentCached = false`, and logs a cache invalidation notice.
 2. **`DIR_NEW_FILE`**: Logs a notice alerting the user that a new file was created in their current directory.
 3. **`FILE_DELETED`**: Evicts the deleted node from `curr.children`, deletes any associated local cache file, and alerts the user.
@@ -138,8 +140,14 @@ DVFS integrates callbacks with the readline library:
 Users can visualize their client's in-memory CNode tree at any time using the `viscache` command:
 ```text
 dvfs> viscache
-mydrive (dir) [fs1_0_1]
-  |-- documents (dir) [fs1_1_1]
-  |    |-- notes.txt (file, 1.2 KB, cached) [fs1_3_1]
-  |-- report.pdf (file, 4.5 MB, not cached) [fs1_2_1]
+Cache Structure:
+- mydrive (directory)
+  - documents (directory)
+    - notes.txt (file (cached: true))
+  - report.pdf (file (cached: false))
 ```
+
+## Diagrams
+
+For visual architecture maps, sequence diagrams, and flowcharts describing the client shell, callback handlers, and interactive state lifecycle, please refer to:
+- [Client System Architecture Diagrams](./../diagrams/client_system.md)

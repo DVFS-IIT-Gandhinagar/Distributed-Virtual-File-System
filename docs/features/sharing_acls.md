@@ -134,3 +134,20 @@ To keep the client's interactive root selection menu streamlined and prevent dup
 - If an entry with `existing.Owner == req.Owner` is already present, the MetaServer logs `Share skipped: root '%s' already shared with '%s'` and returns success immediately without appending a redundant record.
 - As a result, each distinct owner exposes at most one top-level shared root entry in any recipient's `GetRoots` selection menu at a time.
 
+## Diagrams
+
+### RootShare Deduplication and State Persistence
+```mermaid
+flowchart TD
+    FS_Subtree["FileServer: DFS subtree ACL propagation"] --> FS_Save["FileServer: saveSharesLocked"]
+    FS_Save --> FS_Unlock["FileServer releases fs.mu"]
+    FS_Unlock --> FS_RPC["FileServer calls RootShare gRPC on MetaServer"]
+    FS_RPC --> MS_Lock["MetaServer: mu.Lock()"]
+    MS_Lock --> MS_CheckDup["MetaServer: check existing.Owner == req.Owner in shared[ShareWith]"]
+    
+    MS_CheckDup -->|Duplicate found| MS_Skip["MetaServer: return Success immediately"]
+    MS_CheckDup -->|New Share| MS_Append["MetaServer: append SharedDirEntry"]
+    
+    MS_Append --> MS_Save["MetaServer: saveStateLocked()"]
+    MS_Save --> MS_Unlock["MetaServer: mu.Unlock()"]
+```

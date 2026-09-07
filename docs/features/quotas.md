@@ -102,10 +102,13 @@ In addition to per-user logical quotas, FileServers protect the host operating s
 const DiskSafetyBuffer uint64 = 20 * 1024 * 1024 * 1024 // 20 GiB safety buffer
 ```
 
-- **Physical Headroom Check**: During chunk writes in `WriteFile`, the FileServer invokes `readDiskStats(fs.rootDir)` to query host filesystem metrics (`statvfs` / `GetDiskFreeSpaceExW`).
+- **Physical Headroom Check**: During pre-flight allocation checks in `CreateFile` and during chunk writes in `WriteFile`, the FileServer invokes `readDiskStats(fs.rootDir)` to query host filesystem metrics (`statvfs` / `GetDiskFreeSpaceExW`).
 - **Safety Enforcement**: Even if a user has ample logical quota remaining, if physical free disk space drops to or below 20 GiB (`diskFree <= DiskSafetyBuffer`), or if the write size exceeds `diskFree - DiskSafetyBuffer`, the operation is blocked:
   ```text
   fileserver storage limit reached: cannot write X bytes (usable free space: Y bytes, 20 GiB reserved for system safety)
   ```
 - **System Stability Rationale**: This invariant protects the host node against out-of-disk crashes, kernel panics, systemd journal dropouts, and swap exhaustion caused by concurrent large uploads.
+
+## Diagrams
+See the [Quota Enforcement Layers](../diagrams/fileserver_engine.md#4-quota-enforcement-layers) in the FileServer Engine architecture document for a visual breakdown of logical and physical quota enforcement.
 
