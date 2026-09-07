@@ -1,4 +1,4 @@
-.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help certs certs-force certs-nodes certs-root-ca
+.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help certs certs-force certs-nodes certs-root-ca release release-client release-nodes
 
 # Variables
 BINARY_DIR=bin
@@ -57,15 +57,9 @@ run-server: build
 	@echo "Starting file server..."
 	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
 
-exec-server:
-	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
-
 # Run meta server
 run-metaserver: build
 	@echo "Starting meta server..."
-	@./$(METASERVER_BINARY) -port=50052
-
-exec-metaserver:
 	@./$(METASERVER_BINARY) -port=50052
 
 # Run admin console
@@ -73,17 +67,11 @@ run-admin: build
 	@echo "Starting admin console..."
 	@./$(ADMIN_BINARY) -port=8080 -state_file=./metaserver_state.json
 
-exec-admin:
-	@./$(ADMIN_BINARY) -port=8080 -state_file=./metaserver_state.json
-
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice
 IP_ADDR ?= 127.0.0.1
 run-client: build
 	@echo "Starting client for user $(USER) connecting to $(IP_ADDR)..."
-	@./$(CLIENT_BINARY) -username=$(USER) -ip_addr=$(IP_ADDR)
-
-exec-client:
 	@./$(CLIENT_BINARY) -username=$(USER) -ip_addr=$(IP_ADDR)
 
 # Install dependencies
@@ -163,6 +151,9 @@ help:
 	@echo "  make test-edge    - Run edge-case test suite"
 	@echo "  make test-integration - Run integration/e2e tests"
 	@echo "  make test-cover   - Run unit tests with coverage"
+	@echo "  make release      - Cross-compile client & node packages for all platforms"
+	@echo "  make release-client - Cross-compile client for Windows, macOS, and Linux"
+	@echo "  make release-nodes  - Cross-compile server nodes for Linux ARM64 (Pis) & AMD64"
 	@echo "  make help         - Show this help message"
 
 # Generate TLS certificates (on-demand / one-time setup)
@@ -178,3 +169,13 @@ certs-nodes:
 
 certs-root-ca:
 	@$(GO) run scripts/gen-certs/cmd/gen_root_ca/main.go
+
+# Cross-compilation release targets (generates multi-platform packages with SHA256 checksums)
+release:
+	@$(GO) run scripts/build-release/main.go
+
+release-client:
+	@$(GO) run scripts/build-release/main.go -client-only
+
+release-nodes:
+	@$(GO) run scripts/build-release/main.go -nodes-only

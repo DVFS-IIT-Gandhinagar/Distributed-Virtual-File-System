@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. v1.0.0)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Multi-Platform Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+
+      - name: Set up Node.js (for Admin UI build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Admin UI
+        run: |
+          if [ -d "cmd/admin/ui" ] && [ -f "cmd/admin/ui/package.json" ]; then
+            cd cmd/admin/ui
+            npm ci || npm install
+            npm run build
+            cd ../../..
+          fi
+
+      - name: Run Cross-Compilation Builder
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${{ github.ref_name }}"
+          fi
+          go run scripts/build-release/main.go -version="${VERSION}"
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          name: "DVFS ${{ github.ref_name }}"
+          files: |
+            release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
