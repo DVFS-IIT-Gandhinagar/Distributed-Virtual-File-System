@@ -371,3 +371,62 @@ func TestWebSocket_CookieAuth(t *testing.T) {
 		t.Fatalf("failed to write action request over authed ws: %v", err)
 	}
 }
+
+func TestAuth_TLSSecureCookie(t *testing.T) {
+	rawSum := sha256.Sum256([]byte("secretpass"))
+	expectedHash := hex.EncodeToString(rawSum[:])
+
+	srv := NewAdminServer("", "")
+	am := &AuthManager{
+		hash:     expectedHash,
+		sessions: make(map[string]time.Time),
+	}
+	srv.SetAuthManager(am)
+
+	// 1. Plaintext server mode without TLS: Secure flag is false
+	loginBody := bytes.NewBufferString(`{"password":"secretpass"}`)
+	req1 := httptest.NewRequest("POST", "/api/auth/login", loginBody)
+	rec1 := httptest.NewRecorder()
+	srv.handleAuthLogin(rec1, req1)
+
+	cookies1 := rec1.Result().Cookies()
+	if len(cookies1) == 0 {
+		t.Fatal("expected session cookie in response")
+	}
+	if cookies1[0].Secure {
+		t.Errorf("expected Secure=false for plaintext HTTP request, got true")
+	}
+
+	// 2. Direct TLS enabled on server: Secure flag must be true
+	srv.SetTLS("fake.crt", "fake.key")
+	if !srv.IsTLS() {
+		t.Fatal("expected IsTLS to be true after SetTLS")
+	}
+
+	loginBody2 := bytes.NewBufferString(`{"password":"secretpass"}`)
+	req2 := httptest.NewRequest("POST", "/api/auth/login", loginBody2)
+	rec2 := httptest.NewRecorder()
+	srv.handleAuthLogin(rec2, req2)
+
+	cookies2 := rec2.Result().Cookies()
+	if len(cookies2) == 0 {
+		t.Fatal("expected session cookie in response")
+	}
+	if !cookies2[0].Secure {
+		t.Errorf("expected Secure=true when TLS is enabled on server, got false")
+	}
+
+	// 3. Logout also propagates Secure flag
+	logoutReq := httptest.NewRequest("POST", "/api/auth/logout", nil)
+	logoutRec := httptest.NewRecorder()
+	srv.handleAuthLogout(logoutRec, logoutReq)
+
+	logoutCookies := logoutRec.Result().Cookies()
+	if len(logoutCookies) == 0 {
+		t.Fatal("expected session cookie in logout response")
+	}
+	if !logoutCookies[0].Secure {
+		t.Errorf("expected Secure=true on logout cookie when TLS is enabled, got false")
+	}
+}
+

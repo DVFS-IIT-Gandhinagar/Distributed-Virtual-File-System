@@ -10,7 +10,7 @@ func TestFileserverRestartInodeStability(t *testing.T) {
 	rootDir := t.TempDir()
 
 	// 1. Boot fileserver instance 1
-	fs1, err := NewFileServer("fs-1", rootDir, false, "", "")
+	fs1, err := NewFileServer("fs-1", rootDir, "")
 	if err != nil {
 		t.Fatalf("Failed to create fs1: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestFileserverRestartInodeStability(t *testing.T) {
 	aliceFileStr1 := aliceFileFID1.String()
 
 	// 2. Simulate server restart: create a new FileServer instance on the exact same rootDir
-	fs2, err := NewFileServer("fs-1", rootDir, false, "", "")
+	fs2, err := NewFileServer("fs-1", rootDir, "")
 	if err != nil {
 		t.Fatalf("Failed to create fs2 (restart): %v", err)
 	}

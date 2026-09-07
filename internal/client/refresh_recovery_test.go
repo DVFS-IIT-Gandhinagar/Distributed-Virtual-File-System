@@ -19,7 +19,7 @@ func TestClientRefreshRecoversFromFileserverRestart(t *testing.T) {
 	}
 	serverAddr := lis.Addr().String()
 
-	fs1, err := fileserver.NewFileServer("fs-1", rootDir, false, "", "")
+	fs1, err := fileserver.NewFileServer("fs-1", rootDir, "")
 	if err != nil {
 		t.Fatalf("NewFileServer 1 failed: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestClientRefreshRecoversFromFileserverRestart(t *testing.T) {
 	}()
 
 	// 2. Connect client and initialize cache
-	c := NewClient("jassi", false, "")
+	c := NewClient("jassi", WithInsecure())
 	c.SetRootUser("jassi")
 	c.SetRootPath("mydrive", "jassi")
 
@@ -72,7 +72,7 @@ func TestClientRefreshRecoversFromFileserverRestart(t *testing.T) {
 	}
 	defer lis2.Close()
 
-	fs2, err := fileserver.NewFileServer("fs-1", rootDir, false, "", "")
+	fs2, err := fileserver.NewFileServer("fs-1", rootDir, "")
 	if err != nil {
 		t.Fatalf("NewFileServer 2 (restart) failed: %v", err)
 	}

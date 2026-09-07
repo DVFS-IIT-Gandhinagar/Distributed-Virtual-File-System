@@ -2,10 +2,8 @@ package client
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net"
-	"os"
 
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"google.golang.org/grpc"
@@ -18,21 +16,32 @@ func (client *Client) GetRoots(msAddr string) ([]SharedRoot, error) {
 		return []SharedRoot{}, nil
 	}
 
-	// Build the same CA-backed TLS config the client uses when talking to FS.
+	// Build the Root CA-backed TLS config the client uses when talking to servers.
 	var opts []grpc.DialOption
-	if client.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(client.caCertPath)
+	if !client.insecure {
+		cp, err := NewDVFSUniversalCertPool()
 		if err != nil {
-			return []SharedRoot{}, fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return []SharedRoot{}, fmt.Errorf("failed to append CA certificate")
+			return []SharedRoot{}, fmt.Errorf("failed to load Root CA: %w", err)
 		}
 
-		host, _, err := net.SplitHostPort(msAddr)
-		if err != nil {
-			host = msAddr
+		host := client.serverName
+		if host == "" {
+			if client.resolver != nil {
+				host = client.resolver.ResolveServerName(msAddr)
+			} else {
+				var splitErr error
+				host, _, splitErr = net.SplitHostPort(msAddr)
+				if splitErr != nil {
+					host = msAddr
+				}
+			}
+			if net.ParseIP(host) != nil {
+				if net.ParseIP(host).IsLoopback() {
+					host = "localhost"
+				} else {
+					host = "dvfs1"
+				}
+			}
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
 		opts = append(opts, grpc.WithTransportCredentials(creds))
@@ -73,21 +82,32 @@ func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 		return "", nil
 	}
 
-	// Build the same CA-backed TLS config the client uses when talking to FS.
+	// Build the Root CA-backed TLS config the client uses when talking to servers.
 	var opts []grpc.DialOption
-	if client.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(client.caCertPath)
+	if !client.insecure {
+		cp, err := NewDVFSUniversalCertPool()
 		if err != nil {
-			return "", fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return "", fmt.Errorf("failed to append CA certificate")
+			return "", fmt.Errorf("failed to load Root CA: %w", err)
 		}
 
-		host, _, err := net.SplitHostPort(msAddr)
-		if err != nil {
-			host = msAddr
+		host := client.serverName
+		if host == "" {
+			if client.resolver != nil {
+				host = client.resolver.ResolveServerName(msAddr)
+			} else {
+				var splitErr error
+				host, _, splitErr = net.SplitHostPort(msAddr)
+				if splitErr != nil {
+					host = msAddr
+				}
+			}
+			if net.ParseIP(host) != nil {
+				if net.ParseIP(host).IsLoopback() {
+					host = "localhost"
+				} else {
+					host = "dvfs1"
+				}
+			}
 		}
 		creds := credentials.NewClientTLSFromCert(cp, host)
 		opts = append(opts, grpc.WithTransportCredentials(creds))

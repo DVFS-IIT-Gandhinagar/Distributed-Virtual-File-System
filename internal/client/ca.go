@@ -1,0 +1,53 @@
+package client
+
+import (
+	"crypto/x509"
+	"fmt"
+)
+
+// RootCAPEM contains the public certificate of the 10-year offline DVFS Root CA.
+// Embedded directly into the client binary; no external ca_cert file required.
+const RootCAPEM = `-----BEGIN CERTIFICATE-----
+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
+-----END CERTIFICATE-----`
+
+// NewDVFSUniversalCertPool creates an isolated x509.CertPool containing strictly
+// the hardcoded DVFS Root CA, completely ignoring the host operating system's root store.
+func NewDVFSUniversalCertPool() (*x509.CertPool, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(RootCAPEM)) {
+		return nil, fmt.Errorf("failed to append hardcoded DVFS Root CA certificate")
+	}
+	return pool, nil
+}

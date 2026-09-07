@@ -6,64 +6,99 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/scripts/gen-certs/pki"
 )
 
 func main() {
+	force := false
+	var filteredArgs []string
+	for _, arg := range os.Args[1:] {
+		if arg == "-force" || arg == "--force" {
+			force = true
+		} else {
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+
 	hostName := "localhost"
-	if len(os.Args) > 1 {
-		hostName = os.Args[1]
+	if len(filteredArgs) > 0 {
+		hostName = filteredArgs[0]
 	}
 
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(2026),
-		Subject: pkix.Name{
-			Organization: []string{"DVFS project"},
-			CommonName:   "DVFS CA",
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
+	certsDir := "certs"
+	caCertPath := filepath.Join(certsDir, "ca.crt")
+	caKeyPath := filepath.Join(certsDir, "ca.key")
+	serverCertPath := filepath.Join(certsDir, "server.crt")
+	serverKeyPath := filepath.Join(certsDir, "server.key")
+
+	// If certificates already exist and not forced, skip generation
+	if !force && hostName != "ca" && hostName != "--ca-only" {
+		if _, errCert := os.Stat(serverCertPath); errCert == nil {
+			if _, errKey := os.Stat(serverKeyPath); errKey == nil {
+				log.Printf("TLS certificates already exist in %s (server.crt, server.key). Skipping generation. Use -force to regenerate.", certsDir)
+				return
+			}
+		}
 	}
 
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	// 1. Load or Generate Root CA
+	var ca *pki.RootCA
+	var err error
+
+	if _, errCert := os.Stat(caCertPath); errCert == nil {
+		if _, errKey := os.Stat(caKeyPath); errKey == nil {
+			ca, err = pki.LoadCA(caCertPath, caKeyPath)
+			if err != nil {
+				log.Printf("[WARN] Existing CA could not be loaded (%v), generating fresh CA", err)
+				ca = nil
+			} else {
+				log.Printf("Loaded existing Root CA from %s (Subject: %s, Valid until: %s)",
+					caCertPath, ca.Certificate.Subject.CommonName, ca.Certificate.NotAfter.Format("2006-01-02"))
+			}
+		}
+	}
+
+	if ca == nil {
+		log.Printf("Generating new 10+ year Root CA...")
+		ca, err = pki.GenerateRootCA(pki.DefaultRootCAOptions())
+		if err != nil {
+			log.Fatalf("Failed to generate Root CA: %v", err)
+		}
+		if err := ca.Save(certsDir); err != nil {
+			log.Fatalf("Failed to save Root CA: %v", err)
+		}
+		log.Printf("Root CA saved to %s", certsDir)
+	}
+
+	if hostName == "ca" || hostName == "--ca-only" {
+		log.Printf("CA-only mode: Root CA generation completed.")
+		return
+	}
+
+	// 2. Generate Server Certificate signed by Root CA
+	serverSerial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		log.Fatal(err)
+		serverSerial = big.NewInt(time.Now().UnixNano())
 	}
-
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	caPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caBytes,
-	})
-
-	caPrivKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
-	})
 
 	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(2027),
+		SerialNumber: serverSerial,
 		Subject: pkix.Name{
-			Organization: []string{"DVFS project"},
+			Organization: []string{"DVFS Project"},
 			CommonName:   hostName,
 		},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(1, 0, 0),
-		SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		NotBefore:    time.Now().Add(-5 * time.Minute),
+		NotAfter:     time.Now().AddDate(2, 0, 0), // 2-year validity for server cert
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 	}
 
 	if ip := net.ParseIP(hostName); ip != nil {
@@ -78,18 +113,20 @@ func main() {
 
 	// Auto-include the machine's outbound LAN IP so remote clients work without extra flags
 	if lanIP := getOutboundIP(); lanIP != "127.0.0.1" {
-		cert.IPAddresses = append(cert.IPAddresses, net.ParseIP(lanIP))
-		log.Printf("Including LAN IP in cert SANs: %s", lanIP)
+		if parsed := net.ParseIP(lanIP); parsed != nil {
+			cert.IPAddresses = append(cert.IPAddresses, parsed)
+			log.Printf("Including LAN IP in cert SANs: %s", lanIP)
+		}
 	}
 
 	certPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to generate server key: %v", err)
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &certPrivKey.PublicKey, caPrivKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca.Certificate, &certPrivKey.PublicKey, ca.PrivateKey)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to sign server certificate: %v", err)
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{
@@ -102,12 +139,18 @@ func main() {
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
 
-	_ = os.WriteFile("certs/ca.crt", caPEM, 0644)
-	_ = os.WriteFile("certs/ca.key", caPrivKeyPEM, 0644)
-	_ = os.WriteFile("certs/server.crt", certPEM, 0644)
-	_ = os.WriteFile("certs/server.key", certPrivKeyPEM, 0644)
+	serverCertPath = filepath.Join(certsDir, "server.crt")
+	serverKeyPath = filepath.Join(certsDir, "server.key")
 
-	log.Printf("Certificates generated successfully for %s (including 'server' and 'localhost')\n", hostName)
+	if err := os.WriteFile(serverCertPath, certPEM, 0644); err != nil {
+		log.Fatalf("Failed to write server cert: %v", err)
+	}
+	if err := os.WriteFile(serverKeyPath, certPrivKeyPEM, 0600); err != nil {
+		log.Fatalf("Failed to write server key: %v", err)
+	}
+
+	fmt.Printf("Certificates generated successfully for %s (signed by '%s')\n",
+		hostName, ca.Certificate.Subject.CommonName)
 }
 
 // getOutboundIP returns the machine's preferred outbound IP.

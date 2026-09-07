@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
@@ -24,16 +25,14 @@ func main() {
 	ownIp := flag.String("own_ip", "127.0.0.1", "Own IP to advertise to meta server (e.g. 127.0.0.1)")
 	msRetry := flag.Duration("meta_retry_interval", 3*time.Second, "Retry interval for metaserver registration")
 	msHeartbeat := flag.Duration("meta_heartbeat_interval", 5*time.Second, "Heartbeat interval for metaserver liveness")
-	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
 	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
 	tlsKeyPath := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
-	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to CA certificate")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
 	// Create file server
-	server, err := fileserver.NewFileServer(*serverID, *rootDir, *useTLS, *msAddr, *caCertPath)
+	server, err := fileserver.NewFileServer(*serverID, *rootDir, *msAddr)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
@@ -51,14 +50,18 @@ func main() {
 	// Increase max receive message size to 64MB to support file upload chunks
 	// The default 4MB limit is too small once proto field overhead is added to a 4MB chunk.
 	opts = append(opts, grpc.MaxRecvMsgSize(64*1024*1024))
-	if *useTLS {
-		log.Println("TLS enabled")
-		tlsCert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsKeyPath)
-		if err != nil {
-			log.Fatalf("Failed to load key pair: %v", err)
+	if *tlsCertPath != "" && *tlsKeyPath != "" {
+		if _, errCert := os.Stat(*tlsCertPath); errCert == nil {
+			if _, errKey := os.Stat(*tlsKeyPath); errKey == nil {
+				tlsCert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsKeyPath)
+				if err != nil {
+					log.Fatalf("Failed to load key pair: %v", err)
+				}
+				creds := credentials.NewServerTLSFromCert(&tlsCert)
+				opts = append(opts, grpc.Creds(creds))
+				log.Println("TLS enabled with server certificate")
+			}
 		}
-		creds := credentials.NewServerTLSFromCert(&tlsCert)
-		opts = append(opts, grpc.Creds(creds))
 	}
 
 	// Start gRPC server

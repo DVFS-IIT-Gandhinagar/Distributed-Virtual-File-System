@@ -64,6 +64,9 @@ elif [ ! -f "./bin/admin" ]; then
     exit 1
 fi
 
+TLS_CERT="${TLS_CERT:-certs/server.crt}"
+TLS_KEY="${TLS_KEY:-certs/server.key}"
+
 echo "[STARTUP] Starting DVFS Admin Console..."
 echo "[STARTUP] Port:       ${ADMIN_PORT}"
 echo "[STARTUP] State File: ${STATE_FILE}"
@@ -72,6 +75,8 @@ echo "[STARTUP] SSH User:   ${SSH_USER}"
 echo "[STARTUP] SSH Key:    ${SSH_KEY}"
 echo "[STARTUP] SSH Port:   ${SSH_PORT}"
 echo "[STARTUP] Repo Path:  ${REPO_PATH}"
+echo "[STARTUP] TLS Cert:   ${TLS_CERT}"
+echo "[STARTUP] TLS Key:    ${TLS_KEY}"
 
 exec ./bin/admin \
   -port="${ADMIN_PORT}" \
@@ -81,4 +86,6 @@ exec ./bin/admin \
   -ssh_key="${SSH_KEY}" \
   -ssh_port="${SSH_PORT}" \
   -repo_path="${REPO_PATH}" \
+  -tls_cert="${TLS_CERT}" \
+  -tls_key="${TLS_KEY}" \
   "$@"

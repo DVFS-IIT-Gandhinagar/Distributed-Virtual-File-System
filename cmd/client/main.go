@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -17,9 +18,9 @@ func main() {
 	ip_addr := flag.String("ip_addr", "127.0.0.1", "enter ip_addr for mds/fs")
 	metaserver := flag.Bool("meta", true, "to go via metaserver or not")
 	port := flag.String("port", "", "enter port for mds/fs")
-	useTLS := flag.Bool("tls", false, "Enable TLS (default: false)")
-	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to CA certificate")
-
+	gistURL := flag.String("gist_url", "", "Custom GitHub Gist URL for dynamic node discovery")
+	useGist := flag.Bool("use_gist", true, "Use dynamic GitHub Gist discovery for cluster node IPs")
+	insecure := flag.Bool("insecure", false, "Disable TLS verification (mock unit testing only)")
 	flag.Parse()
 
 	if *port == "" {
@@ -30,8 +31,43 @@ func main() {
 		}
 	}
 
-	// Create client
-	c := client.NewClient(*username, *useTLS, *caCertPath)
+	ipExplicitlyProvided := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "ip_addr" {
+			ipExplicitlyProvided = true
+		}
+	})
+
+	var resolverOpts []client.DiscoveryOption
+	if *gistURL != "" {
+		resolverOpts = append(resolverOpts, client.WithGistURL(*gistURL))
+	}
+	resolver := client.NewDiscoveryResolver(resolverOpts...)
+
+	if *useGist {
+		log.Printf("[DISCOVERY] Querying cluster nodes from Gist...")
+		nodes, err := resolver.FetchNodes(context.Background())
+		if err != nil {
+			log.Printf("[DISCOVERY WARNING] Could not fetch nodes from Gist (%v); checking local cache / fallback", err)
+		} else {
+			log.Printf("[DISCOVERY] Discovered %d cluster nodes from Gist", len(nodes))
+		}
+
+		if !ipExplicitlyProvided && *metaserver {
+			if metaIP, ok := nodes["dvfs1"]; ok && metaIP != "" {
+				*ip_addr = metaIP
+				log.Printf("[DISCOVERY] Dynamic Metaserver (dvfs1) IP resolved: %s", *ip_addr)
+			}
+		}
+	}
+
+	// Create client (Root CA TLS is enabled by default)
+	var clientOpts []client.ClientOption
+	clientOpts = append(clientOpts, client.WithDiscovery(resolver))
+	if *insecure {
+		clientOpts = append(clientOpts, client.WithInsecure())
+	}
+	c := client.NewClient(*username, clientOpts...)
 	defer c.Disconnect()
 
 	// Handle graceful exit on Ctrl+C or kill signal

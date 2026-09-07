@@ -16,7 +16,46 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// RegisterWithMetaServer dials the meta server over TLS and registers this file
+// dialMetaServer dials the configured metaserver. If certs/ca.crt exists, it verifies TLS;
+// otherwise it falls back to plaintext (e.g. in mock unit tests).
+func (fs *FileServer) dialMetaServer() (*grpc.ClientConn, error) {
+	if fs.msAddr == "" {
+		return nil, fmt.Errorf("no metaserver address configured")
+	}
+
+	var opts []grpc.DialOption
+	caPath := "certs/ca.crt"
+	if _, err := os.Stat(caPath); os.IsNotExist(err) {
+		if _, errDev := os.Stat("deploy_certs/ca.crt"); errDev == nil {
+			caPath = "deploy_certs/ca.crt"
+		}
+	}
+	if _, err := os.Stat(caPath); err == nil {
+		caBytes, err := os.ReadFile(caPath)
+		if err == nil {
+			cp := x509.NewCertPool()
+			if cp.AppendCertsFromPEM(caBytes) {
+				host, _, err := net.SplitHostPort(fs.msAddr)
+				if err != nil {
+					host = fs.msAddr
+				}
+				serverName := host
+				if net.ParseIP(host) != nil {
+					serverName = "dvfs1"
+				}
+				creds := credentials.NewClientTLSFromCert(cp, serverName)
+				opts = append(opts, grpc.WithTransportCredentials(creds))
+			}
+		}
+	}
+	if len(opts) == 0 {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	return grpc.NewClient(fs.msAddr, opts...)
+}
+
+// RegisterWithMetaServer dials the meta server and registers this file
 // server along with all users it currently knows about.
 // selfAddr is the host:port that the meta server should store as this FS's address.
 // If msAddr is empty this is a no-op.
@@ -25,29 +64,7 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 		return nil
 	}
 
-	// Build the same CA-backed TLS config the client uses when talking to FS.
-	var opts []grpc.DialOption
-	if fs.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(fs.caCertPath)
-		if err != nil {
-			return fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return fmt.Errorf("failed to append CA certificate")
-		}
-
-		host, _, err := net.SplitHostPort(fs.msAddr)
-		if err != nil {
-			host = fs.msAddr
-		}
-		creds := credentials.NewClientTLSFromCert(cp, host)
-		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
-	}
-
-	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	conn, err := fs.dialMetaServer()
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}
@@ -130,29 +147,7 @@ func (fs *FileServer) RootShare(owner, name, path, share_with string) error {
 		return nil
 	}
 
-	// Build the same CA-backed TLS config the client uses when talking to FS.
-	var opts []grpc.DialOption
-	if fs.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(fs.caCertPath)
-		if err != nil {
-			return fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return fmt.Errorf("failed to append CA certificate")
-		}
-
-		host, _, err := net.SplitHostPort(fs.msAddr)
-		if err != nil {
-			host = fs.msAddr
-		}
-		creds := credentials.NewClientTLSFromCert(cp, host)
-		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
-	}
-
-	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	conn, err := fs.dialMetaServer()
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}
@@ -180,29 +175,7 @@ func (fs *FileServer) RootUnshare(owner, name, path, unshare_with string) error 
 		return nil
 	}
 
-	// Build the same CA-backed TLS config the client uses when talking to FS.
-	var opts []grpc.DialOption
-	if fs.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(fs.caCertPath)
-		if err != nil {
-			return fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return fmt.Errorf("failed to append CA certificate")
-		}
-
-		host, _, err := net.SplitHostPort(fs.msAddr)
-		if err != nil {
-			host = fs.msAddr
-		}
-		creds := credentials.NewClientTLSFromCert(cp, host)
-		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
-	}
-
-	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	conn, err := fs.dialMetaServer()
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}
@@ -231,28 +204,7 @@ func (fs *FileServer) HeartbeatWithMetaServer(selfAddr string) error {
 		return nil
 	}
 
-	var opts []grpc.DialOption
-	if fs.useTLS {
-		cp := x509.NewCertPool()
-		caBytes, err := os.ReadFile(fs.caCertPath)
-		if err != nil {
-			return fmt.Errorf("failed to read CA cert file: %v", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return fmt.Errorf("failed to append CA certificate")
-		}
-
-		host, _, err := net.SplitHostPort(fs.msAddr)
-		if err != nil {
-			host = fs.msAddr
-		}
-		creds := credentials.NewClientTLSFromCert(cp, host)
-		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
-	}
-
-	conn, err := grpc.NewClient(fs.msAddr, opts...)
+	conn, err := fs.dialMetaServer()
 	if err != nil {
 		return fmt.Errorf("failed to connect to meta server: %w", err)
 	}
