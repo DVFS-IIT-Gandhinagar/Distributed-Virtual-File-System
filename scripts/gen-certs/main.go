@@ -112,7 +112,7 @@ func main() {
 		cert.DNSNames = append(cert.DNSNames, hostName)
 	}
 
-	// Always include localhost and 'server' (for Docker) for convenience
+	// Always include localhost and 'server' for local testing convenience
 	cert.DNSNames = append(cert.DNSNames, "localhost", "server")
 	cert.IPAddresses = append(cert.IPAddresses, net.IPv4(127, 0, 0, 1))
 

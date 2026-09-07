@@ -8,6 +8,7 @@ metaserver_state.json
 *.dylib
 bin/
 dist/
+release/
 
 # Test binary and coverage
 *.test
