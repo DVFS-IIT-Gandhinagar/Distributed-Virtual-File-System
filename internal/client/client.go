@@ -15,6 +15,7 @@ import (
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 // ClientOption configures optional client settings (primarily for testing).
@@ -41,9 +42,17 @@ func WithDiscovery(resolver *DiscoveryResolver) ClientOption {
 	}
 }
 
+// WithAuthToken configures the client to use a bearer authentication token.
+func WithAuthToken(token string) ClientOption {
+	return func(c *Client) {
+		c.authToken = token
+	}
+}
+
 // Client provides basic VFS client functionality
 type Client struct {
 	username      string
+	authToken     string
 	root_user     string
 	root_path     string
 	display_name  string
@@ -98,6 +107,11 @@ func NewClient(username string, opts ...ClientOption) *Client {
 // Resolver returns the client's discovery resolver.
 func (c *Client) Resolver() *DiscoveryResolver {
 	return c.resolver
+}
+
+// AuthToken returns the active authentication token for this client session.
+func (c *Client) AuthToken() string {
+	return c.authToken
 }
 
 // AttachCacheHandler wires cache invalidation callbacks to the active cache handler.
@@ -177,6 +191,19 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		opts = append(opts, grpc.WithTransportCredentials(creds))
 	} else {
 		opts = append(opts, grpc.WithInsecure())
+	}
+
+	if c.authToken != "" {
+		token := c.authToken
+		authUnary := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, callOpts ...grpc.CallOption) error {
+			ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			return invoker(ctx, method, req, reply, cc, callOpts...)
+		}
+		authStream := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, callOpts ...grpc.CallOption) (grpc.ClientStream, error) {
+			ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			return streamer(ctx, desc, cc, method, callOpts...)
+		}
+		opts = append(opts, grpc.WithChainUnaryInterceptor(authUnary), grpc.WithChainStreamInterceptor(authStream))
 	}
 
 	// Connect to server

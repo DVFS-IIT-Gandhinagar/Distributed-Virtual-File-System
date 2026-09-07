@@ -1,4 +1,4 @@
-.PHONY: all build proto clean run-server run-client test test-client test-edge test-integration test-cover help certs certs-force certs-nodes certs-root-ca release release-client release-nodes
+.PHONY: all build build-google-auth build-no-auth proto clean run-server run-client test test-client test-edge test-admin test-integration test-cover test-google-auth help certs certs-force certs-nodes certs-root-ca release release-client release-nodes
 
 # Variables
 BINARY_DIR=bin
@@ -17,19 +17,37 @@ API_DIR=api
 GO=go
 PROTOC=protoc
 
+# Google Auth build tag configuration (Enabled by default: USE_GOOGLE_AUTH=1)
+USE_GOOGLE_AUTH ?= 1
+ifeq ($(USE_GOOGLE_AUTH),1)
+    TAGS := -tags use_google_auth
+    AUTH_MSG := (Google Auth enabled)
+else
+    TAGS :=
+    AUTH_MSG := (Google Auth disabled)
+endif
+
 all: build
 
 # Build all binaries
 build:
-	@echo "Building file server..."
-	@$(GO) build -o $(FILESERVER_BINARY) cmd/fileserver/main.go
-	@echo "Building client..."
-	@$(GO) build -o $(CLIENT_BINARY) cmd/client/main.go
-	@echo "Building meta server..."
-	@$(GO) build -o $(METASERVER_BINARY) cmd/metaserver/main.go
-	@echo "Building admin server..."
-	@$(GO) build -o $(ADMIN_BINARY) cmd/admin/main.go
+	@echo "Building file server $(AUTH_MSG)..."
+	@$(GO) build $(TAGS) -o $(FILESERVER_BINARY) ./cmd/fileserver
+	@echo "Building client $(AUTH_MSG)..."
+	@$(GO) build $(TAGS) -o $(CLIENT_BINARY) ./cmd/client
+	@echo "Building meta server $(AUTH_MSG)..."
+	@$(GO) build $(TAGS) -o $(METASERVER_BINARY) ./cmd/metaserver
+	@echo "Building admin server $(AUTH_MSG)..."
+	@$(GO) build $(TAGS) -o $(ADMIN_BINARY) ./cmd/admin
 	@echo "Build complete!"
+
+# Build with Google Auth enabled explicitly
+build-google-auth:
+	@$(MAKE) build USE_GOOGLE_AUTH=1
+
+# Build without Google Auth (standard legacy behavior)
+build-no-auth:
+	@$(MAKE) build USE_GOOGLE_AUTH=0
 
 
 # Generate protobuf code
@@ -129,6 +147,12 @@ test-cover:
 	@$(GO) test ./... -count=1 -coverprofile=coverage.out -covermode=atomic
 	@$(GO) tool cover -func=coverage.out
 	@echo "Coverage report written to coverage.out"
+
+# Run all tests with Google Auth tag
+test-google-auth:
+	@echo "Running tests with Google Auth enabled..."
+	@$(GO) test -tags use_google_auth ./... -count=1 -v
+	@echo "Google Auth tests complete!"
 
 # Help
 help:

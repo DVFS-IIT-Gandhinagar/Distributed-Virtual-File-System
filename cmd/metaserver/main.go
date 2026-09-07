@@ -55,6 +55,11 @@ func main() {
 		}
 	}
 
+	if interceptor := metaserver.GetServerAuthInterceptor(); interceptor != nil {
+		opts = append(opts, grpc.UnaryInterceptor(interceptor))
+		log.Println("[AUTH] Google Authentication enforcement enabled on metaserver")
+	}
+
 	// Start gRPC server
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterMetaServerServer(grpcServer, handler)

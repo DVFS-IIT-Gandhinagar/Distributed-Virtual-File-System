@@ -61,11 +61,20 @@ func main() {
 		}
 	}
 
+	authedUser, token, err := performUserAuth(*username)
+	if err != nil {
+		log.Fatalf("[AUTH] Authentication failed: %v", err)
+	}
+	*username = authedUser
+
 	// Create client (Root CA TLS is enabled by default)
 	var clientOpts []client.ClientOption
 	clientOpts = append(clientOpts, client.WithDiscovery(resolver))
 	if *insecure {
 		clientOpts = append(clientOpts, client.WithInsecure())
+	}
+	if token != "" {
+		clientOpts = append(clientOpts, client.WithAuthToken(token))
 	}
 	c := client.NewClient(*username, clientOpts...)
 	defer c.Disconnect()

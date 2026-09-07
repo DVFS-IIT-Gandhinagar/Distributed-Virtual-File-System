@@ -8,6 +8,7 @@ import (
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 // GetRoots gets the accessible roots to the user from the metaserver
@@ -56,7 +57,11 @@ func (client *Client) GetRoots(msAddr string) ([]SharedRoot, error) {
 	defer conn.Close()
 
 	mc := mspb.NewMetaServerClient(conn)
-	resp, err := mc.GetRoots(context.Background(), &mspb.GetRootsRequest{
+	ctx := context.Background()
+	if client.authToken != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+client.authToken)
+	}
+	resp, err := mc.GetRoots(ctx, &mspb.GetRootsRequest{
 		Username: client.username,
 	})
 	if err != nil {
@@ -122,7 +127,11 @@ func (client *Client) NavigateToFileServer(msAddr string) (string, error) {
 	defer conn.Close()
 
 	mc := mspb.NewMetaServerClient(conn)
-	resp, err := mc.Navigate(context.Background(), &mspb.NavigateRequest{
+	ctx := context.Background()
+	if client.authToken != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+client.authToken)
+	}
+	resp, err := mc.Navigate(ctx, &mspb.NavigateRequest{
 		Username: client.username,
 		RootUser: client.root_user,
 	})
