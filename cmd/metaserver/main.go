@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"log"
@@ -23,6 +24,7 @@ func main() {
 	heartbeatCheckInterval := flag.Duration("heartbeat_check_interval", 5*time.Second, "Interval to evaluate fileserver liveness")
 	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
 	tlsKeyPath := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
+	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to Root CA certificate for mTLS client verification")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -48,7 +50,27 @@ func main() {
 				if err != nil {
 					log.Fatalf("Failed to load key pair: %v", err)
 				}
-				creds := credentials.NewServerTLSFromCert(&tlsCert)
+				tlsConfig := &tls.Config{
+					Certificates: []tls.Certificate{tlsCert},
+					ClientAuth:   tls.RequestClientCert,
+				}
+
+				caPath := *caCertPath
+				if _, err := os.Stat(caPath); os.IsNotExist(err) {
+					if _, errDev := os.Stat("deploy_certs/ca.crt"); errDev == nil {
+						caPath = "deploy_certs/ca.crt"
+					}
+				}
+				if caBytes, err := os.ReadFile(caPath); err == nil {
+					cp := x509.NewCertPool()
+					if cp.AppendCertsFromPEM(caBytes) {
+						tlsConfig.ClientCAs = cp
+						tlsConfig.ClientAuth = tls.VerifyClientCertIfGiven
+						log.Printf("mTLS client verification enabled with CA from %s", caPath)
+					}
+				}
+
+				creds := credentials.NewTLS(tlsConfig)
 				opts = append(opts, grpc.Creds(creds))
 				log.Println("TLS enabled with server certificate")
 			}

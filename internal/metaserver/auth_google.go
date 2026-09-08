@@ -90,19 +90,37 @@ func verifyClusterPeer(ctx context.Context) error {
 	}
 
 	cert := tlsInfo.State.PeerCertificates[0]
-	authorized := false
-	for _, dns := range cert.DNSNames {
-		if strings.HasSuffix(dns, ".cluster.local") || dns == "fileserver" || dns == "localhost" {
-			authorized = true
-			break
+	authorized := isAuthorizedClusterIdentity(cert.Subject.CommonName)
+	if !authorized {
+		for _, dns := range cert.DNSNames {
+			if isAuthorizedClusterIdentity(dns) {
+				authorized = true
+				break
+			}
 		}
-	}
-	if !authorized && (strings.HasSuffix(cert.Subject.CommonName, ".cluster.local") || cert.Subject.CommonName == "fileserver" || cert.Subject.CommonName == "localhost") {
-		authorized = true
 	}
 	if !authorized {
 		return status.Errorf(codes.PermissionDenied, "unauthorized cluster node certificate: %s", cert.Subject.CommonName)
 	}
 
 	return nil
+}
+
+func isAuthorizedClusterIdentity(name string) bool {
+	if name == "" {
+		return false
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "localhost" || name == "127.0.0.1" || name == "fileserver" || name == "metaserver" || name == "mds" {
+		return true
+	}
+	if strings.HasPrefix(name, "dvfs") || strings.HasPrefix(name, "fs") {
+		return true
+	}
+	if strings.HasSuffix(name, ".cluster.local") ||
+		strings.HasSuffix(name, ".dvfs.cluster") ||
+		strings.HasSuffix(name, ".local") {
+		return true
+	}
+	return false
 }

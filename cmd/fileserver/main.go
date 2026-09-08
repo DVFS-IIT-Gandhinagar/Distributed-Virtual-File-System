@@ -27,6 +27,7 @@ func main() {
 	msHeartbeat := flag.Duration("meta_heartbeat_interval", 5*time.Second, "Heartbeat interval for metaserver liveness")
 	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
 	tlsKeyPath := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
+	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to Root CA certificate")
 	flag.Parse()
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -36,6 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}
+	server.SetTLSCredentials(*tlsCertPath, *tlsKeyPath, *caCertPath)
 
 	// Start metrics HTTP sidecar (port = gRPC port - 41000, e.g. 50052 -> 9052)
 	metricsPort := *port - 41000

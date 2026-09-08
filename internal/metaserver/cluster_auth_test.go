@@ -102,7 +102,30 @@ func TestClusterAuthInterceptor_mTLSEnforcement(t *testing.T) {
 		assert.Equal(t, "cluster_registered", res)
 	})
 
-	// 5. In mock mode, missing peer info is allowed
+	// 5. Peer with dvfs1..dvfs9 CommonName succeeds
+	t.Run("AuthorizedDVFSNodeNamePasses", func(t *testing.T) {
+		t.Setenv("DVFS_AUTH_MOCK", "false")
+
+		validCert := &x509.Certificate{
+			Subject:  pkix.Name{CommonName: "dvfs1"},
+			DNSNames: []string{"dvfs1", "dvfs1.local", "dvfs1.dvfs.cluster", "localhost"},
+		}
+		tlsInfo := credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{validCert},
+			},
+		}
+		p := &peer.Peer{AuthInfo: tlsInfo}
+		ctxWithPeer := peer.NewContext(context.Background(), p)
+
+		res, err := interceptor(ctxWithPeer, req, clusterInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+			return "cluster_registered", nil
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "cluster_registered", res)
+	})
+
+	// 6. In mock mode, missing peer info is allowed
 	t.Run("MockModeAllowsNoPeer", func(t *testing.T) {
 		t.Setenv("DVFS_AUTH_MOCK", "true")
 

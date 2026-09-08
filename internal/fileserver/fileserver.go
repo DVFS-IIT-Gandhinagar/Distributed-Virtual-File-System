@@ -39,6 +39,9 @@ type FileServer struct {
 	quotas       map[string]uint64 // username -> quota in bytes
 	inodeStore   *InodeStore
 	opMetrics    *OperationMetrics
+	tlsCertPath  string
+	tlsKeyPath   string
+	caCertPath   string
 }
 
 type trashEntry struct {
@@ -118,6 +121,22 @@ func NewFileServer(serverID, rootDir string, msAddr string) (*FileServer, error)
 // SessionStore returns the decoupled SessionStore instance.
 func (fs *FileServer) SessionStore() *session.Store {
 	return fs.sessionStore
+}
+
+// SetTLSCredentials configures the TLS certificate paths for mTLS client operations.
+func (fs *FileServer) SetTLSCredentials(certPath, keyPath, caCertPath string) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	fs.tlsCertPath = certPath
+	fs.tlsKeyPath = keyPath
+	fs.caCertPath = caCertPath
+}
+
+// GetTLSCredentials returns the configured TLS certificate paths.
+func (fs *FileServer) GetTLSCredentials() (string, string, string) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	return fs.tlsCertPath, fs.tlsKeyPath, fs.caCertPath
 }
 
 // Permission defines the access levels for Centralized Policy Enforcement.
