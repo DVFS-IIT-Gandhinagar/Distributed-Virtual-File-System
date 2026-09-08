@@ -3,14 +3,17 @@ package admin
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type mockFileServer struct {
@@ -195,6 +198,69 @@ func TestHandleUserQuotaSuccess(t *testing.T) {
 	}
 
 	// Verify cached metrics updated immediately
+	if q := admin.nodes["0"].Metrics.PerUserQuota["alice"]; q != newQuota {
+		t.Errorf("expected cached quota %d, got %d", newQuota, q)
+	}
+}
+
+func TestHandleUserQuotaSuccessTLS(t *testing.T) {
+	certFile := "../../deploy_certs/localhost/server.crt"
+	keyFile := "../../deploy_certs/localhost/server.key"
+	if _, err := os.Stat(certFile); os.IsNotExist(err) {
+		certFile = "deploy_certs/localhost/server.crt"
+		keyFile = "deploy_certs/localhost/server.key"
+	}
+	tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Skipf("skipping TLS test, deploy_certs not found: %v", err)
+	}
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	mockSrv := &mockFileServer{}
+	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewServerTLSFromCert(&tlsCert)))
+	pb.RegisterFileServerServer(grpcServer, mockSrv)
+	go grpcServer.Serve(lis)
+	defer grpcServer.Stop()
+
+	serverAddr := lis.Addr().String()
+
+	admin := NewAdminServer("", "")
+	admin.users["alice"] = "0"
+	admin.nodes["0"] = &NodeState{
+		FsID:    "0",
+		Address: serverAddr,
+		Metrics: &FileserverMetrics{
+			PerUserQuota: map[string]uint64{
+				"alice": 1024 * 1024 * 1024,
+			},
+		},
+	}
+
+	newQuota := uint64(5 * 1024 * 1024 * 1024)
+	payload := SetQuotaPayload{QuotaBytes: newQuota}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/users/alice/quota", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	admin.handleUserQuota(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body: %s", rec.Code, rec.Body.String())
+	}
+
+	if mockSrv.receivedUser != "alice" {
+		t.Errorf("expected mock to receive user 'alice', got %s", mockSrv.receivedUser)
+	}
+	if mockSrv.receivedQuota != newQuota {
+		t.Errorf("expected mock to receive quota %d, got %d", newQuota, mockSrv.receivedQuota)
+	}
+
 	if q := admin.nodes["0"].Metrics.PerUserQuota["alice"]; q != newQuota {
 		t.Errorf("expected cached quota %d, got %d", newQuota, q)
 	}

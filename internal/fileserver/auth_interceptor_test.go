@@ -221,3 +221,56 @@ func TestGRPCHandler_SessionLifecycle(t *testing.T) {
 	assert.Equal(t, session.ErrSessionNotFound, err, "Session must be revoked upon UnregisterClient")
 }
 
+func TestUnaryAuthInterceptor_SetQuotaAdminBypass(t *testing.T) {
+	interceptor := GetServerAuthInterceptor()
+
+	infoSetQuota := &grpc.UnaryServerInfo{
+		FullMethod: "/fileserver.FileServer/SetQuota",
+	}
+	reqSetQuota := &pb.SetQuotaRequest{
+		Username:   "alice",
+		QuotaBytes: 1024 * 1024,
+	}
+
+	// 1. Missing metadata -> unauthenticated
+	_, err := interceptor(context.Background(), reqSetQuota, infoSetQuota, func(ctx context.Context, req interface{}) (interface{}, error) {
+		return "ok", nil
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	// 2. Empty authorization and no admin hash -> unauthenticated
+	emptyMD := metadata.New(map[string]string{"foo": "bar"})
+	ctxEmptyMD := metadata.NewIncomingContext(context.Background(), emptyMD)
+	_, err = interceptor(ctxEmptyMD, reqSetQuota, infoSetQuota, func(ctx context.Context, req interface{}) (interface{}, error) {
+		return "ok", nil
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	// 3. With x-admin-password-hash -> passes through to handler
+	adminMD := metadata.New(map[string]string{"x-admin-password-hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"})
+	ctxAdminMD := metadata.NewIncomingContext(context.Background(), adminMD)
+	handlerCalled := false
+	res, err := interceptor(ctxAdminMD, reqSetQuota, infoSetQuota, func(ctx context.Context, req interface{}) (interface{}, error) {
+		handlerCalled = true
+		return "handler_called", nil
+	})
+	require.NoError(t, err)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, "handler_called", res)
+
+	// 4. With x-admin-password -> passes through to handler
+	passMD := metadata.New(map[string]string{"x-admin-password": "secretpassword"})
+	ctxPassMD := metadata.NewIncomingContext(context.Background(), passMD)
+	handlerPassCalled := false
+	resPass, err := interceptor(ctxPassMD, reqSetQuota, infoSetQuota, func(ctx context.Context, req interface{}) (interface{}, error) {
+		handlerPassCalled = true
+		return "handler_pass_called", nil
+	})
+	require.NoError(t, err)
+	assert.True(t, handlerPassCalled)
+	assert.Equal(t, "handler_pass_called", resPass)
+}
+
+

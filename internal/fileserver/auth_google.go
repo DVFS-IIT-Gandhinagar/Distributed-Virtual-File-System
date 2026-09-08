@@ -59,6 +59,14 @@ func GetServerAuthInterceptor() grpc.UnaryServerInterceptor {
 			return nil, status.Errorf(codes.Unauthenticated, "missing authorization metadata in request")
 		}
 
+		// Allow administrative password-authenticated calls to SetQuota to proceed to handler
+		// where GRPCHandler.SetQuota performs constant-time ADMIN_PASSWORD_HASH verification.
+		if info.FullMethod == "/fileserver.FileServer/SetQuota" {
+			if len(md.Get("x-admin-password-hash")) > 0 || len(md.Get("x-admin-password")) > 0 {
+				return handler(ctx, req)
+			}
+		}
+
 		authHeaders := md.Get("authorization")
 		if len(authHeaders) == 0 || !strings.HasPrefix(authHeaders[0], "Bearer ") {
 			return nil, status.Errorf(codes.Unauthenticated, "missing or malformed Bearer authorization header")
