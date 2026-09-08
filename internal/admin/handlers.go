@@ -85,8 +85,11 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 		clusterErrorRatePct = (totalErrorOps / totalOps) * 100.0
 	}
 
-	// Deterministically sort nodes by numerical ID (0, 1, ... 8)
+	// Deterministically sort nodes by DisplayID, falling back to numerical FsID
 	sort.Slice(nodes, func(i, j int) bool {
+		if nodes[i].DisplayID > 0 && nodes[j].DisplayID > 0 && nodes[i].DisplayID != nodes[j].DisplayID {
+			return nodes[i].DisplayID < nodes[j].DisplayID
+		}
 		id1, err1 := strconv.Atoi(nodes[i].FsID)
 		id2, err2 := strconv.Atoi(nodes[j].FsID)
 		if err1 == nil && err2 == nil {
@@ -266,26 +269,39 @@ func (a *AdminServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 	userList := make([]UserSummary, 0, len(a.users))
 	for username, homeFsID := range a.users {
 		homeDisplayID := 1
-		if num, parseErr := strconv.Atoi(homeFsID); parseErr == nil {
+		homeDisplayName := ""
+		homeMachineName := ""
+		homeAddress := ""
+		if homeNode, exists := a.nodes[homeFsID]; exists {
+			homeAddress = homeNode.Address
+			if homeNode.DisplayID > 0 {
+				homeDisplayID = homeNode.DisplayID
+			} else if num, parseErr := strconv.Atoi(homeFsID); parseErr == nil {
+				homeDisplayID = num + 1
+			}
+			homeDisplayName = homeNode.DisplayName
+			homeMachineName = homeNode.MachineName
+		} else if num, parseErr := strconv.Atoi(homeFsID); parseErr == nil {
 			homeDisplayID = num + 1
 		}
+		if homeDisplayName == "" {
+			homeDisplayName = fmt.Sprintf("FS-%d", homeDisplayID)
+		}
+		if homeMachineName == "" {
+			homeMachineName = fmt.Sprintf("dvfs%d", homeDisplayID)
+		}
+
 		summary := UserSummary{
 			Username:      username,
 			HomeFsID:      homeFsID,
-			HomeFsDisplay: fmt.Sprintf("FS-%d", homeDisplayID),
-			HomeFsMachine: fmt.Sprintf("dvfs%d", homeDisplayID),
+			HomeFsAddress: homeAddress,
+			HomeFsDisplay: homeDisplayName,
+			HomeFsMachine: homeMachineName,
 			QuotaLimit:    1024 * 1024 * 1024, // 1 GB default
 			Nodes:         make([]NodeUserStorage, 0),
 		}
 
 		if homeNode, exists := a.nodes[homeFsID]; exists {
-			summary.HomeFsAddress = homeNode.Address
-			if homeNode.DisplayName != "" {
-				summary.HomeFsDisplay = homeNode.DisplayName
-			}
-			if homeNode.MachineName != "" {
-				summary.HomeFsMachine = homeNode.MachineName
-			}
 			if homeNode.Metrics != nil {
 				if q, ok := homeNode.Metrics.PerUserQuota[username]; ok && q > 0 {
 					summary.QuotaLimit = q
@@ -300,9 +316,13 @@ func (a *AdminServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 				used, hasUsed := node.Metrics.PerUserStorage[username]
 				quota, hasQuota := node.Metrics.PerUserQuota[username]
 				if hasUsed || hasQuota {
-					nodeDisplayID := 1
-					if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
-						nodeDisplayID = num + 1
+					nodeDisplayID := node.DisplayID
+					if nodeDisplayID <= 0 {
+						if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
+							nodeDisplayID = num + 1
+						} else {
+							nodeDisplayID = 1
+						}
 					}
 					nodeDisplayName := node.DisplayName
 					if nodeDisplayName == "" {
@@ -343,8 +363,11 @@ func (a *AdminServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			summary.UsagePercent = float64(summary.QuotaUsed) / float64(summary.QuotaLimit) * 100.0
 		}
 
-		// Sort user's nodes list deterministically by numerical ID
+		// Sort user's nodes list deterministically by DisplayID or numerical ID
 		sort.Slice(summary.Nodes, func(i, j int) bool {
+			if summary.Nodes[i].DisplayID > 0 && summary.Nodes[j].DisplayID > 0 && summary.Nodes[i].DisplayID != summary.Nodes[j].DisplayID {
+				return summary.Nodes[i].DisplayID < summary.Nodes[j].DisplayID
+			}
 			id1, err1 := strconv.Atoi(summary.Nodes[i].FsID)
 			id2, err2 := strconv.Atoi(summary.Nodes[j].FsID)
 			if err1 == nil && err2 == nil {
@@ -605,6 +628,9 @@ func (a *AdminServer) handlePerformance(w http.ResponseWriter, r *http.Request) 
 	}
 
 	sort.Slice(perfNodes, func(i, j int) bool {
+		if perfNodes[i].DisplayID > 0 && perfNodes[j].DisplayID > 0 && perfNodes[i].DisplayID != perfNodes[j].DisplayID {
+			return perfNodes[i].DisplayID < perfNodes[j].DisplayID
+		}
 		id1, err1 := strconv.Atoi(perfNodes[i].FsID)
 		id2, err2 := strconv.Atoi(perfNodes[j].FsID)
 		if err1 == nil && err2 == nil {
@@ -655,6 +681,9 @@ func (a *AdminServer) handlePerformanceExport(w http.ResponseWriter, r *http.Req
 	}
 
 	sort.Slice(exportNodes, func(i, j int) bool {
+		if exportNodes[i].DisplayID > 0 && exportNodes[j].DisplayID > 0 && exportNodes[i].DisplayID != exportNodes[j].DisplayID {
+			return exportNodes[i].DisplayID < exportNodes[j].DisplayID
+		}
 		id1, err1 := strconv.Atoi(exportNodes[i].FsID)
 		id2, err2 := strconv.Atoi(exportNodes[j].FsID)
 		if err1 == nil && err2 == nil {

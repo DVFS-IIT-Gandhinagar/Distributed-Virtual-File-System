@@ -66,6 +66,7 @@ fi
 
 TLS_CERT="${TLS_CERT:-certs/server.crt}"
 TLS_KEY="${TLS_KEY:-certs/server.key}"
+GIST_URL="https://gist.githubusercontent.com/dvfs-iitgn/6eb8da397735b83f76b54af4cca64c83/raw/machines.json"
 
 echo "[STARTUP] Starting DVFS Admin Console..."
 echo "[STARTUP] Port:       ${ADMIN_PORT}"

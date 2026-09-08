@@ -62,7 +62,7 @@ export default function Users() {
           cmp = a.username.localeCompare(b.username);
           break;
         case 'home_node':
-          cmp = a.home_fs_id.localeCompare(b.home_fs_id, undefined, { numeric: true });
+          cmp = (a.home_fs_display || a.home_fs_id).localeCompare(b.home_fs_display || b.home_fs_id, undefined, { numeric: true });
           break;
         case 'used_storage':
           cmp = a.quota_used - b.quota_used;
@@ -299,13 +299,13 @@ export default function Users() {
                                   </span>
                                 )}
                               </div>
-                              <small className="text-muted">Home {formatNodeDisplayName(u.home_fs_id)} ({formatMachineName(u.home_fs_id)})</small>
+                              <small className="text-muted">Home {u.home_fs_display || formatNodeDisplayName(u)} ({u.home_fs_machine || formatMachineName(u)})</small>
                             </div>
                           </div>
                         </td>
                         <td>
                           <span className="badge bg-secondary bg-opacity-10 text-secondary border">
-                            <i className="bi bi-server me-1"></i>{formatNodeDisplayName(u.home_fs_id)}
+                            <i className="bi bi-server me-1"></i>{u.home_fs_display || formatNodeDisplayName(u)}
                           </span>
                         </td>
                         <td className="fw-medium">{formatBytes(u.quota_used)}</td>
@@ -387,7 +387,7 @@ export default function Users() {
                                         <ResponsiveContainer>
                                           <BarChart
                                             data={u.nodes.map((n) => ({
-                                              name: `${formatNodeDisplayName(n.fs_id)} (${formatMachineName(n.fs_id)})`,
+                                              name: `${n.display_name || formatNodeDisplayName(n)} (${n.machine_name || formatMachineName(n)})`,
                                               used: Number((n.used_bytes / (1024 * 1024)).toFixed(2)),
                                             }))}
                                             layout="vertical"
@@ -407,7 +407,7 @@ export default function Users() {
                                         {u.nodes.map((n) => (
                                           <li key={n.fs_id} className="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
                                             <div>
-                                              <span className="fw-semibold">Node {formatNodeDisplayName(n.fs_id)} ({formatMachineName(n.fs_id)})</span>
+                                              <span className="fw-semibold">Node {n.display_name || formatNodeDisplayName(n)} ({n.machine_name || formatMachineName(n)})</span>
                                               <small className="text-muted d-block">{n.address}</small>
                                             </div>
                                             <span className="fw-medium text-dark">{formatBytes(n.used_bytes)}</span>
@@ -527,7 +527,7 @@ export default function Users() {
                   <div className="bg-light p-3 rounded mb-3 small">
                     <div className="d-flex justify-content-between mb-1">
                       <span className="text-muted">Target Home Fileserver:</span>
-                      <span className="fw-semibold">FS-{editingUser.home_fs_id} ({editingUser.home_fs_address})</span>
+                      <span className="fw-semibold">{editingUser.home_fs_display || formatNodeDisplayName(editingUser)} ({editingUser.home_fs_machine ? `${editingUser.home_fs_machine} · ` : ''}{editingUser.home_fs_address})</span>
                     </div>
                     <div className="d-flex justify-content-between mb-1">
                       <span className="text-muted">Current Storage Used:</span>
