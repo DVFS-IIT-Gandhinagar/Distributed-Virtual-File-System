@@ -3,9 +3,9 @@
 Welcome to the technical documentation for the **Distributed Virtual File System (DVFS)** — an Andrew File System (AFS)-inspired, high-performance distributed virtual file system implemented in Go, communicating over gRPC, and secured with Zero-Trust mutual TLS.
 
 <div style="display: flex; gap: 0.8rem; flex-wrap: wrap; margin: 1.2rem 0;">
-  <a href="downloads.md" class="md-button md-button--primary">Download Client</a>
-  <a href="setup.md" class="md-button">Setup Guide</a>
-  <a href="architecture.md" class="md-button">Architecture</a>
+  <a href="downloads" class="md-button md-button--primary">Download Client</a>
+  <a href="setup" class="md-button">Setup Guide</a>
+  <a href="architecture" class="md-button">Architecture</a>
 </div>
 
 ---
