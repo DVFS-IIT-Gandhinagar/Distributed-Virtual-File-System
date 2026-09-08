@@ -89,19 +89,47 @@ export interface CachedNodeInfo {
 
 const clusterNodesCache = new Map<string, CachedNodeInfo>();
 
-export function updateClusterNodesCache(nodes: any[]): void {
+export function clearClusterNodesCache(): void {
+  clusterNodesCache.clear();
+}
+
+export function updateClusterNodesCache(nodes: any[], fullSync: boolean = false): void {
   if (!Array.isArray(nodes)) return;
-  for (const n of nodes) {
-    if (!n) continue;
-    const id = String(n.fsID ?? n.fs_id ?? '');
-    if (id !== '') {
-      clusterNodesCache.set(id, {
-        fsID: id,
-        displayID: n.displayID ?? n.display_id,
-        displayName: n.displayName ?? n.display_name,
-        machineName: n.machineName ?? n.machine_name,
-        address: n.address,
-      });
+  if (fullSync) {
+    const activeIds = new Set<string>();
+    for (const n of nodes) {
+      if (!n) continue;
+      const id = String(n.fsID ?? n.fs_id ?? '');
+      if (id !== '') {
+        activeIds.add(id);
+        clusterNodesCache.set(id, {
+          fsID: id,
+          displayID: n.displayID ?? n.display_id,
+          displayName: n.displayName ?? n.display_name,
+          machineName: n.machineName ?? n.machine_name,
+          address: n.address,
+        });
+      }
+    }
+    // Prune deleted/removed nodes that are no longer in the authoritative cluster response
+    for (const key of Array.from(clusterNodesCache.keys())) {
+      if (!activeIds.has(key)) {
+        clusterNodesCache.delete(key);
+      }
+    }
+  } else {
+    for (const n of nodes) {
+      if (!n) continue;
+      const id = String(n.fsID ?? n.fs_id ?? '');
+      if (id !== '') {
+        clusterNodesCache.set(id, {
+          fsID: id,
+          displayID: n.displayID ?? n.display_id,
+          displayName: n.displayName ?? n.display_name,
+          machineName: n.machineName ?? n.machine_name,
+          address: n.address,
+        });
+      }
     }
   }
 }

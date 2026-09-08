@@ -74,7 +74,7 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
       <div
         className={`offcanvas offcanvas-end ${show ? 'show' : ''}`}
         tabIndex={-1}
-        style={{ width: 550, zIndex: 1045, visibility: show ? 'visible' : 'hidden' }}
+        style={{ width: 'min(550px, 100vw)', maxWidth: '100vw', zIndex: 1045, visibility: show ? 'visible' : 'hidden' }}
         aria-label={`Node ${formatNodeDisplayName(node)} details`}
       >
         {/* Header */}

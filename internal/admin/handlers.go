@@ -21,6 +21,7 @@ type ClusterResponse struct {
 	Users               map[string]string `json:"users"`
 	NodeCount           int               `json:"node_count"`
 	OnlineCount         int               `json:"online_count"`
+	ActiveCount         int               `json:"active_count"`
 	TotalStorageBytes   uint64            `json:"total_storage_bytes"`
 	UsedStorageBytes    uint64            `json:"used_storage_bytes"`
 	TotalUsers          int               `json:"total_users"`
@@ -46,6 +47,7 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 
 	nodes := make([]*NodeState, 0, len(a.nodes))
 	onlineCount := 0
+	activeCount := 0
 	var totalStorage uint64
 	var usedStorage uint64
 	onlineUsersMap := make(map[string]struct{})
@@ -59,8 +61,11 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 
 	for _, n := range a.nodes {
 		nodes = append(nodes, n)
-		if n.Status == StatusOnline || n.Status == StatusWarning || n.Status == StatusDegraded || n.Status == StatusCritical {
+		if n.Status == StatusOnline {
 			onlineCount++
+		}
+		if n.Status == StatusOnline || n.Status == StatusWarning || n.Status == StatusDegraded || n.Status == StatusCritical {
+			activeCount++
 			if n.Metrics != nil {
 				for _, u := range n.Metrics.ActiveUsers {
 					onlineUsersMap[u] = struct{}{}
@@ -140,6 +145,7 @@ func (a *AdminServer) handleCluster(w http.ResponseWriter, r *http.Request) {
 		Users:               usersCopy,
 		NodeCount:           len(nodes),
 		OnlineCount:         onlineCount,
+		ActiveCount:         activeCount,
 		TotalStorageBytes:   totalStorage,
 		UsedStorageBytes:    usedStorage,
 		TotalUsers:          totalUsersCount,

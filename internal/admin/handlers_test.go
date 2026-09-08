@@ -171,3 +171,37 @@ func TestSpaHandler(t *testing.T) {
 		t.Errorf("expected 404 for /api/ routes, got code=%d", recAPI.Code)
 	}
 }
+
+func TestHandleCluster_OnlineVsUnhealthyCounts(t *testing.T) {
+	admin := NewAdminServer("", "")
+	admin.authManager = nil
+
+	admin.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052", Status: StatusOnline}
+	admin.nodes["1"] = &NodeState{FsID: "1", Address: "10.0.0.2:50052", Status: StatusWarning}
+	admin.nodes["2"] = &NodeState{FsID: "2", Address: "10.0.0.3:50052", Status: StatusDegraded}
+	admin.nodes["3"] = &NodeState{FsID: "3", Address: "10.0.0.4:50052", Status: StatusCritical}
+	admin.nodes["4"] = &NodeState{FsID: "4", Address: "10.0.0.5:50052", Status: StatusOffline}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cluster", nil)
+	rec := httptest.NewRecorder()
+	admin.handleCluster(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp ClusterResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.NodeCount != 5 {
+		t.Errorf("expected NodeCount=5, got %d", resp.NodeCount)
+	}
+	if resp.OnlineCount != 1 {
+		t.Errorf("expected OnlineCount=1 (only healthy StatusOnline), got %d", resp.OnlineCount)
+	}
+	if resp.ActiveCount != 4 {
+		t.Errorf("expected ActiveCount=4 (reachable non-offline nodes), got %d", resp.ActiveCount)
+	}
+}

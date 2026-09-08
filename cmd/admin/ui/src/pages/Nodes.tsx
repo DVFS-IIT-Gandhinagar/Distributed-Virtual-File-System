@@ -27,6 +27,45 @@ export default function Nodes() {
     });
   }, [cluster?.nodes]);
 
+  const nodeCounts = useMemo(() => {
+    let online = 0;
+    let warning = 0;
+    let degraded = 0;
+    let critical = 0;
+    let offline = 0;
+
+    for (const node of cluster?.nodes || []) {
+      switch (node.status) {
+        case 'online':
+          online++;
+          break;
+        case 'warning':
+          warning++;
+          break;
+        case 'degraded':
+          degraded++;
+          break;
+        case 'critical':
+          critical++;
+          break;
+        case 'offline':
+        default:
+          offline++;
+          break;
+      }
+    }
+    const unhealthy = warning + degraded + critical;
+    return {
+      online,
+      warning,
+      degraded,
+      critical,
+      offline,
+      unhealthy,
+      total: cluster?.nodes?.length || 0,
+    };
+  }, [cluster?.nodes]);
+
   if (isLoading) {
     return (
       <div className="container-fluid py-5 text-center">
@@ -58,13 +97,29 @@ export default function Nodes() {
               Nodes
             </h4>
             <p className="text-muted small mb-0">
-              {cluster.online_count} of {cluster.node_count} node{cluster.node_count !== 1 ? 's' : ''} online
+              {nodeCounts.online} of {nodeCounts.total} node{nodeCounts.total !== 1 ? 's' : ''} healthy
+              {nodeCounts.unhealthy > 0 && (
+                <span className="text-warning fw-semibold ms-1">
+                  ({nodeCounts.unhealthy} {nodeCounts.unhealthy === 1 ? 'node has issues' : 'nodes have issues'})
+                </span>
+              )}
             </p>
           </div>
-          <div className="d-flex align-items-center gap-2">
-            <span className="badge bg-success rounded-pill px-3">{cluster.online_count} Online</span>
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <span className="badge bg-success rounded-pill px-3">{nodeCounts.online} Online</span>
+            {nodeCounts.unhealthy > 0 && (
+              <span
+                className={`badge rounded-pill px-3 ${
+                  nodeCounts.critical > 0
+                    ? 'bg-danger'
+                    : 'bg-warning text-dark'
+                }`}
+              >
+                {nodeCounts.unhealthy} Issues
+              </span>
+            )}
             <span className="badge bg-secondary rounded-pill px-3">
-              {cluster.node_count - cluster.online_count} Offline
+              {nodeCounts.offline} Offline
             </span>
           </div>
         </div>

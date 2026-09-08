@@ -28,6 +28,19 @@ chmod +x ./scripts/rp_115/persist.sh
 sudo cp scripts/rp_115/fortinet.service scripts/rp_115/fortinet.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now fortinet.timer
+sudo timedatectl set-timezone Asia/Kolkata
+sudo systemctl enable --now chrony
+sudo tee /etc/chrony/chrony.conf > /dev/null <<'EOF'
+pool pool.ntp.org iburst
+server time.cloudflare.com iburst
+server time.google.com iburst
+
+driftfile /var/lib/chrony/chrony.drift
+makestep 1.0 3
+rtcsync
+EOF
+sudo systemctl restart chrony
+sudo chronyc makestep
 ```
 
 ---
@@ -84,42 +97,7 @@ sudo systemctl status dvfs-metaserver --no-pager
 
 ---
 
-## 4. Update Gist Discovery Server Setup
-
-On the machine designated to run the **Gist IP updater**:
-
-```bash
-# Install system packages
-sudo apt update && sudo apt install -y python3 python3-pip python3-requests python3-dotenv
-
-# Prepare execution directory
-sudo mkdir -p /opt/dvfs
-sudo cp scripts/rp_115/update_gist.py /opt/dvfs/
-sudo chmod +x /opt/dvfs/update_gist.py
-
-# Create secret configuration file
-sudo tee /opt/dvfs/.env > /dev/null << 'EOF'
-TAILSCALE_CLIENT_ID=your_tailscale_oauth_client_id
-TAILSCALE_CLIENT_SECRET=your_tailscale_oauth_client_secret
-GIST_ID=your_github_gist_id
-GITHUB_TOKEN=your_github_personal_access_token
-EOF
-
-# Lock down permissions and enable hourly timer
-sudo chown -R $USER:$USER /opt/dvfs
-sudo chmod 600 /opt/dvfs/.env
-sudo cp scripts/rp_115/dvfs-gist.service scripts/rp_115/dvfs-gist.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl start dvfs-gist.service
-sudo systemctl enable --now dvfs-gist.timer
-
-# Verify timer schedule
-systemctl list-timers --all | grep dvfs-gist
-```
-
----
-
-## 5. Admin UI & Orchestration Server Setup
+## 4. Admin UI & Orchestration Server Setup
 
 On the coordinator or management server:
 
@@ -169,6 +147,43 @@ sudo systemctl status dvfs-admin --no-pager
 ```
 
 Open `http://<admin_ip>:8080` (or `https://` if TLS certs are supplied) in your web browser.
+
+---
+
+## 5. Update Gist Discovery Server Setup
+
+On the machine designated to run the **Gist IP updater**:
+
+> Repeat the above SSH Key copying process for this machine!
+
+```bash
+# Install system packages
+sudo apt update && sudo apt install -y python3 python3-pip python3-requests python3-dotenv
+
+# Prepare execution directory
+sudo mkdir -p /opt/dvfs
+sudo cp scripts/rp_115/update_gist.py /opt/dvfs/
+sudo chmod +x /opt/dvfs/update_gist.py
+
+# Create secret configuration file
+sudo tee /opt/dvfs/.env > /dev/null << 'EOF'
+TAILSCALE_CLIENT_ID=your_tailscale_oauth_client_id
+TAILSCALE_CLIENT_SECRET=your_tailscale_oauth_client_secret
+GIST_ID=your_github_gist_id
+GITHUB_TOKEN=your_github_personal_access_token
+EOF
+
+# Lock down permissions and enable hourly timer
+sudo chown -R $USER:$USER /opt/dvfs
+sudo chmod 600 /opt/dvfs/.env
+sudo cp scripts/rp_115/dvfs-gist.service scripts/rp_115/dvfs-gist.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start dvfs-gist.service
+sudo systemctl enable --now dvfs-gist.timer
+
+# Verify timer schedule
+systemctl list-timers --all | grep dvfs-gist
+```
 
 ---
 

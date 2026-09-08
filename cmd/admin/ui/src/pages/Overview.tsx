@@ -84,9 +84,13 @@ export default function Overview() {
       <div className="row g-3 mb-4">
         <div className="col-sm-6 col-md-4 col-xl-2">
           <StatCard
-            title="Active Nodes"
+            title="Healthy Nodes"
             value={`${cluster.online_count} / ${cluster.node_count}`}
-            subtitle="Online nodes"
+            subtitle={
+              cluster.active_count !== undefined && cluster.active_count !== cluster.online_count
+                ? `${cluster.active_count} active (${cluster.active_count - cluster.online_count} degraded)`
+                : 'Online & healthy'
+            }
             icon="bi-server"
             iconColor="#0d6efd"
             onClick={() => navigate('/nodes')}

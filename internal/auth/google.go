@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -362,8 +363,20 @@ func VerifyToken(ctx context.Context, rawToken string, expectedEmail string, cli
 			fmt.Sscanf(v, "%d", &expInt)
 		}
 	}
-	if expInt > 0 && now.Unix() > expInt {
-		return nil, fmt.Errorf("token has expired (expiry: %d, now: %d)", expInt, now.Unix())
+	// Allow configurable clock skew leeway (default 300s / 5 minutes)
+	leewaySec := int64(300)
+	if envLeeway := os.Getenv("DVFS_CLOCK_SKEW_SECONDS"); envLeeway != "" {
+		if val, err := strconv.ParseInt(envLeeway, 10, 64); err == nil && val >= 0 {
+			leewaySec = val
+		}
+	}
+	if expInt > 0 && now.Unix() > (expInt+leewaySec) {
+		diff := now.Unix() - expInt
+		hint := ""
+		if diff >= 16000 && diff <= 22000 {
+			hint = " [HINT: server clock appears to be set to Indian Standard Time (IST) but interpreted as UTC. Check 'date -u' on server and sync with NTP/timedatectl]"
+		}
+		return nil, fmt.Errorf("token has expired (expiry: %d, now: %d, skew: %ds)%s", expInt, now.Unix(), diff, hint)
 	}
 
 	// Strict Audience Enforcement

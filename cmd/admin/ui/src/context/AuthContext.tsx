@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { loginAdmin, logoutAdmin, fetchAuthStatus, getAdminToken } from '../api';
+import { clearClusterNodesCache } from '../utils';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -52,6 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     await logoutAdmin();
+    clearClusterNodesCache();
     setIsAuthenticated(false);
     // Invalidate queries so redacted public data is fetched immediately
     await queryClient.invalidateQueries();

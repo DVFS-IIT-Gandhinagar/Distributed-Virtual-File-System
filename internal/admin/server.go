@@ -62,9 +62,9 @@ type AdminServer struct {
 
 // NewAdminServer creates a new AdminServer instance.
 func NewAdminServer(stateFile, staticDir string) *AdminServer {
-	snapshotPath := "./admin_metrics_snapshot.json"
-	historyPath := "./command_history.json"
-	alertsPath := "./admin_alerts.json"
+	snapshotPath := "./bin/admin_metrics_snapshot.json"
+	historyPath := "./bin/command_history.json"
+	alertsPath := "./bin/admin_alerts.json"
 	if stateFile == "" {
 		snapshotPath = ""
 		historyPath = ""

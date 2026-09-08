@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { ClusterResponse } from '../types';
@@ -22,6 +23,7 @@ function worstStatus(cluster?: ClusterResponse): string {
 }
 
 export default function AppNavbar({ cluster, lastUpdated }: Props) {
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const { isAuthenticated, openLoginModal, logout } = useAuth();
   const { data: alertSummary } = useQuery({
     queryKey: ['alertSummary'],
@@ -34,6 +36,8 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
   const borderColor = getStatusColor(status);
   const secsAgo = lastUpdated ? Math.floor((Date.now() - lastUpdated) / 1000) : null;
 
+  const closeNav = () => setIsNavOpen(false);
+
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
       <div className="container-fluid px-4">
@@ -44,23 +48,25 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
         </span>
 
         <button
-          className="navbar-toggler"
+          className={`navbar-toggler ${isNavOpen ? '' : 'collapsed'}`}
           type="button"
+          onClick={() => setIsNavOpen(prev => !prev)}
           data-bs-toggle="collapse"
           data-bs-target="#navMenu"
           aria-controls="navMenu"
-          aria-expanded="false"
+          aria-expanded={isNavOpen}
           aria-label="Toggle navigation"
         >
           <span className="navbar-toggler-icon"></span>
         </button>
 
-        <div className="collapse navbar-collapse" id="navMenu">
+        <div className={`collapse navbar-collapse ${isNavOpen ? 'show' : ''}`} id="navMenu">
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
             <li className="nav-item">
               <NavLink
                 to="/"
                 end
+                onClick={closeNav}
                 className={({ isActive }) =>
                   'nav-link' + (isActive ? ' active fw-semibold' : '')
                 }
@@ -71,6 +77,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             <li className="nav-item">
               <NavLink
                 to="/nodes"
+                onClick={closeNav}
                 className={({ isActive }) =>
                   'nav-link' + (isActive ? ' active fw-semibold' : '')
                 }
@@ -81,6 +88,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             <li className="nav-item">
               <NavLink
                 to="/performance"
+                onClick={closeNav}
                 className={({ isActive }) =>
                   'nav-link' + (isActive ? ' active fw-semibold' : '')
                 }
@@ -91,6 +99,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             <li className="nav-item">
               <NavLink
                 to="/users"
+                onClick={closeNav}
                 className={({ isActive }) =>
                   'nav-link' + (isActive ? ' active fw-semibold' : '')
                 }
@@ -104,6 +113,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             <li className="nav-item">
               <NavLink
                 to="/actions"
+                onClick={closeNav}
                 className={({ isActive }) =>
                   'nav-link' + (isActive ? ' active fw-semibold' : '')
                 }
@@ -117,6 +127,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
             <li className="nav-item">
               <NavLink
                 to="/logs"
+                onClick={closeNav}
                 className={({ isActive }) =>
                   'nav-link position-relative' + (isActive ? ' active fw-semibold' : '')
                 }
@@ -167,7 +178,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
                 <button
                   type="button"
                   className="btn btn-outline-light btn-sm d-flex align-items-center gap-1 py-1 px-2"
-                  onClick={logout}
+                  onClick={() => { closeNav(); logout(); }}
                   title="Logout from Admin Console"
                   style={{ fontSize: '0.78rem' }}
                 >
@@ -179,7 +190,7 @@ export default function AppNavbar({ cluster, lastUpdated }: Props) {
               <button
                 type="button"
                 className="btn btn-warning btn-sm text-dark fw-bold d-flex align-items-center gap-1 py-1 px-3 shadow-sm"
-                onClick={openLoginModal}
+                onClick={() => { closeNav(); openLoginModal(); }}
                 title="Enter password to unlock admin console"
                 style={{ fontSize: '0.8rem' }}
               >

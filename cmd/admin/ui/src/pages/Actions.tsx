@@ -74,6 +74,7 @@ export default function Actions() {
 
   // Per-Node Restart Overrides
   const [nodeParamsOverrides, setNodeParamsOverrides] = useState<Record<string, NodeRestartParams>>({});
+  const [openParamAccordions, setOpenParamAccordions] = useState<Record<string, boolean>>({});
 
   // Terminal & Live Stream State
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
@@ -649,19 +650,26 @@ export default function Actions() {
                                 own_ip: '127.0.0.1',
                                 data_dir: `./fileserver_data_${id}`,
                               };
+                              const isExpanded = !!openParamAccordions[id];
                               return (
                                 <div key={id} className="accordion-item">
                                   <h2 className="accordion-header" id={`flush-heading-${id}`}>
                                     <button
-                                      className="accordion-button collapsed py-2 small fw-semibold"
+                                      className={`accordion-button ${isExpanded ? '' : 'collapsed'} py-2 small fw-semibold`}
                                       type="button"
-                                      data-bs-toggle="collapse"
-                                      data-bs-target={`#flush-collapse-${id}`}
+                                      onClick={() =>
+                                        setOpenParamAccordions((prev) => ({
+                                          ...prev,
+                                          [id]: !prev[id],
+                                        }))
+                                      }
+                                      aria-expanded={isExpanded}
+                                      aria-controls={`flush-collapse-${id}`}
                                     >
                                       Node FS-{id} Parameters ({p.host || p.address})
                                     </button>
                                   </h2>
-                                  <div id={`flush-collapse-${id}`} className="accordion-collapse collapse p-3 bg-light">
+                                  <div id={`flush-collapse-${id}`} className={`accordion-collapse collapse ${isExpanded ? 'show' : ''} p-3 bg-light`}>
                                     <div className="row g-2 small">
                                       <div className="col-6">
                                         <label className="form-label">Port</label>

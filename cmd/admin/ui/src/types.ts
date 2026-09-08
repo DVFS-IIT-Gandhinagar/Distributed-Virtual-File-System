@@ -57,6 +57,7 @@ export interface ClusterResponse {
   users: Record<string, string>;
   node_count: number;
   online_count: number;
+  active_count?: number;
   total_storage_bytes: number;
   used_storage_bytes: number;
   total_users: number;

@@ -91,7 +91,7 @@ export async function fetchCluster(): Promise<ClusterResponse> {
   if (!res.ok) throw new Error(`fetchCluster: ${res.status} ${res.statusText}`);
   const data = (await res.json()) as ClusterResponse;
   if (data?.nodes) {
-    updateClusterNodesCache(data.nodes);
+    updateClusterNodesCache(data.nodes, true);
   }
   return data;
 }
@@ -101,7 +101,7 @@ export async function fetchPerformance(): Promise<PerformanceResponse> {
   if (!res.ok) throw new Error(`fetchPerformance: ${res.status} ${res.statusText}`);
   const data = (await res.json()) as PerformanceResponse;
   if (data?.nodes) {
-    updateClusterNodesCache(data.nodes);
+    updateClusterNodesCache(data.nodes, true);
   }
   return data;
 }
