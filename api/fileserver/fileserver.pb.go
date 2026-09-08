@@ -2469,7 +2469,9 @@ type RegisterClientResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	UserRootFid   *FID                   `protobuf:"bytes,3,opt,name=user_root_fid,json=userRootFid,proto3" json:"user_root_fid,omitempty"` // FID of user's root directory
+	UserRootFid   *FID                   `protobuf:"bytes,3,opt,name=user_root_fid,json=userRootFid,proto3" json:"user_root_fid,omitempty"`  // FID of user's root directory
+	SessionToken  string                 `protobuf:"bytes,4,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"` // Server Session Token (SST) minted by server
+	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`         // Unix timestamp of absolute expiration ceiling
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2523,6 +2525,20 @@ func (x *RegisterClientResponse) GetUserRootFid() *FID {
 		return x.UserRootFid
 	}
 	return nil
+}
+
+func (x *RegisterClientResponse) GetSessionToken() string {
+	if x != nil {
+		return x.SessionToken
+	}
+	return ""
+}
+
+func (x *RegisterClientResponse) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
 }
 
 type SetQuotaRequest struct {
@@ -2901,11 +2917,14 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\x10callback_address\x18\x02 \x01(\tR\x0fcallbackAddress\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x1b\n" +
 	"\troot_user\x18\x04 \x01(\tR\brootUser\x12\x1b\n" +
-	"\troot_path\x18\x05 \x01(\tR\brootPath\"}\n" +
+	"\troot_path\x18\x05 \x01(\tR\brootPath\"\xc1\x01\n" +
 	"\x16RegisterClientResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x123\n" +
-	"\ruser_root_fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\vuserRootFid\"N\n" +
+	"\ruser_root_fid\x18\x03 \x01(\v2\x0f.fileserver.FIDR\vuserRootFid\x12#\n" +
+	"\rsession_token\x18\x04 \x01(\tR\fsessionToken\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"N\n" +
 	"\x0fSetQuotaRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1f\n" +
 	"\vquota_bytes\x18\x02 \x01(\x04R\n" +

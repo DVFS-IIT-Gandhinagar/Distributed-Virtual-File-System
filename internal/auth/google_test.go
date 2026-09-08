@@ -125,3 +125,59 @@ func TestStartLocalCallbackServer(t *testing.T) {
 	assert.Contains(t, string(body), "tester@gmail.com")
 	assert.Contains(t, string(body), "Google Authentication Successful")
 }
+
+func TestPKCE_GenerateAndWireAuthURL(t *testing.T) {
+	pkce, err := GeneratePKCE()
+	require.NoError(t, err)
+	require.NotEmpty(t, pkce.Verifier)
+	require.NotEmpty(t, pkce.Challenge)
+	assert.Equal(t, "S256", pkce.Method)
+
+	cfg := &GoogleDesktopConfig{
+		ClientID:    "test-client-id",
+		RedirectURI: "http://localhost:38485/logincallback",
+	}
+
+	authURL := GenerateAuthURL(cfg, "alice@example.com", "nonce-xyz", pkce.Challenge)
+	assert.Contains(t, authURL, "code_challenge="+pkce.Challenge)
+	assert.Contains(t, authURL, "code_challenge_method=S256")
+	assert.Contains(t, authURL, "state=nonce-xyz")
+}
+
+func TestStartLocalCallbackServer_CSRFStateValidation(t *testing.T) {
+	cfg := &GoogleDesktopConfig{
+		ClientID:    "mock-id",
+		RedirectURI: "http://localhost:38487/logincallback",
+		MockAuth:    true,
+	}
+
+	stop, err := StartLocalCallbackServer(cfg, 38487, "expected-nonce-42")
+	require.NoError(t, err)
+	defer stop()
+
+	client := &http.Client{Timeout: 3 * time.Second}
+
+	// 1. Wrong state should fail CSRF check
+	respBad, err := client.Get("http://127.0.0.1:38487/logincallback?code=mock-code:alice@test.com&state=wrong-nonce")
+	require.NoError(t, err)
+	defer respBad.Body.Close()
+	bodyBad, _ := io.ReadAll(respBad.Body)
+	assert.Contains(t, string(bodyBad), "CSRF state parameter mismatch")
+
+	// 2. Correct state should succeed
+	respGood, err := client.Get("http://127.0.0.1:38487/logincallback?code=mock-code:alice@test.com&state=expected-nonce-42")
+	require.NoError(t, err)
+	defer respGood.Body.Close()
+	bodyGood, _ := io.ReadAll(respGood.Body)
+	assert.Contains(t, string(bodyGood), "Google Authentication Successful")
+}
+
+func TestVerifyToken_FailsClosedOnEmptyClientIDInProduction(t *testing.T) {
+	t.Setenv("DVFS_AUTH_MOCK", "false")
+
+	// In production mode with clientID="", VerifyToken must fail closed
+	_, err := VerifyToken(context.Background(), "some-real-looking-token", "user@gmail.com", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GOOGLE_CLIENT_ID")
+}
+

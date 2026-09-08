@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -121,7 +120,8 @@ func GenerateRandomState() string {
 }
 
 // GenerateAuthURL builds the accounts.google.com authorization URL for Desktop OAuth flow.
-func GenerateAuthURL(cfg *GoogleDesktopConfig, email string, state string) string {
+// Optional codeChallenge can be provided for RFC 7636 PKCE S256 protection.
+func GenerateAuthURL(cfg *GoogleDesktopConfig, email string, state string, codeChallenge ...string) string {
 	if state == "" {
 		state = GenerateRandomState()
 	}
@@ -136,13 +136,22 @@ func GenerateAuthURL(cfg *GoogleDesktopConfig, email string, state string) strin
 	if email != "" {
 		params.Set("login_hint", strings.TrimSpace(strings.ToLower(email)))
 	}
+	if len(codeChallenge) > 0 && codeChallenge[0] != "" {
+		params.Set("code_challenge", codeChallenge[0])
+		params.Set("code_challenge_method", "S256")
+	}
 
 	return fmt.Sprintf("%s?%s", GoogleAuthEndpoint, params.Encode())
 }
 
 // ExchangeCodeForTokens exchanges the OAuth authorization code for tokens at Google's token endpoint.
-func ExchangeCodeForTokens(ctx context.Context, cfg *GoogleDesktopConfig, code string, redirectURI string) (*TokenResponse, error) {
+// Optional codeVerifier can be provided for RFC 7636 PKCE verification.
+func ExchangeCodeForTokens(ctx context.Context, cfg *GoogleDesktopConfig, code string, redirectURI string, codeVerifier ...string) (*TokenResponse, error) {
 	if cfg.MockAuth || strings.HasPrefix(code, "mock-code:") {
+		// VULN-01 FIX: Enforce environment guard for mock codes
+		if !cfg.MockAuth {
+			return nil, fmt.Errorf("security violation: mock authorization code submitted while DVFS_AUTH_MOCK is disabled")
+		}
 		// Mock token generation for test/offline environments
 		email := "user@gmail.com"
 		if strings.HasPrefix(code, "mock-code:") {
@@ -167,6 +176,9 @@ func ExchangeCodeForTokens(ctx context.Context, cfg *GoogleDesktopConfig, code s
 	data.Set("code", code)
 	data.Set("grant_type", "authorization_code")
 	data.Set("redirect_uri", redirectURI)
+	if len(codeVerifier) > 0 && codeVerifier[0] != "" {
+		data.Set("code_verifier", codeVerifier[0])
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, GoogleTokenEndpoint, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -257,9 +269,13 @@ func VerifyToken(ctx context.Context, rawToken string, expectedEmail string, cli
 		return cached.claims, nil
 	}
 
-	// 2. Handle Mock Tokens
-	isMock := strings.HasPrefix(rawToken, "mock-jwt.") || strings.EqualFold(os.Getenv("DVFS_AUTH_MOCK"), "true") || strings.EqualFold(os.Getenv("DVFS_AUTH_MOCK"), "1")
-	if isMock {
+	// 2. Handle Mock Tokens (VULN-01 FIX: Strict environment guard)
+	isMockPrefix := strings.HasPrefix(rawToken, "mock-jwt.")
+	mockEnvEnabled := strings.EqualFold(os.Getenv("DVFS_AUTH_MOCK"), "true") || strings.EqualFold(os.Getenv("DVFS_AUTH_MOCK"), "1")
+	if isMockPrefix || mockEnvEnabled {
+		if !mockEnvEnabled {
+			return nil, fmt.Errorf("security violation: mock token submitted in production mode (DVFS_AUTH_MOCK is false)")
+		}
 		claims, err := parseMockToken(rawToken)
 		if err != nil {
 			return nil, fmt.Errorf("mock token parse error: %w", err)
@@ -269,6 +285,17 @@ func VerifyToken(ctx context.Context, rawToken string, expectedEmail string, cli
 		}
 		// Cache mock token
 		tokenCacheMu.Lock()
+		if len(tokenCache) >= 5000 {
+			// Evict expired entries
+			for k, v := range tokenCache {
+				if time.Now().After(v.expiry) {
+					delete(tokenCache, k)
+				}
+			}
+			if len(tokenCache) >= 5000 {
+				tokenCache = make(map[string]*cachedClaim)
+			}
+		}
 		tokenCache[rawToken] = &cachedClaim{
 			claims: claims,
 			expiry: time.Unix(claims.Expiry, 0),
@@ -278,6 +305,10 @@ func VerifyToken(ctx context.Context, rawToken string, expectedEmail string, cli
 	}
 
 	// 3. Query Google tokeninfo endpoint
+	if !mockEnvEnabled && clientID == "" {
+		return nil, fmt.Errorf("server configuration error: GOOGLE_CLIENT_ID must be configured to validate token audience in production mode")
+	}
+
 	infoURL := fmt.Sprintf("%s?id_token=%s", GoogleInfoEndpoint, url.QueryEscape(rawToken))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, infoURL, nil)
 	if err != nil {
@@ -335,9 +366,17 @@ func VerifyToken(ctx context.Context, rawToken string, expectedEmail string, cli
 		return nil, fmt.Errorf("token has expired (expiry: %d, now: %d)", expInt, now.Unix())
 	}
 
+	// Strict Audience Enforcement
 	aud, _ := rawMap["aud"].(string)
-	if clientID != "" && aud != "" && aud != clientID {
-		log.Printf("[AUTH WARNING] Token audience '%s' differs from configured clientID '%s'", aud, clientID)
+	if clientID != "" {
+		if aud == "" {
+			return nil, fmt.Errorf("token validation failed: token missing audience claim ('aud')")
+		}
+		if aud != clientID {
+			return nil, fmt.Errorf("token audience mismatch: token audience '%s' does not match configured clientID '%s'", aud, clientID)
+		}
+	} else if !mockEnvEnabled {
+		return nil, fmt.Errorf("server configuration error: GOOGLE_CLIENT_ID must be configured to validate token audience in production mode")
 	}
 
 	if expectedEmail != "" && !strings.EqualFold(email, expectedEmail) {
@@ -587,7 +626,7 @@ var callbackPageTemplate = template.Must(template.New("callback").Parse(`<!DOCTY
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
         </svg>
       </div>
-      <h1>Authentication Successful</h1>
+      <h1>Google Authentication Successful</h1>
       <div class="subtitle">Distributed Virtual File System (DVFS)</div>
       
       <div class="user-badge">
@@ -658,9 +697,19 @@ func RenderCallbackHTML(w io.Writer, email, token, errMsg string) error {
 }
 
 // StartLocalCallbackServer starts a temporary loopback HTTP listener on the given port (e.g. 38485).
-func StartLocalCallbackServer(cfg *GoogleDesktopConfig, port int) (stopFunc func(), err error) {
+// Optional parameters: opts[0] = expectedState (for CSRF validation), opts[1] = codeVerifier (for PKCE exchange).
+func StartLocalCallbackServer(cfg *GoogleDesktopConfig, port int, opts ...string) (stopFunc func(), err error) {
 	if port <= 0 {
 		port = DefaultRedirectPort
+	}
+
+	var expectedState string
+	var codeVerifier string
+	if len(opts) > 0 {
+		expectedState = opts[0]
+	}
+	if len(opts) > 1 {
+		codeVerifier = opts[1]
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
@@ -679,13 +728,22 @@ func StartLocalCallbackServer(cfg *GoogleDesktopConfig, port int) (stopFunc func
 			return
 		}
 
+		// Validate CSRF state parameter if expected
+		if expectedState != "" {
+			stateParam := r.URL.Query().Get("state")
+			if stateParam != expectedState {
+				_ = RenderCallbackHTML(w, "", "", "CSRF state parameter mismatch. Authorization request rejected.")
+				return
+			}
+		}
+
 		code := r.URL.Query().Get("code")
 		if code == "" {
 			_ = RenderCallbackHTML(w, "", "", "No authorization code found in callback query parameters.")
 			return
 		}
 
-		tokResp, err := ExchangeCodeForTokens(r.Context(), cfg, code, cfg.RedirectURI)
+		tokResp, err := ExchangeCodeForTokens(r.Context(), cfg, code, cfg.RedirectURI, codeVerifier)
 		if err != nil {
 			_ = RenderCallbackHTML(w, "", "", fmt.Sprintf("Failed to exchange code for token: %v", err))
 			return

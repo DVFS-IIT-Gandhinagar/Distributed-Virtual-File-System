@@ -46,16 +46,25 @@ func performUserAuth(cliUsername string) (string, string, error) {
 		break
 	}
 
-	// 2. Start local callback listener on port 38485
-	stopServer, err := auth.StartLocalCallbackServer(cfg, auth.DefaultRedirectPort)
+	// 2. Generate PKCE & CSRF state
+	pkce, _ := auth.GeneratePKCE()
+	var codeChallenge, codeVerifier string
+	if pkce != nil {
+		codeChallenge = pkce.Challenge
+		codeVerifier = pkce.Verifier
+	}
+	state := auth.GenerateRandomState()
+
+	// 3. Start local callback listener on port 38485 with state verification and PKCE verifier
+	stopServer, err := auth.StartLocalCallbackServer(cfg, auth.DefaultRedirectPort, state, codeVerifier)
 	if err != nil {
 		log.Printf("[AUTH NOTICE] Could not bind callback listener on port %d (%v); will rely on existing handler", auth.DefaultRedirectPort, err)
 	} else {
 		defer stopServer()
 	}
 
-	// 3. Generate OAuth link
-	authURL := auth.GenerateAuthURL(cfg, email, "")
+	// 4. Generate OAuth link with PKCE S256 challenge
+	authURL := auth.GenerateAuthURL(cfg, email, state, codeChallenge)
 	fmt.Println("\nPlease open the following URL in your web browser to sign in:")
 	fmt.Println("─────────────────────────────────────────────────────────")
 	fmt.Println(authURL)

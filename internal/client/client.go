@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -53,6 +54,7 @@ func WithAuthToken(token string) ClientOption {
 type Client struct {
 	username      string
 	authToken     string
+	sessionToken  string
 	root_user     string
 	root_path     string
 	display_name  string
@@ -193,14 +195,25 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	if c.authToken != "" {
-		token := c.authToken
+	if c.authToken != "" || c.sessionToken != "" {
 		authUnary := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, callOpts ...grpc.CallOption) error {
-			ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			token := c.sessionToken
+			if token == "" || strings.HasSuffix(method, "RegisterClient") {
+				token = c.authToken
+			}
+			if token != "" {
+				ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			}
 			return invoker(ctx, method, req, reply, cc, callOpts...)
 		}
 		authStream := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, callOpts ...grpc.CallOption) (grpc.ClientStream, error) {
-			ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			token := c.sessionToken
+			if token == "" {
+				token = c.authToken
+			}
+			if token != "" {
+				ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+			}
 			return streamer(ctx, desc, cc, method, callOpts...)
 		}
 		opts = append(opts, grpc.WithChainUnaryInterceptor(authUnary), grpc.WithChainStreamInterceptor(authStream))
@@ -229,6 +242,11 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 
 	if !resp.Success {
 		return nil, fmt.Errorf("registration failed: %s", resp.Error)
+	}
+
+	if resp.SessionToken != "" {
+		c.sessionToken = resp.SessionToken
+		log.Printf("[AUTH] Established authenticated session with server")
 	}
 
 	c.rootFID = domain.FIDFromProto(resp.UserRootFid)
@@ -262,6 +280,10 @@ func (c *Client) ReRegister() error {
 		return fmt.Errorf("server returned nil root FID")
 	}
 
+	if resp.SessionToken != "" {
+		c.sessionToken = resp.SessionToken
+	}
+
 	c.rootFID = newRootFID
 	if c.cacheHandler != nil && c.cacheHandler.root != nil {
 		c.cacheHandler.root.fid = newRootFID
@@ -282,6 +304,7 @@ func (c *Client) Disconnect() {
 	if c == nil {
 		return
 	}
+	c.sessionToken = ""
 	if c.serverConn != nil && c.username != "" {
 		func() {
 			defer func() { _ = recover() }()

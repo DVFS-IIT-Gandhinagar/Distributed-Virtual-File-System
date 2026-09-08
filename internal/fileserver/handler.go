@@ -2,6 +2,9 @@ package fileserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +17,8 @@ import (
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver/session"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
 
@@ -137,10 +142,39 @@ func (h *GRPCHandler) RegisterClient(ctx context.Context, req *pb.RegisterClient
 	}
 	h.fileServer.UpsertClientSession(req.Username, normalizedCallbackAddress, rootFID)
 
+	// Mint Server Session Token (SST) and record session in SessionStore
+	var sessionToken string
+	var expiresAt int64
+	if store := h.fileServer.SessionStore(); store != nil {
+		rawSST, err := session.GenerateSST()
+		if err == nil {
+			absExp := time.Now().Add(12 * time.Hour)
+			peerAddr := ""
+			if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+				peerAddr = p.Addr.String()
+			}
+			sess, err := store.CreateSession(
+				rawSST,
+				req.Username,
+				req.ClientId,
+				peerAddr,
+				normalizedCallbackAddress,
+				rootFID.String(),
+				absExp,
+			)
+			if err == nil && sess != nil {
+				sessionToken = rawSST
+				expiresAt = sess.AbsoluteExp.Unix()
+			}
+		}
+	}
+
 	log.Printf("RegisterClient: success for user %s for the user root %s", req.Username, req.RootPath)
 	return &pb.RegisterClientResponse{
-		Success:     true,
-		UserRootFid: rootFID.ToProto(),
+		Success:      true,
+		UserRootFid:  rootFID.ToProto(),
+		SessionToken: sessionToken,
+		ExpiresAt:    expiresAt,
 	}, nil
 }
 
@@ -155,6 +189,9 @@ func (h *GRPCHandler) UnregisterClient(ctx context.Context, req *pb.UnregisterCl
 
 	log.Printf("UnregisterClient: user '%s' disconnected (clientId: %s)", req.Username, req.ClientId)
 	h.fileServer.RemoveClientSession(req.Username)
+	if store := h.fileServer.SessionStore(); store != nil && req.ClientId != "" {
+		_ = store.RevokeByClientID(req.ClientId)
+	}
 	return &pb.UnregisterClientResponse{
 		Success: true,
 	}, nil
@@ -180,13 +217,13 @@ func (h *GRPCHandler) GetAttr(ctx context.Context, req *pb.GetAttrRequest) (*pb.
 	}
 
 	fid := domain.FIDFromProto(req.Fid)
-	inode, err := h.fileServer.GetInode(fid)
-	if err != nil {
-		log.Printf("GetAttr: error getting inode - %v", err)
-		opErr = err
+	inode, _, authErr := h.fileServer.Authorize(ctx, fid, PermRead)
+	if authErr != nil {
+		log.Printf("GetAttr: auth error - %v", authErr)
+		opErr = authErr
 		return &pb.GetAttrResponse{
 			Success: false,
-			Error:   err.Error(),
+			Error:   authErr.Error(),
 		}, nil
 	}
 
@@ -209,7 +246,28 @@ func (h *GRPCHandler) Share(ctx context.Context, req *pb.ShareRequest) (*pb.Shar
 		}, nil
 	}
 
-	err := h.fileServer.Share(req.Username, req.ShareWith, domain.FIDFromProto(req.Fid))
+	fid := domain.FIDFromProto(req.Fid)
+	_, caller, authErr := h.fileServer.Authorize(ctx, fid, PermDelete)
+	if authErr != nil {
+		log.Printf("Share: auth error - %v", authErr)
+		return &pb.ShareResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
+	effectiveUser := req.Username
+	if caller != "" {
+		if req.Username != "" && !strings.EqualFold(caller, req.Username) {
+			return &pb.ShareResponse{
+				Success: false,
+				Error:   "permission denied: cannot share on behalf of another user",
+			}, nil
+		}
+		effectiveUser = caller
+	}
+
+	err := h.fileServer.Share(effectiveUser, req.ShareWith, fid)
 	if err != nil {
 		log.Printf("Share: error sharing - %v", err)
 		return &pb.ShareResponse{
@@ -233,7 +291,28 @@ func (h *GRPCHandler) Unshare(ctx context.Context, req *pb.UnshareRequest) (*pb.
 		}, nil
 	}
 
-	err := h.fileServer.Unshare(req.Username, req.UnshareWith, domain.FIDFromProto(req.Fid))
+	fid := domain.FIDFromProto(req.Fid)
+	_, caller, authErr := h.fileServer.Authorize(ctx, fid, PermDelete)
+	if authErr != nil {
+		log.Printf("Unshare: auth error - %v", authErr)
+		return &pb.UnshareResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
+	effectiveUser := req.Username
+	if caller != "" {
+		if req.Username != "" && !strings.EqualFold(caller, req.Username) {
+			return &pb.UnshareResponse{
+				Success: false,
+				Error:   "permission denied: cannot unshare on behalf of another user",
+			}, nil
+		}
+		effectiveUser = caller
+	}
+
+	err := h.fileServer.Unshare(effectiveUser, req.UnshareWith, fid)
 	if err != nil {
 		log.Printf("Unshare: error sharing - %v", err)
 		return &pb.UnshareResponse{
@@ -301,12 +380,29 @@ func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (
 
 	fid := domain.FIDFromProto(req.Fid)
 	root_fid := domain.FIDFromProto(req.RootFid)
+
+	if _, _, authErr := h.fileServer.Authorize(ctx, fid, PermRead); authErr != nil {
+		log.Printf("ChangeDir: auth error on current fid - %v", authErr)
+		return &pb.ChangeDirResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
 	new_fid, err := h.fileServer.ChangeDir(fid, req.Path, root_fid)
 	if err != nil {
 		log.Printf("ChangeDir: error changing directory - %v", err)
 		return &pb.ChangeDirResponse{
 			Success: false,
 			Error:   err.Error(),
+		}, nil
+	}
+
+	if _, _, authErr := h.fileServer.Authorize(ctx, new_fid, PermRead); authErr != nil {
+		log.Printf("ChangeDir: auth error on new fid - %v", authErr)
+		return &pb.ChangeDirResponse{
+			Success: false,
+			Error:   authErr.Error(),
 		}, nil
 	}
 
@@ -340,6 +436,16 @@ func (h *GRPCHandler) ListDir(ctx context.Context, req *pb.ListDirRequest) (*pb.
 	}
 
 	fid := domain.FIDFromProto(req.Fid)
+	_, _, authErr := h.fileServer.Authorize(ctx, fid, PermRead)
+	if authErr != nil {
+		log.Printf("ListDir: auth error - %v", authErr)
+		opErr = authErr
+		return &pb.ListDirResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
 	children, err := h.fileServer.ListDirectory(fid)
 	if err != nil {
 		log.Printf("ListDir: error listing directory - %v", err)
@@ -409,9 +515,24 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	// get parent FID
 	parentFID := domain.FIDFromProto(req.Fid)
 
+	// Authorize caller has write permission on parent directory
+	_, caller, authErr := h.fileServer.Authorize(ctx, parentFID, PermWrite)
+	if authErr != nil {
+		opErr = authErr
+		return &pb.CreateFileResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
+	effectiveUser := req.RootUser
+	if caller != "" {
+		effectiveUser = caller
+	}
+
 	// create file
 	fileType := domain.InodeTypeFromProto(req.Type)
-	fid, err := h.fileServer.CreateFile(parentFID, req.Name, req.RootUser, fileType)
+	fid, err := h.fileServer.CreateFile(parentFID, req.Name, effectiveUser, fileType)
 	if err != nil {
 		log.Printf("CreateFile: error - %v", err)
 		opErr = err
@@ -522,6 +643,19 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 
 		if first {
 			name = req.Name
+			// Enforce Policy Enforcement Point on destination directory
+			_, caller, authErr := h.fileServer.Authorize(stream.Context(), parentFID, PermWrite)
+			if authErr != nil {
+				opErr = authErr
+				return stream.SendAndClose(&pb.UploadFileResponse{
+					Success: false,
+					Error:   authErr.Error(),
+				})
+			}
+			if caller != "" {
+				uploadUser = caller
+			}
+
 			ogHash, err = h.fileServer.GetFileHash(parentFID, name) // hash of the original file before upload
 			if err != nil {
 				opErr = err
@@ -531,6 +665,11 @@ func (h *GRPCHandler) UploadFile(stream pb.FileServer_UploadFileServer) error {
 				})
 			}
 			first = false
+		}
+
+		// Touch active session to prevent idle timeout during active streaming upload
+		if sess, ok := session.FromContext(stream.Context()); ok && sess != nil {
+			sess.Touch(time.Now())
 		}
 
 		err = h.fileServer.WriteFile(parentFID, name, req.Offset, req.Chunk)
@@ -557,6 +696,17 @@ func (h *GRPCHandler) DownloadFile(req *pb.DownloadFileRequest, stream pb.FileSe
 
 	log.Printf("DownloadFile: Name=%s", req.Name)
 	parentFID := domain.FIDFromProto(req.ParentFid)
+
+	// Enforce PEP on parent directory for download
+	_, _, authErr := h.fileServer.Authorize(stream.Context(), parentFID, PermRead)
+	if authErr != nil {
+		opErr = authErr
+		return stream.Send(&pb.DownloadFileResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		})
+	}
+
 	parentInode, err := h.fileServer.GetInode(parentFID)
 	if err != nil {
 		opErr = err
@@ -646,6 +796,16 @@ func (h *GRPCHandler) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*p
 		}, nil
 	}
 
+	// Enforce PEP on parent directory for reading
+	_, _, authErr := h.fileServer.Authorize(ctx, parentFID, PermRead)
+	if authErr != nil {
+		opErr = authErr
+		return &pb.ReadFileResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
 	data, err := h.fileServer.ReadFile(parentFID, req.Name, req.Offset, req.Length)
 	if err != nil {
 		log.Printf("ReadFile: error reading file - %v", err)
@@ -680,6 +840,16 @@ func (h *GRPCHandler) WriteFile(ctx context.Context, req *pb.WriteFileRequest) (
 		return &pb.WriteFileResponse{
 			Success: false,
 			Error:   "Name is required",
+		}, nil
+	}
+
+	// Enforce PEP on parent directory for writing
+	_, _, authErr := h.fileServer.Authorize(ctx, parentFID, PermWrite)
+	if authErr != nil {
+		opErr = authErr
+		return &pb.WriteFileResponse{
+			Success: false,
+			Error:   authErr.Error(),
 		}, nil
 	}
 
@@ -721,7 +891,24 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 		}, nil
 	}
 
-	if req.RootUser == "" {
+	fid := domain.FIDFromProto(req.Fid)
+
+	// Enforce PEP: caller must be authorized owner to delete
+	_, caller, authErr := h.fileServer.Authorize(ctx, fid, PermDelete)
+	if authErr != nil {
+		opErr = authErr
+		return &pb.DeleteFileResponse{
+			Success: false,
+			Error:   authErr.Error(),
+		}, nil
+	}
+
+	effectiveUser := req.RootUser
+	if caller != "" {
+		effectiveUser = caller
+	}
+
+	if effectiveUser == "" {
 		log.Printf("DeleteFile: error - user is required")
 		opErr = errors.New("user is required")
 		return &pb.DeleteFileResponse{
@@ -729,8 +916,6 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 			Error:   "user is required",
 		}, nil
 	}
-
-	fid := domain.FIDFromProto(req.Fid)
 
 	// Capture parent directory and name before deletion for callbacks.
 	var parentFIDForNotify *domain.FID
@@ -752,7 +937,7 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 	recursive := req.Recursive
 
 	// Attempt deletion
-	err := h.fileServer.DeleteFile(fid, req.RootUser, recursive)
+	err := h.fileServer.DeleteFile(fid, effectiveUser, recursive)
 	if err != nil {
 		log.Printf("DeleteFile: error deleting file - %v", err)
 		opErr = err
@@ -762,7 +947,7 @@ func (h *GRPCHandler) DeleteFile(ctx context.Context, req *pb.DeleteFileRequest)
 		}, nil
 	}
 
-	h.fileServer.NotifyFileDeletedInDir(parentFIDForNotify, deletedName, req.RootUser)
+	h.fileServer.NotifyFileDeletedInDir(parentFIDForNotify, deletedName, effectiveUser)
 
 	log.Printf("DeleteFile: success for FID %s", fid.String())
 	return &pb.DeleteFileResponse{
@@ -784,13 +969,27 @@ func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (
 		opErr = errors.New("FID is required")
 		return &pb.TrashFileResponse{Success: false, Error: "FID is required"}, nil
 	}
-	if req.RootUser == "" {
+
+	fid := domain.FIDFromProto(req.Fid)
+
+	// Enforce PEP: caller must be authorized owner to move to trash
+	_, caller, authErr := h.fileServer.Authorize(ctx, fid, PermDelete)
+	if authErr != nil {
+		opErr = authErr
+		return &pb.TrashFileResponse{Success: false, Error: authErr.Error()}, nil
+	}
+
+	effectiveUser := req.RootUser
+	if caller != "" {
+		effectiveUser = caller
+	}
+
+	if effectiveUser == "" {
 		opErr = errors.New("user is required")
 		return &pb.TrashFileResponse{Success: false, Error: "user is required"}, nil
 	}
 
-	fid := domain.FIDFromProto(req.Fid)
-	trashedName, err := h.fileServer.TrashFile(fid, req.RootUser, req.Recursive)
+	trashedName, err := h.fileServer.TrashFile(fid, effectiveUser, req.Recursive)
 	if err != nil {
 		log.Printf("TrashFile: error - %v", err)
 		opErr = err
@@ -824,6 +1023,19 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 	}
 
 	fid := domain.FIDFromProto(req.Fid)
+
+	caller, ok := session.UsernameFromContext(ctx)
+	if ok && caller != "" {
+		if req.RootUser != "" && !strings.EqualFold(caller, req.RootUser) {
+			opErr = errors.New("permission denied: cannot restore files in another user's root")
+			return &pb.RestoreFileResponse{Success: false, Error: "permission denied: cannot restore files in another user's root"}, nil
+		}
+		if req.Username != "" && !strings.EqualFold(caller, req.Username) {
+			opErr = errors.New("permission denied: username mismatch")
+			return &pb.RestoreFileResponse{Success: false, Error: "permission denied: username mismatch"}, nil
+		}
+	}
+
 	restoredName, err := h.fileServer.RestoreFile(fid, req.RootUser, req.Username)
 	if err != nil {
 		log.Printf("RestoreFile: error - %v", err)
@@ -849,6 +1061,18 @@ func (h *GRPCHandler) ShowTrash(ctx context.Context, req *pb.ShowTrashRequest) (
 	if req.Username == "" {
 		opErr = errors.New("username is required")
 		return &pb.ShowTrashResponse{Success: false, Error: "username is required"}, nil
+	}
+
+	caller, ok := session.UsernameFromContext(ctx)
+	if ok && caller != "" {
+		if req.RootUser != "" && !strings.EqualFold(caller, req.RootUser) {
+			opErr = errors.New("permission denied: cannot view another user's trash")
+			return &pb.ShowTrashResponse{Success: false, Error: "permission denied: cannot view another user's trash"}, nil
+		}
+		if req.Username != "" && !strings.EqualFold(caller, req.Username) {
+			opErr = errors.New("permission denied: username mismatch")
+			return &pb.ShowTrashResponse{Success: false, Error: "permission denied: username mismatch"}, nil
+		}
 	}
 
 	entries, err := h.fileServer.ShowTrash(req.RootUser, req.Username)
@@ -880,6 +1104,46 @@ func (h *GRPCHandler) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) (*p
 		return &pb.SetQuotaResponse{Success: false, Error: "quota must be greater than 0"}, nil
 	}
 
+	// Restrict SetQuota to administrative identity:
+	// 1. Password-based admin authorization via ADMIN_PASSWORD_HASH or ADMIN_PASSWORD
+	//    (e.g. from the Admin Web Console or authorized management scripts via metadata)
+	// 2. Email-based admin authorization via DVFS_ADMIN_EMAIL for authenticated Google users
+	expectedHash := strings.TrimSpace(strings.ToLower(os.Getenv("ADMIN_PASSWORD_HASH")))
+	adminEmail := strings.TrimSpace(strings.ToLower(os.Getenv("DVFS_ADMIN_EMAIL")))
+
+	adminAuthorized := false
+
+	// Check metadata for admin password credentials
+	if md, hasMD := metadata.FromIncomingContext(ctx); hasMD {
+		if hashes := md.Get("x-admin-password-hash"); len(hashes) > 0 && expectedHash != "" {
+			if subtle.ConstantTimeCompare([]byte(strings.ToLower(hashes[0])), []byte(expectedHash)) == 1 {
+				adminAuthorized = true
+			}
+		}
+		if passes := md.Get("x-admin-password"); len(passes) > 0 {
+			pass := passes[0]
+			if expectedHash != "" {
+				sum := sha256.Sum256([]byte(pass))
+				if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(expectedHash)) == 1 {
+					adminAuthorized = true
+				}
+			}
+		}
+	}
+
+	caller, ok := session.UsernameFromContext(ctx)
+	if ok && caller != "" {
+		if adminEmail != "" && strings.EqualFold(caller, adminEmail) {
+			adminAuthorized = true
+		}
+		if !adminAuthorized {
+			return &pb.SetQuotaResponse{
+				Success: false,
+				Error:   "permission denied: only cluster administrators can modify quotas",
+			}, nil
+		}
+	}
+
 	err := h.fileServer.SetUserQuota(req.Username, req.QuotaBytes)
 	if err != nil {
 		log.Printf("SetQuota: error - %v", err)
@@ -888,4 +1152,3 @@ func (h *GRPCHandler) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) (*p
 
 	return &pb.SetQuotaResponse{Success: true}, nil
 }
-

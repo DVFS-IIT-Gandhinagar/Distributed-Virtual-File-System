@@ -26,7 +26,43 @@ go run ./cmd/client/main.go [flags]
 | `-gist_url` | string | `""` | Custom GitHub Gist URL (overrides default `machines.json` location) |
 | `-insecure` | bool | `false` | Disables TLS verification (for local loopback testing only) |
 
-### Interactive Root Selection
+### 1.1 Interactive Google Authentication Flow (OAuth 2.0 + PKCE)
+
+When built with Google Authentication (`USE_GOOGLE_AUTH=1`), the client initiates an interactive authentication flow on startup:
+
+1. **Email Input**:
+   ```text
+   Enter your email: alice@gmail.com
+   ```
+2. **PKCE & Loopback Listener**:
+   The client generates an RFC 7636 PKCE S256 code challenge/verifier pair and a cryptographic CSRF `state` nonce, then spins up a local loopback HTTP listener on `127.0.0.1:38485`.
+3. **Browser Consent**:
+   The client prints the generated Google authorization URL:
+   ```text
+   Please open the following URL in your web browser to sign in:
+   ─────────────────────────────────────────────────────────
+   https://accounts.google.com/o/oauth2/v2/auth?client_id=...&code_challenge=...&state=...
+   ─────────────────────────────────────────────────────────
+   After signing in, your browser will open the DVFS callback page.
+   Copy the token displayed on that page and paste it below.
+   ```
+4. **Token Exchange & Headless Fallback**:
+   - **Local Browser**: Google redirects to `http://localhost:38485/logincallback`. The client validates the `state` nonce, exchanges the authorization code using `code_verifier`, and renders a styled HTML success page.
+   - **Headless SSH / Remote Terminal**: If the browser is on a separate machine, the user copies the token displayed on the callback page and pastes it at the terminal prompt:
+     ```text
+     Paste your token: <token>
+     ```
+5. **Session Handshake (`RegisterClient`)**:
+   The client calls `RegisterClient` presenting the Google ID token once. The FileServer validates the token and returns a **Server Session Token (SST)**:
+   ```text
+   [AUTH] Established authenticated session with server
+   ```
+6. **Transparent Bearer Injection**:
+   The client automatically injects `Authorization: Bearer <SST>` on all subsequent unary and streaming gRPC calls (`ls`, `cat`, `upload`, `download`, `share`, etc.).
+7. **Session Termination**:
+   Typing `exit` or `quit` automatically invokes `UnregisterClient` on the FileServer, revoking the session token on the storage node.
+
+### 1.2 Interactive Root Selection
 When starting with `-meta=true`, the client displays a numbered menu:
 ```text
 Available roots:

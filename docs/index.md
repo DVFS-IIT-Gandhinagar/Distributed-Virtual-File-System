@@ -26,7 +26,10 @@ DVFS is designed for multi-user collaboration in cluster and campus environments
 4. **Zero-Trust PKI & Dynamic Discovery**:
    All inter-node gRPC communication is encrypted with TLS 1.3 using an offline, air-gapped Root Certificate Authority. Node leaf certificates use DNS Subject Alternative Names (SANs), allowing cluster nodes to function seamlessly over dynamic DHCP network addresses. Client binaries embed the public Root CA trust store at compile time, eliminating manual certificate distribution to end-user machines.
 
-5. **Integrated Observability & Remote Orchestration**:
+5. **User-Facing Google OAuth 2.0 & High-Performance Session Security**:
+   End users authenticate via Google OAuth 2.0 using the Authorization Code Flow with RFC 7636 PKCE. A single-gate handshake (`RegisterClient`) exchanges the Google ID token for a 256-bit CSPRNG Server Session Token (SST). The SST is bound to the client's network IP address, cached in memory via SHA-256 hashes, and verified across all unary and streaming gRPC calls with sub-millisecond overhead. A Centralized Policy Enforcement Point (`fs.Authorize`) authoritatively verifies file permissions and ownership, eliminating Insecure Direct Object References (IDOR).
+
+6. **Integrated Observability & Remote Orchestration**:
    FileServers run an integrated `/metrics` HTTP sidecar exposing real-time chunked streaming throughput, IOPS, and sliding-window latency percentiles (p50, p95, p99). An administrative web console polls telemetry every 5 seconds, maintains in-memory ring buffers, raises state-machine alerts, and executes remote operational commands over SSH.
 
 ---
@@ -52,7 +55,8 @@ DVFS is designed for multi-user collaboration in cluster and campus environments
 |   FileServer Node 1     |                         |   FileServer Node 2     |
 | - Authoritative Inodes  |                         | - Authoritative Inodes  |
 | - Persistent InodeStore |                         | - Persistent InodeStore |
-| - ACL Enforcement       |                         | - ACL Enforcement       |
+| - ACL & PEP Authorize   |                         | - ACL & PEP Authorize   |
+| - SessionStore (SST)    |                         | - SessionStore (SST)    |
 | - Streaming File I/O    |                         | - Streaming File I/O    |
 | - Metrics HTTP Sidecar  |                         | - Metrics HTTP Sidecar  |
 +------------+------------+                         +------------+------------+
@@ -65,6 +69,7 @@ DVFS is designed for multi-user collaboration in cluster and campus environments
                              +----------+----------+
                              |     DVFS Client     |
                              | - Cobra CLI REPL    |
+                             | - Google OAuth PKCE |
                              | - Local CNode Cache |
                              | - Embedded Root CA  |
                              | - Dynamic Discovery |
@@ -92,7 +97,7 @@ Explore the comprehensive guides and references below:
   - [Zero-Trust TLS & PKI](features/tls_security.md): Air-gapped Root CA ceremony, DNS SAN certificates, and dynamic SNI resolution.
   - [Telemetry & Performance](features/admin_telemetry.md): HTTP sidecars, chunked streaming throughput, IOPS, and latency histograms.
   - [Remote Orchestration & Alerts](features/cluster_orchestration.md): Remote SSH management, live log streaming, and deduplicated alerts.
-  - [Authentication & Security](features/authentication.md): SHA-256 password hashing, cookie-authenticated WebSockets, and public dashboard mode.
+  - [Authentication & Security](features/authentication.md): Google OAuth 2.0 PKCE, loopback listener, Server Session Tokens (SST), centralized PEP (`fs.Authorize`), dual-mode `SetQuota`, cluster mTLS, and Admin Web Console security.
 - [**Client CLI Reference**](client_cli.md): Complete manual for all 20 interactive shell commands, flags, syntax, and examples.
 - [**Project Artifacts**](artifacts.md): Downloadable academic poster (`Poster.pdf`), summary of research findings, and cross-compiled release binaries.
 

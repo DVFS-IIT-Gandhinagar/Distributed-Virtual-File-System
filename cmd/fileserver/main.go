@@ -65,7 +65,11 @@ func main() {
 
 	if interceptor := fileserver.GetServerAuthInterceptor(); interceptor != nil {
 		opts = append(opts, grpc.UnaryInterceptor(interceptor))
-		log.Println("[AUTH] Google Authentication enforcement enabled on fileserver")
+		log.Println("[AUTH] Google Authentication unary enforcement enabled on fileserver")
+	}
+	if streamInterceptor := fileserver.GetServerStreamAuthInterceptor(); streamInterceptor != nil {
+		opts = append(opts, grpc.StreamInterceptor(streamInterceptor))
+		log.Println("[AUTH] Google Authentication stream enforcement enabled on fileserver")
 	}
 
 	// Start gRPC server
