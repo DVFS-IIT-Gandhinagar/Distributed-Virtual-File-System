@@ -180,4 +180,13 @@ func TestVerifyToken_FailsClosedOnEmptyClientIDInProduction(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GOOGLE_CLIENT_ID")
 }
+func TestLoadDesktopConfig_DefaultAndOverride(t *testing.T) {
+	t.Setenv("GOOGLE_CLIENT_ID", "")
+	cfgDefault := LoadDesktopConfig("/non/existent/path/.env")
+	assert.Equal(t, DefaultClientID, cfgDefault.ClientID)
+
+	t.Setenv("GOOGLE_CLIENT_ID", "custom-client-id.apps.googleusercontent.com")
+	cfgOverridden := LoadDesktopConfig("/non/existent/path/.env")
+	assert.Equal(t, "custom-client-id.apps.googleusercontent.com", cfgOverridden.ClientID)
+}
 

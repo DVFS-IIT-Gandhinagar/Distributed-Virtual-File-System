@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
+	"bufio"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,6 +24,8 @@ type Target struct {
 }
 
 func main() {
+	loadEnv(".env", "../.env", "../../.env")
+
 	clientOnly := flag.Bool("client-only", false, "Only build and package client binaries")
 	nodesOnly := flag.Bool("nodes-only", false, "Only build and package node binaries")
 	outDir := flag.String("out", "./release", "Output directory for release archives")
@@ -238,6 +241,9 @@ func buildNodeDistribution(target Target, tempDir, outDir, version, tags, suffix
 
 func compileBinary(srcPkg, outBin, targetOS, targetArch, version, tags string) error {
 	ldflags := fmt.Sprintf("-s -w -X main.Version=%s", version)
+	if clientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")); clientID != "" {
+		ldflags += fmt.Sprintf(" -X github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/auth.DefaultClientID=%s", clientID)
+	}
 	args := []string{"build", "-trimpath"}
 	if tags != "" {
 		args = append(args, "-tags", tags)
@@ -253,6 +259,32 @@ func compileBinary(srcPkg, outBin, targetOS, targetArch, version, tags string) e
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func loadEnv(paths ...string) {
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				val := strings.TrimSpace(parts[1])
+				val = strings.Trim(val, `"'`)
+				if os.Getenv(key) == "" {
+					_ = os.Setenv(key, val)
+				}
+			}
+		}
+		_ = f.Close()
+	}
 }
 
 func resolveVersion() string {

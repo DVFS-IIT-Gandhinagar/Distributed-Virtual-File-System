@@ -92,11 +92,20 @@ func LoadEnv(paths ...string) {
 	}
 }
 
+// DefaultClientID is the embedded Google OAuth Client ID, injected at compile time
+// via -ldflags "-X github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/auth.DefaultClientID=..."
+// or defaulted to the project's public desktop OAuth client ID.
+var DefaultClientID = "455543948524-ood3v14gdp934kgd89pheei257o8qg40.apps.googleusercontent.com"
+
 // LoadDesktopConfig loads Google OAuth settings from environment or .env.
 func LoadDesktopConfig(envPaths ...string) *GoogleDesktopConfig {
 	LoadEnv(envPaths...)
 
 	clientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
+	if clientID == "" {
+		clientID = strings.TrimSpace(DefaultClientID)
+	}
+
 	clientSecret := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET"))
 	redirectURI := strings.TrimSpace(os.Getenv("GOOGLE_REDIRECT_URI"))
 	if redirectURI == "" {
@@ -173,7 +182,9 @@ func ExchangeCodeForTokens(ctx context.Context, cfg *GoogleDesktopConfig, code s
 
 	data := url.Values{}
 	data.Set("client_id", cfg.ClientID)
-	data.Set("client_secret", cfg.ClientSecret)
+	if cfg.ClientSecret != "" {
+		data.Set("client_secret", cfg.ClientSecret)
+	}
 	data.Set("code", code)
 	data.Set("grant_type", "authorization_code")
 	data.Set("redirect_uri", redirectURI)

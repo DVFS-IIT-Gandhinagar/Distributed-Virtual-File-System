@@ -19,6 +19,11 @@ import (
 func performUserAuth(cliUsername string) (string, string, error) {
 	cfg := auth.LoadDesktopConfig()
 
+	if cfg.ClientID == "" && !cfg.MockAuth {
+		return "", "", fmt.Errorf("Google OAuth client ID is not configured. " +
+			"Please set the GOOGLE_CLIENT_ID environment variable, or supply a .env file containing GOOGLE_CLIENT_ID=<client-id>")
+	}
+
 	fmt.Println("=========================================================")
 	fmt.Println("       Distributed Virtual File System (DVFS)")
 	fmt.Println("            Google Authentication Required")
