@@ -96,6 +96,7 @@ func LoadEnv(paths ...string) {
 // via -ldflags "-X github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/auth.DefaultClientID=..."
 // or defaulted to the project's public desktop OAuth client ID.
 var DefaultClientID = "455543948524-ood3v14gdp934kgd89pheei257o8qg40.apps.googleusercontent.com"
+var DefaultClientSecret = "DEFAULT_CLIENT_SECRET"
 
 // LoadDesktopConfig loads Google OAuth settings from environment or .env.
 func LoadDesktopConfig(envPaths ...string) *GoogleDesktopConfig {
@@ -107,6 +108,9 @@ func LoadDesktopConfig(envPaths ...string) *GoogleDesktopConfig {
 	}
 
 	clientSecret := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET"))
+	if clientSecret == "" {
+		clientSecret = strings.TrimSpace(DefaultClientSecret)
+	}
 	redirectURI := strings.TrimSpace(os.Getenv("GOOGLE_REDIRECT_URI"))
 	if redirectURI == "" {
 		redirectURI = DefaultRedirectURI

@@ -244,6 +244,9 @@ func compileBinary(srcPkg, outBin, targetOS, targetArch, version, tags string) e
 	if clientID := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")); clientID != "" {
 		ldflags += fmt.Sprintf(" -X github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/auth.DefaultClientID=%s", clientID)
 	}
+	if clientSecret := strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET")); clientSecret != "" {
+		ldflags += fmt.Sprintf(" -X github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/auth.DefaultClientSecret=%s", clientSecret)
+	}
 	args := []string{"build", "-trimpath"}
 	if tags != "" {
 		args = append(args, "-tags", tags)
