@@ -31,6 +31,8 @@ markdown_extensions:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
   - tables
   - attr_list
   - toc:
@@ -38,6 +40,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Downloads: downloads.md
   - Setup Guide: setup.md
   - Architecture: architecture.md
   - Features & Subsystems:
