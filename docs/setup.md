@@ -196,19 +196,65 @@ sudo systemctl status dvfs-fileserver --no-pager
 
 ---
 
-## 7. Quick Local Development (Single-Machine)
+## 7. Google OAuth 2.0 & Identity Configuration
 
-To test the complete DVFS ecosystem locally on a single machine without systemd:
+DVFS supports user-facing Google OAuth 2.0 authentication with RFC 7636 PKCE (Proof Key for Code Exchange) and high-performance Server Session Tokens (SST).
+
+### Environment Variables
+
+Configure the following environment variables in `.env` (or via systemd service overrides):
+
+| Variable | Required in Prod? | Default | Description |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | Yes | `""` | Google OAuth 2.0 Web Application Client ID from Google Cloud Console. |
+| `GOOGLE_CLIENT_SECRET` | Yes | `""` | Google OAuth 2.0 Client Secret for authorization code exchange. |
+| `GOOGLE_REDIRECT_URI` | No | `http://localhost:38485/logincallback` | OAuth redirect URI configured in Google Cloud Console. Must match the client loopback callback address. |
+| `DVFS_AUTH_MOCK` | No (Dev only) | `false` | When set to `true` or `1`, allows deterministic mock tokens (`mock-jwt.<email>.<exp>`) for automated tests and offline development. Fails closed in production. |
+| `DVFS_ADMIN_EMAIL` | No | `""` | Google-authenticated email address granted administrative authorization on FileServers (e.g., executing `SetQuota` without an admin password hash). |
+| `ADMIN_PASSWORD_HASH` | Yes (for Admin UI) | `""` | Hex-encoded SHA-256 hash of the administrative password for the Admin Web Console and dual-mode administrative gRPC operations. |
+| `DVFS_ALLOW_LEGACY_TOKEN_FALLBACK` | No | `0` | When set to `1`, permits transitional fallback to raw Google ID tokens if an SST is missing. Disabled by default for zero-trust compliance. |
+
+Example `.env` configuration:
+```bash
+GOOGLE_CLIENT_ID=1234567890-abcdefgh.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-SampleSecretKey123456
+GOOGLE_REDIRECT_URI=http://localhost:38485/logincallback
+DVFS_AUTH_MOCK=false
+DVFS_ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD_HASH=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+```
+
+### Build Configurations
+
+By default, DVFS builds with Google Authentication enabled (`USE_GOOGLE_AUTH=1`):
+
+```bash
+# Build all components with Google Auth enabled
+make build
+
+# Explicit build targets
+make build-google-auth   # Builds with -tags use_google_auth
+make build-no-auth       # Builds without Google Auth (legacy testing)
+
+# Run test suite with Google Auth enabled
+make test-google-auth    # go test -tags use_google_auth ./...
+```
+
+---
+
+## 8. Quick Local Development (Single-Machine)
+
+To test the complete DVFS ecosystem locally on a single machine without systemd (using mock auth mode):
 
 ```bash
 # 1. Generate dev certificates (if not already created)
 make certs
 
-# 2. Terminal 1: Start MetaServer
-go run ./cmd/metaserver/main.go -port=50051 -tls_cert=certs/server.crt -tls_key=certs/server.key
+# 2. Terminal 1: Start MetaServer (with mock auth enabled)
+DVFS_AUTH_MOCK=true go run ./cmd/metaserver/main.go -port=50051 -tls_cert=certs/server.crt -tls_key=certs/server.key
 
-# 3. Terminal 2: Start FileServer
-go run ./cmd/fileserver/main.go \
+# 3. Terminal 2: Start FileServer (with mock auth enabled)
+DVFS_AUTH_MOCK=true go run ./cmd/fileserver/main.go \
   -id=fs1 \
   -port=50052 \
   -data=./fileserver_data \
@@ -225,32 +271,44 @@ go run ./cmd/admin/main.go \
   -state_file=./metaserver_state.json \
   -static=./cmd/admin/static
 
-# 5. Terminal 4: Launch Client
-go run ./cmd/client/main.go -username=alice -ip_addr=127.0.0.1 -port=50051 -meta=true
+# 5. Terminal 4: Launch Client (using email as identity)
+DVFS_AUTH_MOCK=true go run ./cmd/client/main.go -username=alice@example.com -ip_addr=127.0.0.1 -port=50051 -meta=true
 ```
 
 ---
 
-## 8. Client Usage
+## 9. Client Usage
 
 ### Running from Source
 ```bash
-# Connect via MetaServer with dynamic Gist discovery
-go run ./cmd/client/main.go -username alice
+# Connect via MetaServer with dynamic Gist discovery (prompts for Google email if omitted)
+go run ./cmd/client/main.go -username alice@example.com
 
 # Connect directly to a specific FileServer or MetaServer IP
-go run ./cmd/client/main.go -username alice -ip_addr 10.7.52.85 -port 50051
+go run ./cmd/client/main.go -username alice@example.com -ip_addr 10.7.52.85 -port 50051
 ```
 
 ### Running Pre-Compiled Standalone Binaries
 Download the matching binary from the repository release artifacts (e.g. `dvfs-client-windows-amd64.exe` or `dvfs-client-linux-amd64`):
 ```bash
-./dvfs-client-linux-amd64 -username alice
+./dvfs-client-linux-amd64 -username alice@example.com
 ```
+
+### Interactive Login Flow
+When starting the client:
+1. If `-username` is not a valid email, the client prompts: `Enter your email:`.
+2. A temporary loopback HTTP listener starts at `http://localhost:38485/logincallback`.
+3. The client opens your system browser to Google's OAuth 2.0 consent page with RFC 7636 PKCE parameters.
+4. After authenticating, Google redirects to the loopback listener.
+5. In headless environments, the terminal prints the authorization URL and prompts you to paste the authorization code manually.
+6. The client exchanges the authorization code for a Google ID token and performs the `RegisterClient` handshake with the FileServer, acquiring a 256-bit CSPRNG Server Session Token (SST).
+7. All subsequent operations seamlessly authenticate using the SST. On client shutdown, `UnregisterClient` revokes the active session.
 
 ---
 
-## 9. Architectural & Operational Explanations
+---
+
+## 10. Architectural & Operational Explanations
 
 ### Why Hardware Sleep is Masked (`persist.sh`)
 Linux power management daemons routinely place idle cluster machines into sleep or hybrid-sleep states. The `persist.sh` script executes `systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target` to guarantee uninterrupted fileserver availability.
@@ -272,17 +330,20 @@ Cluster machines run on DHCP where local IP addresses can change upon router reb
 The Admin Console features remote cluster orchestration (restarting services, streaming logs, updating packages, and rebooting nodes). To enable automated execution over SSH without prompting for interactive passwords or granting unrestricted root privileges, `/etc/sudoers.d/dvfs` restricts passwordless execution specifically to `/usr/bin/systemctl`, `/usr/bin/journalctl`, `/sbin/reboot`, `/sbin/shutdown`, and `/usr/bin/apt`.
 
 ### How Admin Authentication Operates
-The Admin Console reads `ADMIN_PASSWORD_HASH` from `.env`. When an administrator logs in, the backend computes the SHA-256 hash of the submitted password and compares it in constant time via `crypto/subtle.ConstantTimeCompare`. A cryptographically secure 32-byte session token is generated and stored with a 12-hour expiration, set via an `HttpOnly` browser cookie (`dvfs_admin_token`).
+The Admin Console reads `ADMIN_PASSWORD_HASH` from `.env`. When an administrator logs in, the backend computes the SHA-256 hash of the submitted password and compares it in constant time via `crypto/subtle.ConstantTimeCompare`. A cryptographically secure 32-byte session token is generated and stored with a 12-hour expiration, set via an `HttpOnly` browser cookie (`dvfs_admin_token`). Privileged operations such as modifying user storage quotas (`SetQuota`) can be authenticated either through `ADMIN_PASSWORD_HASH` (sent by the Admin Web Console backend via `x-admin-password-hash`) or by a Google-authenticated user matching `DVFS_ADMIN_EMAIL`.
 
 ---
 
-## 10. Makefile Targets Reference
+## 11. Makefile Targets Reference
 
 The root `Makefile` automates building, testing, code generation, TLS certificate minting, and cross-platform packaging.
 
 | Target | Description | Underlying Command |
 |---|---|---|
-| `make build` | Builds all 4 binaries (`fileserver`, `client`, `metaserver`, `admin`) into `bin/`. | `go build -o bin/<binary> cmd/<component>/main.go` |
+| `make build` | Builds all 4 binaries (`fileserver`, `client`, `metaserver`, `admin`) into `bin/` (defaults to Google Auth enabled). | `go build -tags use_google_auth -o bin/<binary> cmd/<component>/main.go` |
+| `make build-google-auth` | Builds all 4 binaries explicitly with Google Auth enabled. | `make build USE_GOOGLE_AUTH=1` |
+| `make build-no-auth` | Builds binaries without Google Auth (legacy mode for testing). | `make build USE_GOOGLE_AUTH=0` |
+| `make test-google-auth` | Runs test suite explicitly with `-tags use_google_auth`. | `go test -tags use_google_auth ./... -count=1 -v` |
 | `make proto` | Recompiles all Protocol Buffer `.proto` schemas into Go structs and gRPC interfaces. | `protoc --go_out=. --go-grpc_out=. api/...` |
 | `make clean` | Removes build artifacts (`bin/`, `fileserver_data/`). Cross-platform (PowerShell / rm). | `rm -rf bin fileserver_data` |
 | `make deps` | Downloads and tidies Go module dependencies. | `go mod download && go mod tidy` |
@@ -309,7 +370,7 @@ The root `Makefile` automates building, testing, code generation, TLS certificat
 
 ---
 
-## 11. Systemd Service Units & Template Architecture
+## 12. Systemd Service Units & Template Architecture
 
 DVFS provides two styles of systemd unit files in `scripts/`:
 

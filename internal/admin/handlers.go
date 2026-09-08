@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/auth"
 )
 
 type ClusterResponse struct {
@@ -1074,6 +1076,7 @@ func (a *AdminServer) Run(port int) error {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok"}`)
 	})
+	mux.HandleFunc("/logincallback", a.handleGoogleLoginCallback)
 
 	spa := spaHandler{
 		staticDir: a.staticDir,
@@ -1099,3 +1102,40 @@ func (a *AdminServer) Stop() {
 		_ = a.SaveMetricsSnapshot(a.snapshotPath)
 	}
 }
+
+// handleGoogleLoginCallback handles incoming redirects from Google OAuth and renders the token display page.
+func (a *AdminServer) handleGoogleLoginCallback(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	cfg := auth.LoadDesktopConfig(".env", "../.env", "../../.env")
+
+	errParam := r.URL.Query().Get("error")
+	if errParam != "" {
+		_ = auth.RenderCallbackHTML(w, "", "", fmt.Sprintf("Google returned error: %s", errParam))
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		_ = auth.RenderCallbackHTML(w, "", "", "No authorization code found in callback query parameters.")
+		return
+	}
+
+	tokResp, err := auth.ExchangeCodeForTokens(r.Context(), cfg, code, cfg.RedirectURI)
+	if err != nil {
+		_ = auth.RenderCallbackHTML(w, "", "", fmt.Sprintf("Failed to exchange code for token: %v", err))
+		return
+	}
+
+	token := tokResp.IdToken
+	if token == "" {
+		token = tokResp.AccessToken
+	}
+
+	email := auth.ExtractEmailFromToken(token)
+	if email == "" {
+		email = "Google User"
+	}
+
+	_ = auth.RenderCallbackHTML(w, email, token, "")
+}
+

@@ -1,4 +1,4 @@
-﻿name: Deploy Documentation to GitHub Pages
+name: Deploy Documentation to GitHub Pages
 
 on:
   push:
@@ -40,8 +40,8 @@ jobs:
 
       - name: Install documentation dependencies
         run: |
-          pip install --upgrade pip
-          pip install mkdocs-material
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Build documentation site
         run: mkdocs build --strict

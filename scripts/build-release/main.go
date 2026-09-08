@@ -51,40 +51,55 @@ func main() {
 
 	var archivesCreated []string
 
-	// 1. Build Clients
-	if !*nodesOnly {
-		log.Println("\n--- Building Client Distributions ---")
-		clientTargets := []Target{
-			{OS: "windows", Arch: "amd64", Archive: "dvfs-client-windows-amd64.zip"},
-			{OS: "linux", Arch: "amd64", Archive: "dvfs-client-linux-amd64.tar.gz"},
-			{OS: "linux", Arch: "arm64", Archive: "dvfs-client-linux-arm64.tar.gz"},
-			{OS: "darwin", Arch: "arm64", Archive: "dvfs-client-darwin-arm64.tar.gz"},
-			{OS: "darwin", Arch: "amd64", Archive: "dvfs-client-darwin-amd64.tar.gz"},
-		}
-
-		for _, t := range clientTargets {
-			files, err := buildClientDistribution(t, tempBuildDir, *outDir, *version)
-			if err != nil {
-				log.Fatalf("[FATAL] Failed to build client distribution for %s/%s: %v", t.OS, t.Arch, err)
-			}
-			archivesCreated = append(archivesCreated, files...)
-		}
+	flavors := []struct {
+		Name   string
+		Tags   string
+		Suffix string
+	}{
+		{Name: "Google Auth (Default)", Tags: "use_google_auth", Suffix: ""},
+		{Name: "No-Auth", Tags: "", Suffix: "-no-auth"},
 	}
 
-	// 2. Build Cluster Nodes
-	if !*clientOnly {
-		log.Println("\n--- Building Cluster Node Distributions ---")
-		nodeTargets := []Target{
-			{OS: "linux", Arch: "arm64", Archive: "dvfs-nodes-linux-arm64.tar.gz"},
-			{OS: "linux", Arch: "amd64", Archive: "dvfs-nodes-linux-amd64.tar.gz"},
+	for _, f := range flavors {
+		log.Printf("\n=================================================================")
+		log.Printf("           BUILDING FLAVOR: %s", f.Name)
+		log.Printf("=================================================================")
+
+		// 1. Build Clients
+		if !*nodesOnly {
+			log.Printf("\n--- Building Client Distributions (%s) ---", f.Name)
+			clientTargets := []Target{
+				{OS: "windows", Arch: "amd64", Archive: "dvfs-client-windows-amd64.zip"},
+				{OS: "linux", Arch: "amd64", Archive: "dvfs-client-linux-amd64.tar.gz"},
+				{OS: "linux", Arch: "arm64", Archive: "dvfs-client-linux-arm64.tar.gz"},
+				{OS: "darwin", Arch: "arm64", Archive: "dvfs-client-darwin-arm64.tar.gz"},
+				{OS: "darwin", Arch: "amd64", Archive: "dvfs-client-darwin-amd64.tar.gz"},
+			}
+
+			for _, t := range clientTargets {
+				files, err := buildClientDistribution(t, tempBuildDir, *outDir, *version, f.Tags, f.Suffix)
+				if err != nil {
+					log.Fatalf("[FATAL] Failed to build client distribution for %s/%s (%s): %v", t.OS, t.Arch, f.Name, err)
+				}
+				archivesCreated = append(archivesCreated, files...)
+			}
 		}
 
-		for _, t := range nodeTargets {
-			archivePath, err := buildNodeDistribution(t, tempBuildDir, *outDir, *version)
-			if err != nil {
-				log.Fatalf("[FATAL] Failed to build node distribution for %s/%s: %v", t.OS, t.Arch, err)
+		// 2. Build Cluster Nodes
+		if !*clientOnly {
+			log.Printf("\n--- Building Cluster Node Distributions (%s) ---", f.Name)
+			nodeTargets := []Target{
+				{OS: "linux", Arch: "arm64", Archive: "dvfs-nodes-linux-arm64.tar.gz"},
+				{OS: "linux", Arch: "amd64", Archive: "dvfs-nodes-linux-amd64.tar.gz"},
 			}
-			archivesCreated = append(archivesCreated, archivePath)
+
+			for _, t := range nodeTargets {
+				archivePath, err := buildNodeDistribution(t, tempBuildDir, *outDir, *version, f.Tags, f.Suffix)
+				if err != nil {
+					log.Fatalf("[FATAL] Failed to build node distribution for %s/%s (%s): %v", t.OS, t.Arch, f.Name, err)
+				}
+				archivesCreated = append(archivesCreated, archivePath)
+			}
 		}
 	}
 
@@ -102,24 +117,23 @@ func main() {
 	log.Printf("  - SHA256SUMS.txt\n")
 }
 
-func buildClientDistribution(target Target, tempDir, outDir, version string) ([]string, error) {
+func buildClientDistribution(target Target, tempDir, outDir, version, tags, suffix string) ([]string, error) {
 	ext := ""
 	if target.OS == "windows" {
 		ext = ".exe"
 	}
 
-	standaloneName := fmt.Sprintf("dvfs-client-%s-%s%s", target.OS, target.Arch, ext)
+	standaloneName := fmt.Sprintf("dvfs-client%s-%s-%s%s", suffix, target.OS, target.Arch, ext)
 	standaloneBin := filepath.Join(outDir, standaloneName)
-	log.Printf("Compiling standalone client executable: %s", standaloneName)
+	log.Printf("Compiling standalone client executable: %s (tags: %q)", standaloneName, tags)
 
-	if err := compileBinary("cmd/client/main.go", standaloneBin, target.OS, target.Arch, version); err != nil {
+	if err := compileBinary("./cmd/client", standaloneBin, target.OS, target.Arch, version, tags); err != nil {
 		return nil, err
 	}
 
 	created := []string{standaloneBin}
 
-	// Also package into compressed archive (.zip for windows, .tar.gz for unix)
-	stagingDir := filepath.Join(tempDir, fmt.Sprintf("client-%s-%s", target.OS, target.Arch))
+	stagingDir := filepath.Join(tempDir, fmt.Sprintf("client%s-%s-%s", suffix, target.OS, target.Arch))
 	if err := os.MkdirAll(stagingDir, 0755); err != nil {
 		return created, nil
 	}
@@ -129,9 +143,20 @@ func buildClientDistribution(target Target, tempDir, outDir, version string) ([]
 		return created, nil
 	}
 
-	finalArchive := filepath.Join(outDir, target.Archive)
+	archiveName := target.Archive
+	if suffix != "" {
+		if strings.HasPrefix(archiveName, "dvfs-client-") {
+			archiveName = strings.Replace(archiveName, "dvfs-client-", "dvfs-client"+suffix+"-", 1)
+		} else if strings.HasSuffix(archiveName, ".zip") {
+			archiveName = strings.TrimSuffix(archiveName, ".zip") + suffix + ".zip"
+		} else if strings.HasSuffix(archiveName, ".tar.gz") {
+			archiveName = strings.TrimSuffix(archiveName, ".tar.gz") + suffix + ".tar.gz"
+		}
+	}
+
+	finalArchive := filepath.Join(outDir, archiveName)
 	var err error
-	if strings.HasSuffix(target.Archive, ".zip") {
+	if strings.HasSuffix(archiveName, ".zip") {
 		err = createZipArchive(stagingDir, finalArchive)
 	} else {
 		err = createTarGzArchive(stagingDir, finalArchive)
@@ -139,14 +164,14 @@ func buildClientDistribution(target Target, tempDir, outDir, version string) ([]
 
 	if err == nil {
 		created = append(created, finalArchive)
-		log.Printf("Packaged %s", target.Archive)
+		log.Printf("Packaged %s", archiveName)
 	}
 
 	return created, nil
 }
 
-func buildNodeDistribution(target Target, tempDir, outDir, version string) (string, error) {
-	stagingDir := filepath.Join(tempDir, fmt.Sprintf("nodes-%s-%s", target.OS, target.Arch))
+func buildNodeDistribution(target Target, tempDir, outDir, version, tags, suffix string) (string, error) {
+	stagingDir := filepath.Join(tempDir, fmt.Sprintf("nodes%s-%s-%s", suffix, target.OS, target.Arch))
 	binDir := filepath.Join(stagingDir, "bin")
 	scriptsDir := filepath.Join(stagingDir, "scripts")
 
@@ -158,20 +183,20 @@ func buildNodeDistribution(target Target, tempDir, outDir, version string) (stri
 	}
 
 	// 1. Compile Metaserver
-	log.Printf("Compiling metaserver for %s/%s", target.OS, target.Arch)
-	if err := compileBinary("cmd/metaserver/main.go", filepath.Join(binDir, "metaserver"), target.OS, target.Arch, version); err != nil {
+	log.Printf("Compiling metaserver for %s/%s (tags: %q)", target.OS, target.Arch, tags)
+	if err := compileBinary("./cmd/metaserver", filepath.Join(binDir, "metaserver"), target.OS, target.Arch, version, tags); err != nil {
 		return "", err
 	}
 
 	// 2. Compile Fileserver
-	log.Printf("Compiling fileserver for %s/%s", target.OS, target.Arch)
-	if err := compileBinary("cmd/fileserver/main.go", filepath.Join(binDir, "fileserver"), target.OS, target.Arch, version); err != nil {
+	log.Printf("Compiling fileserver for %s/%s (tags: %q)", target.OS, target.Arch, tags)
+	if err := compileBinary("./cmd/fileserver", filepath.Join(binDir, "fileserver"), target.OS, target.Arch, version, tags); err != nil {
 		return "", err
 	}
 
 	// 3. Compile Admin Server
-	log.Printf("Compiling admin server for %s/%s", target.OS, target.Arch)
-	if err := compileBinary("cmd/admin/main.go", filepath.Join(binDir, "admin"), target.OS, target.Arch, version); err != nil {
+	log.Printf("Compiling admin server for %s/%s (tags: %q)", target.OS, target.Arch, tags)
+	if err := compileBinary("./cmd/admin", filepath.Join(binDir, "admin"), target.OS, target.Arch, version, tags); err != nil {
 		return "", err
 	}
 
@@ -193,18 +218,33 @@ func buildNodeDistribution(target Target, tempDir, outDir, version string) (stri
 		}
 	}
 
-	finalArchive := filepath.Join(outDir, target.Archive)
+	archiveName := target.Archive
+	if suffix != "" {
+		if strings.HasPrefix(archiveName, "dvfs-nodes-") {
+			archiveName = strings.Replace(archiveName, "dvfs-nodes-", "dvfs-nodes"+suffix+"-", 1)
+		} else {
+			archiveName = strings.TrimSuffix(archiveName, ".tar.gz") + suffix + ".tar.gz"
+		}
+	}
+
+	finalArchive := filepath.Join(outDir, archiveName)
 	if err := createTarGzArchive(stagingDir, finalArchive); err != nil {
 		return "", err
 	}
 
-	log.Printf("Packaged %s", target.Archive)
+	log.Printf("Packaged %s", archiveName)
 	return finalArchive, nil
 }
 
-func compileBinary(srcPkg, outBin, targetOS, targetArch, version string) error {
+func compileBinary(srcPkg, outBin, targetOS, targetArch, version, tags string) error {
 	ldflags := fmt.Sprintf("-s -w -X main.Version=%s", version)
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", outBin, srcPkg)
+	args := []string{"build", "-trimpath"}
+	if tags != "" {
+		args = append(args, "-tags", tags)
+	}
+	args = append(args, "-ldflags", ldflags, "-o", outBin, srcPkg)
+
+	cmd := exec.Command("go", args...)
 	cmd.Env = append(os.Environ(),
 		"GOOS="+targetOS,
 		"GOARCH="+targetArch,

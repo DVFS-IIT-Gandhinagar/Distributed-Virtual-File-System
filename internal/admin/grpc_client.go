@@ -8,12 +8,17 @@ import (
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // CallSetQuota invokes the SetQuota gRPC RPC on the target fileserver address.
 func (a *AdminServer) CallSetQuota(address string, username string, quotaBytes uint64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	if a.authManager != nil && a.authManager.GetHash() != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-admin-password-hash", a.authManager.GetHash())
+	}
 
 	conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {

@@ -1,6 +1,7 @@
 package fileserver
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -16,24 +17,28 @@ import (
 	"time"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver/session"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // FileServer provides basic file operations
 type FileServer struct {
-	serverID    string
-	rootDir     string
-	inodes      map[string]*domain.Inode // FID string -> Inode
-	users       map[string]*domain.FID
-	nextInodeID uint64
-	mu          sync.RWMutex
-	trashMeta   map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
-	msAddr      string
-	Shared      map[string][]string       // directory path -> users map (e.g., "umang/proj" -> ["romit"])
-	sessions    map[string]*clientSession // username -> last known session metadata
-	startTime   time.Time
-	quotas      map[string]uint64 // username -> quota in bytes
-	inodeStore  *InodeStore
-	opMetrics   *OperationMetrics
+	serverID     string
+	rootDir      string
+	inodes       map[string]*domain.Inode // FID string -> Inode
+	users        map[string]*domain.FID
+	nextInodeID  uint64
+	mu           sync.RWMutex
+	trashMeta    map[string]trashEntry // trashed inode FID string -> metadata (best-effort, in-memory)
+	msAddr       string
+	Shared       map[string][]string       // directory path -> users map (e.g., "umang/proj" -> ["romit"])
+	sessions     map[string]*clientSession // username -> last known session metadata
+	sessionStore *session.Store            // Decoupled, thread-safe session store
+	startTime    time.Time
+	quotas       map[string]uint64 // username -> quota in bytes
+	inodeStore   *InodeStore
+	opMetrics    *OperationMetrics
 }
 
 type trashEntry struct {
@@ -67,11 +72,14 @@ func NewFileServer(serverID, rootDir string, msAddr string) (*FileServer, error)
 		trashMeta:   make(map[string]trashEntry),
 		msAddr:      msAddr,
 		Shared:      make(map[string][]string),
-		sessions:    make(map[string]*clientSession),
-		startTime:   time.Now(),
+		sessions:     make(map[string]*clientSession),
+		sessionStore: session.NewStore(session.DefaultIdleTTL, session.DefaultSweepInterval),
+		startTime:    time.Now(),
 		quotas:      make(map[string]uint64),
 		opMetrics:   NewOperationMetrics(),
 	}
+
+	SetGlobalSessionStore(fs.sessionStore)
 
 	// Load custom quota configuration if present
 	_ = fs.loadQuotas()
@@ -105,6 +113,103 @@ func NewFileServer(serverID, rootDir string, msAddr string) (*FileServer, error)
 	}
 
 	return fs, nil
+}
+
+// SessionStore returns the decoupled SessionStore instance.
+func (fs *FileServer) SessionStore() *session.Store {
+	return fs.sessionStore
+}
+
+// Permission defines the access levels for Centralized Policy Enforcement.
+type Permission int
+
+const (
+	PermRead Permission = iota
+	PermWrite
+	PermDelete
+	PermAdmin
+)
+
+func (p Permission) String() string {
+	switch p {
+	case PermRead:
+		return "READ"
+	case PermWrite:
+		return "WRITE"
+	case PermDelete:
+		return "DELETE"
+	case PermAdmin:
+		return "ADMIN"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+// Authorize is the Centralized Policy Enforcement Point (PEP) across all filesystem operations.
+// It verifies the caller extracted from context against the target Inode's ACL, eliminating reliance on req.RootUser.
+func (fs *FileServer) Authorize(ctx context.Context, fid *domain.FID, perm Permission) (*domain.Inode, string, error) {
+	if fid == nil {
+		return nil, "", status.Errorf(codes.InvalidArgument, "authorization failed: FID cannot be nil")
+	}
+
+	// 1. Resolve Authenticated Identity from Session Context
+	caller, ok := session.UsernameFromContext(ctx)
+
+	// 2. Fetch Inode under read lock
+	fs.mu.RLock()
+	inode, exists := fs.inodes[fid.String()]
+	fs.mu.RUnlock()
+
+	if !exists || inode == nil {
+		return nil, caller, status.Errorf(codes.NotFound, "file or directory not found for FID: %s", fid.String())
+	}
+
+	// If no authenticated caller found (legacy mode or local test without auth)
+	if !ok || caller == "" {
+		return inode, inode.ACL.Owner, nil
+	}
+
+	// 3. Evaluate Permissions against Inode ACL
+	switch perm {
+	case PermRead:
+		if !fs.userCanAccessInode(inode, caller) {
+			return nil, caller, status.Errorf(codes.PermissionDenied, "permission denied: user '%s' lacks READ permission on '%s'", caller, inode.Name)
+		}
+
+	case PermWrite:
+		if !fs.userCanAccessInode(inode, caller) {
+			return nil, caller, status.Errorf(codes.PermissionDenied, "permission denied: user '%s' lacks WRITE permission on '%s'", caller, inode.Name)
+		}
+
+	case PermDelete:
+		// Delete/Trash requires ownership of target resource
+		if inode.ACL.Owner != caller {
+			return nil, caller, status.Errorf(codes.PermissionDenied, "permission denied: user '%s' does not own '%s' (owner: '%s')", caller, inode.Name, inode.ACL.Owner)
+		}
+
+	case PermAdmin:
+		adminEmail := os.Getenv("DVFS_ADMIN_EMAIL")
+		if adminEmail == "" || !strings.EqualFold(caller, adminEmail) {
+			return nil, caller, status.Errorf(codes.PermissionDenied, "permission denied: user '%s' lacks administrative privileges", caller)
+		}
+
+	default:
+		return nil, caller, status.Errorf(codes.Internal, "unknown authorization permission level: %v", perm)
+	}
+
+	return inode, caller, nil
+}
+
+func (fs *FileServer) userCanAccessInode(inode *domain.Inode, user string) bool {
+	if inode.ACL.Owner == user {
+		return true
+	}
+	for _, u := range inode.ACL.Shared {
+		if u == user {
+			return true
+		}
+	}
+	return false
 }
 
 // RecordWrite records write bytes, duration in ms, and error status into operation metrics.
@@ -877,25 +982,28 @@ func (fs *FileServer) Share(username string, share_with string, dirFID *domain.F
 	}
 
 	fs.mu.Lock()
-	defer fs.mu.Unlock()
 
 	// Only directories can be shared
 	if dirInode.Type != domain.InodeTypeDirectory {
+		fs.mu.Unlock()
 		return fmt.Errorf("only directories can be shared")
 	}
 
 	// Sharing is allowed only if current user is the owner
 	if dirInode.ACL.Owner != username {
+		fs.mu.Unlock()
 		return fmt.Errorf("Only owner can share")
 	}
 
 	if share_with == dirInode.ACL.Owner {
+		fs.mu.Unlock()
 		return fmt.Errorf("Cannot share with self")
 	}
 
 	// Check if already shared at directory level (idempotent)
 	for _, u := range dirInode.ACL.Shared {
 		if u == share_with {
+			fs.mu.Unlock()
 			return fmt.Errorf("The given already has the access to this directory")
 		}
 	}
@@ -979,7 +1087,10 @@ func (fs *FileServer) Share(username string, share_with string, dirFID *domain.F
 		log.Printf("Warning: failed to compute relative path for inode '%s': %v", dirInode.Name, err)
 	}
 
-	// Notify metaserver once after all ACLs are updated
+	// CRITICAL DEADLOCK FIX: Release fs.mu BEFORE executing network RPC to MetaServer
+	fs.mu.Unlock()
+
+	// Notify metaserver once after all ACLs are updated (outside of lock)
 	fs.RootShare(username, dirInode.Name, path, share_with)
 
 	log.Printf("Share: successfully shared directory '%s' with user '%s' (updated %d inodes)",
@@ -998,14 +1109,15 @@ func (fs *FileServer) Unshare(username string, unshare_with string, dirFID *doma
 	}
 
 	fs.mu.Lock()
-	defer fs.mu.Unlock()
 
 	// Sharing is allowed only if current user is the owner
 	if dirInode.ACL.Owner != username {
+		fs.mu.Unlock()
 		return fmt.Errorf("Only owner can unshare")
 	}
 
 	if unshare_with == dirInode.ACL.Owner {
+		fs.mu.Unlock()
 		return fmt.Errorf("Cannot unshare with self")
 	}
 
@@ -1019,6 +1131,7 @@ func (fs *FileServer) Unshare(username string, unshare_with string, dirFID *doma
 	}
 
 	if !found {
+		fs.mu.Unlock()
 		return fmt.Errorf("user not in shared list")
 	}
 
@@ -1094,7 +1207,10 @@ func (fs *FileServer) Unshare(username string, unshare_with string, dirFID *doma
 		log.Printf("Warning: failed to compute relative path for inode '%s': %v", dirInode.Name, err)
 	}
 
-	// Notify metaserver once after all ACLs are updated
+	// CRITICAL DEADLOCK FIX: Release fs.mu BEFORE executing network RPC
+	fs.mu.Unlock()
+
+	// Notify metaserver once after all ACLs are updated (outside of lock)
 	fs.RootUnshare(username, dirInode.Name, path, unshare_with)
 
 	log.Printf("Unshare: successfully unshared directory '%s' with user '%s' (updated %d inodes)",

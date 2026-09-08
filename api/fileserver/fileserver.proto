@@ -259,6 +259,8 @@ message RegisterClientResponse {
   bool success = 1;
   string error = 2;
   FID user_root_fid = 3; // FID of user's root directory
+  string session_token = 4; // Server Session Token (SST) minted by server
+  int64 expires_at = 5; // Unix timestamp of absolute expiration ceiling
 }
 
 message SetQuotaRequest {
