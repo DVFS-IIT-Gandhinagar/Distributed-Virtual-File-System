@@ -54,6 +54,22 @@ func (a *AdminServer) refreshNodes() {
 		displayName := fmt.Sprintf("FS-%d", displayID)
 		machineName := fmt.Sprintf("dvfs%d", displayID)
 
+		// Check if cluster discovery resolves host IP to an explicit machine name (e.g. dvfs3)
+		host, _, splitErr := net.SplitHostPort(fsInfo.Address)
+		if splitErr != nil {
+			host = fsInfo.Address
+		}
+		if a.resolver != nil && host != "" {
+			if resolved := a.resolver.ResolveServerName(host); resolved != "" && resolved != host && resolved != "localhost" {
+				machineName = resolved
+				var machineNum int
+				if _, scanErr := fmt.Sscanf(resolved, "dvfs%d", &machineNum); scanErr == nil && machineNum > 0 {
+					displayID = machineNum
+					displayName = fmt.Sprintf("FS-%d", machineNum)
+				}
+			}
+		}
+
 		if node, exists := a.nodes[fsID]; exists {
 			node.Address = fsInfo.Address
 			node.MetricsURL = metricsURL

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/admin"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	tlsCert := flag.String("tls_cert", "certs/server.crt", "Path to TLS server certificate")
 	tlsKey := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
 	tlsEnabled := flag.Bool("tls", false, "Force enable TLS (auto-enabled if cert and key exist)")
+	gistURL := flag.String("gist_url", "", "Custom GitHub Gist URL for machines discovery (optional)")
 	flag.Parse()
 
 	log.Printf("[ADMIN] Starting Admin Console on port %d...", *port)
@@ -29,6 +31,9 @@ func main() {
 	log.Printf("[ADMIN] SSH User: '%s', SSH Key: '%s', Port: %d, Repo Path: '%s'", *sshUser, *sshKey, *sshPort, *repoPath)
 
 	server := admin.NewAdminServer(*stateFile, *staticDir)
+	if *gistURL != "" {
+		server.SetDiscoveryResolver(client.NewDiscoveryResolver(client.WithGistURL(*gistURL)))
+	}
 	history := admin.NewCommandHistory(*historyLimit, *historyFile)
 	server.SetHistory(history)
 	server.SetOrchestrator(admin.NewOrchestrator(server, admin.NewRemoteSSHExecutor(), history, *sshUser, *sshKey, *repoPath, *sshPort))

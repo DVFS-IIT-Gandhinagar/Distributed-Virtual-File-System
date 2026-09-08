@@ -40,6 +40,11 @@ export default function Actions() {
     enabled: isAuthenticated,
   });
 
+  const findNode = useCallback(
+    (id?: string) => cluster?.nodes?.find((n) => n.fsID === id) || id || '',
+    [cluster?.nodes]
+  );
+
   // Selected Nodes
   const [selectedNodeIDs, setSelectedNodeIDs] = useState<string[]>([]);
   const selectedNodeIDsRef = useRef<string[]>(selectedNodeIDs);
@@ -142,7 +147,7 @@ export default function Actions() {
         break;
 
       case 'node_started':
-        appendTerminal(`⚡ [${formatNodeDisplayName(ev.node_id || '')} | ${ev.address}] Starting execution...`);
+        appendTerminal(`⚡ [${formatNodeDisplayName(findNode(ev.node_id))} | ${ev.address}] Starting execution...`);
         setNodeStatusMap((prev) => ({
           ...prev,
           [ev.node_id || '']: { status: 'running' },
@@ -154,7 +159,7 @@ export default function Actions() {
           const lines = ev.chunk.split('\n');
           lines.forEach((line) => {
             if (line.trim().length > 0) {
-              const prefix = `[${formatNodeDisplayName(ev.node_id || '')}] `;
+              const prefix = `[${formatNodeDisplayName(findNode(ev.node_id))}] `;
               appendTerminal(`${prefix}${line}`);
             }
           });
@@ -164,7 +169,7 @@ export default function Actions() {
       case 'node_finished': {
         const exitCode = ev.exit_code ?? (ev.error ? -1 : 0);
         const isSuccess = exitCode === 0 && !ev.error;
-        const nodeName = formatNodeDisplayName(ev.node_id || '');
+        const nodeName = formatNodeDisplayName(findNode(ev.node_id));
         if (isSuccess) {
           appendTerminal(`✅ [${nodeName}] Succeeded in ${ev.duration_ms}ms (Exit 0)`);
         } else {
@@ -735,7 +740,7 @@ export default function Actions() {
                         ) : (
                           selectedNodeIDs.map((id) => (
                             <span key={id} className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1">
-                              <i className="bi bi-server me-1"></i>{formatNodeDisplayName(id)} ({formatMachineName(id)})
+                              <i className="bi bi-server me-1"></i>{formatNodeDisplayName(findNode(id))} ({formatMachineName(findNode(id))})
                             </span>
                           ))
                         )}
@@ -802,7 +807,7 @@ export default function Actions() {
                         ) : (
                           selectedNodeIDs.map((id) => (
                             <span key={id} className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
-                              <i className="bi bi-server me-1"></i>{formatNodeDisplayName(id)} ({formatMachineName(id)})
+                              <i className="bi bi-server me-1"></i>{formatNodeDisplayName(findNode(id))} ({formatMachineName(findNode(id))})
                             </span>
                           ))
                         )}
@@ -1008,7 +1013,7 @@ export default function Actions() {
                   {Object.entries(nodeStatusMap).map(([nodeId, info]) => (
                     <div key={nodeId} className="col-sm-6 col-md-4">
                       <div className="p-2 rounded bg-white border d-flex justify-content-between align-items-center">
-                        <span className="fw-bold small">{formatNodeDisplayName(nodeId)}</span>
+                        <span className="fw-bold small">{formatNodeDisplayName(findNode(nodeId))}</span>
                         <div>
                           {info.status === 'pending' && (
                             <span className="badge bg-secondary text-light small">
@@ -1209,7 +1214,7 @@ export default function Actions() {
                         <div className="d-flex flex-wrap gap-1">
                           {h.target_nodes.map((nID) => (
                             <span key={nID} className="badge bg-light text-dark border" style={{ fontSize: '0.72rem' }}>
-                              {formatNodeDisplayName(nID)}
+                              {formatNodeDisplayName(findNode(nID))}
                             </span>
                           ))}
                         </div>
@@ -1275,7 +1280,7 @@ export default function Actions() {
                 {Object.values(viewingRecord.node_results || {}).map((nr) => (
                   <div key={nr.node_id} className="card bg-light border mb-2">
                     <div className="card-header py-1 px-3 d-flex justify-content-between align-items-center small bg-white border-bottom">
-                      <span className="fw-semibold">Node {formatNodeDisplayName(nr.node_id)} ({formatMachineName(nr.node_id)} | {nr.address})</span>
+                      <span className="fw-semibold">Node {formatNodeDisplayName(findNode(nr.node_id))} ({formatMachineName(findNode(nr.node_id))} | {nr.address})</span>
                       <div>
                         <span className={`badge ${nr.exit_code === 0 ? 'bg-success' : 'bg-danger'} me-2`}>
                           Exit {nr.exit_code}
@@ -1317,7 +1322,7 @@ export default function Actions() {
                 <div className="d-flex flex-wrap gap-2 mb-3">
                   {selectedNodeIDs.map((id) => (
                     <span key={id} className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-2">
-                      <i className="bi bi-server me-1"></i>{formatNodeDisplayName(id)} ({formatMachineName(id)})
+                      <i className="bi bi-server me-1"></i>{formatNodeDisplayName(findNode(id))} ({formatMachineName(findNode(id))})
                     </span>
                   ))}
                 </div>

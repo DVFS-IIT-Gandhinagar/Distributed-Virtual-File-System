@@ -262,3 +262,54 @@ func TestOrchestratorCustomSSHPort(t *testing.T) {
 	}
 }
 
+func TestOrchestrator_MachineNameShiftResolution(t *testing.T) {
+	srv := NewAdminServer("", "")
+	// Node 0 is dvfs1
+	srv.nodes["0"] = &NodeState{
+		FsID:        "0",
+		Address:     "10.0.171.38:50052",
+		MachineName: "dvfs1",
+		DisplayName: "FS-1",
+		DisplayID:   1,
+	}
+	// dvfs2 was skipped! Node 1 is actually physical machine dvfs3
+	srv.nodes["1"] = &NodeState{
+		FsID:        "1",
+		Address:     "10.0.171.40:50052",
+		MachineName: "dvfs3",
+		DisplayName: "FS-3",
+		DisplayID:   3,
+	}
+
+	mockSSH := NewMockSSHExecutor()
+	// Orchestrator has default user dvfs1 (from whoami on dvfs1)
+	orchestrator := NewOrchestrator(srv, mockSSH, NewCommandHistory(10, ""), "dvfs1", "~/.ssh/id_ed25519", "/repo", 22)
+	srv.SetOrchestrator(orchestrator)
+
+	// Verify presets resolve SSHUser to dvfs3 instead of dvfs2!
+	presets := orchestrator.GetPresets()
+	if presets["1"].SSHUser != "dvfs3" {
+		t.Errorf("expected preset SSHUser for node 1 to be dvfs3, got %s", presets["1"].SSHUser)
+	}
+
+	// Verify Execute connects as dvfs3 on host 10.0.171.40!
+	_, err := orchestrator.Execute(context.Background(), ActionRequest{
+		ActionType:    ActionCustom,
+		CustomCommand: "whoami",
+		TargetNodeIDs: []string{"1"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("execute error: %v", err)
+	}
+
+	if len(mockSSH.Calls) != 1 {
+		t.Fatalf("expected 1 SSH call, got %d", len(mockSSH.Calls))
+	}
+	if mockSSH.Calls[0].User != "dvfs3" {
+		t.Errorf("expected SSH call user to be 'dvfs3', got %s", mockSSH.Calls[0].User)
+	}
+	if mockSSH.Calls[0].Host != "10.0.171.40" {
+		t.Errorf("expected SSH call host to be '10.0.171.40', got %s", mockSSH.Calls[0].Host)
+	}
+}
+
