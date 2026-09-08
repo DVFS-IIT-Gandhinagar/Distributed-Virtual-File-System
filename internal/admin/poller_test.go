@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
 )
 
 func TestDeriveMetricsURL(t *testing.T) {
@@ -120,5 +124,74 @@ func TestPollNode(t *testing.T) {
 	}
 	if len(node.History.GetAll()) != 1 {
 		t.Errorf("expected 1 history snapshot, got %d", len(node.History.GetAll()))
+	}
+}
+
+func TestPoller_MachineDiscoveryResolutionAndShiftFix(t *testing.T) {
+	// Create mock metaserver state file where dvfs2 was skipped:
+	// Node 0 -> 10.0.171.38:50052
+	// Node 1 -> 10.0.171.40:50052
+	stateDir := t.TempDir()
+	statePath := filepath.Join(stateDir, "metaserver_state.json")
+
+	mockState := struct {
+		FileServers map[string]struct {
+			Address string `json:"address"`
+		} `json:"fileservers"`
+		Users map[string]uint64 `json:"users"`
+	}{
+		FileServers: map[string]struct {
+			Address string `json:"address"`
+		}{
+			"0": {Address: "10.0.171.38:50052"},
+			"1": {Address: "10.0.171.40:50052"},
+		},
+		Users: map[string]uint64{"alice": 0, "bob": 1},
+	}
+
+	data, err := json.Marshal(mockState)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	if err := os.WriteFile(statePath, data, 0644); err != nil {
+		t.Fatalf("write file error: %v", err)
+	}
+
+	admin := NewAdminServer(statePath, "")
+
+	// Set discovery resolver with pre-seeded nodes
+	resolver := client.NewDiscoveryResolver()
+	resolver.SetNodes([]client.GistNode{
+		{Username: "dvfs1", IP: "10.0.171.38"},
+		{Username: "dvfs3", IP: "10.0.171.40"},
+	})
+	admin.SetDiscoveryResolver(resolver)
+
+	admin.refreshNodes()
+
+	admin.mu.RLock()
+	defer admin.mu.RUnlock()
+
+	node0, ok0 := admin.nodes["0"]
+	if !ok0 {
+		t.Fatalf("expected node 0 to be registered")
+	}
+	if node0.MachineName != "dvfs1" || node0.DisplayName != "FS-1" || node0.DisplayID != 1 {
+		t.Errorf("unexpected node 0: name=%s display=%s id=%d", node0.MachineName, node0.DisplayName, node0.DisplayID)
+	}
+
+	node1, ok1 := admin.nodes["1"]
+	if !ok1 {
+		t.Fatalf("expected node 1 to be registered")
+	}
+	// Crucial check: node 1 should be resolved to dvfs3 / FS-3, NOT dvfs2 / FS-2!
+	if node1.MachineName != "dvfs3" {
+		t.Errorf("expected node 1 MachineName to be dvfs3, got %s", node1.MachineName)
+	}
+	if node1.DisplayName != "FS-3" {
+		t.Errorf("expected node 1 DisplayName to be FS-3, got %s", node1.DisplayName)
+	}
+	if node1.DisplayID != 3 {
+		t.Errorf("expected node 1 DisplayID to be 3, got %d", node1.DisplayID)
 	}
 }

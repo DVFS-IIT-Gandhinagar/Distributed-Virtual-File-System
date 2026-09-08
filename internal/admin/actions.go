@@ -120,7 +120,9 @@ func (o *Orchestrator) GetPresets() map[string]*NodeRestartParams {
 		}
 
 		nodeSSHUser := o.defaultSSHUser
-		if nodeSSHUser == "" || strings.HasPrefix(nodeSSHUser, "dvfs") {
+		if node.MachineName != "" {
+			nodeSSHUser = node.MachineName
+		} else if nodeSSHUser == "" || strings.HasPrefix(nodeSSHUser, "dvfs") {
 			if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
 				nodeSSHUser = fmt.Sprintf("dvfs%d", num+1)
 			}
@@ -470,10 +472,12 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 			nodeUser := sshUser
 			if req.RestartParams != nil && req.RestartParams[nID] != nil && req.RestartParams[nID].SSHUser != "" {
 				nodeUser = req.RestartParams[nID].SSHUser
-			} else if req.SSHUser != "" {
-				nodeUser = req.SSHUser
 			} else if params != nil && params.SSHUser != "" {
 				nodeUser = params.SSHUser
+			} else if nState != nil && nState.MachineName != "" {
+				nodeUser = nState.MachineName
+			} else if req.SSHUser != "" {
+				nodeUser = req.SSHUser
 			} else if sshUser == "" || strings.HasPrefix(sshUser, "dvfs") {
 				if num, parseErr := strconv.Atoi(nID); parseErr == nil {
 					nodeUser = fmt.Sprintf("dvfs%d", num+1)

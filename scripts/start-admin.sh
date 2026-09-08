@@ -77,6 +77,14 @@ echo "[STARTUP] SSH Port:   ${SSH_PORT}"
 echo "[STARTUP] Repo Path:  ${REPO_PATH}"
 echo "[STARTUP] TLS Cert:   ${TLS_CERT}"
 echo "[STARTUP] TLS Key:    ${TLS_KEY}"
+if [ -n "${GIST_URL}" ]; then
+    echo "[STARTUP] Gist URL:   ${GIST_URL}"
+fi
+
+GIST_FLAG=""
+if [ -n "${GIST_URL}" ]; then
+    GIST_FLAG="-gist_url=${GIST_URL}"
+fi
 
 exec ./bin/admin \
   -port="${ADMIN_PORT}" \
@@ -88,4 +96,5 @@ exec ./bin/admin \
   -repo_path="${REPO_PATH}" \
   -tls_cert="${TLS_CERT}" \
   -tls_key="${TLS_KEY}" \
+  ${GIST_FLAG} \
   "$@"

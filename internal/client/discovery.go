@@ -246,9 +246,24 @@ func (d *DiscoveryResolver) ResolveServerName(address string) string {
 	// Check reverse lookup
 	d.mu.RLock()
 	mappedHost, ok := d.ipToHost[host]
+	stale := d.lastFetch.IsZero() || time.Since(d.lastFetch) > d.cacheTTL
 	d.mu.RUnlock()
 
-	if ok && mappedHost != "" {
+	if ok && mappedHost != "" && !stale {
+		return mappedHost
+	}
+
+	// Try fetching fresh nodes if not cached or stale
+	fetchCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, fetchErr := d.FetchNodes(fetchCtx); fetchErr == nil {
+		d.mu.RLock()
+		mappedHost, ok = d.ipToHost[host]
+		d.mu.RUnlock()
+		if ok && mappedHost != "" {
+			return mappedHost
+		}
+	} else if ok && mappedHost != "" {
 		return mappedHost
 	}
 

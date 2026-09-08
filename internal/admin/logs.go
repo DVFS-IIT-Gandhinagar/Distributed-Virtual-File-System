@@ -98,10 +98,10 @@ func (a *AdminServer) FetchNodeLogs(ctx context.Context, nodeID string, service 
 		sshUser := a.orchestrator.defaultSSHUser
 		if presets != nil && presets[node.FsID] != nil && presets[node.FsID].SSHUser != "" {
 			sshUser = presets[node.FsID].SSHUser
+		} else if node.MachineName != "" {
+			sshUser = node.MachineName
 		} else if sshUser == "" || strings.HasPrefix(sshUser, "dvfs") {
-			if node.MachineName != "" {
-				sshUser = node.MachineName
-			} else if num, parseErr := strconv.Atoi(node.FsID); parseErr == nil {
+			if num, parseErr := strconv.Atoi(node.FsID); parseErr == nil {
 				sshUser = fmt.Sprintf("dvfs%d", num+1)
 			}
 		}

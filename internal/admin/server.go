@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
 )
 
 type NodeStatus string
@@ -55,6 +57,7 @@ type AdminServer struct {
 	tlsCertFile  string
 	tlsKeyFile   string
 	isTLS        bool
+	resolver     *client.DiscoveryResolver
 }
 
 // NewAdminServer creates a new AdminServer instance.
@@ -79,6 +82,7 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 		stopCh:       make(chan struct{}),
 		snapshotPath: snapshotPath,
 		authManager:  NewAuthManager(".env", "../.env", "../../.env"),
+		resolver:     client.NewDiscoveryResolver(),
 	}
 	history := NewCommandHistory(100, historyPath)
 	ssh := NewRemoteSSHExecutor()
@@ -87,6 +91,20 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 	srv.alertManager = NewAlertManager(500, alertsPath)
 	_ = srv.LoadMetricsSnapshot(srv.snapshotPath)
 	return srv
+}
+
+// SetDiscoveryResolver sets the discovery resolver (useful for testing or custom Gist URLs).
+func (a *AdminServer) SetDiscoveryResolver(r *client.DiscoveryResolver) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.resolver = r
+}
+
+// DiscoveryResolver returns the discovery resolver.
+func (a *AdminServer) DiscoveryResolver() *client.DiscoveryResolver {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.resolver
 }
 
 // SetAuthManager sets the authentication manager (useful for testing).
