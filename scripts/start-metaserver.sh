@@ -14,6 +14,7 @@ HEARTBEAT_TIMEOUT="${HEARTBEAT_TIMEOUT:-30s}"
 HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5s}"
 TLS_CERT="${TLS_CERT:-certs/server.crt}"
 TLS_KEY="${TLS_KEY:-certs/server.key}"
+TLS_CA="${TLS_CA:-certs/ca.crt}"
 
 # Ensure state directory exists
 STATE_DIR="$(dirname "$STATE_FILE")"
@@ -41,6 +42,7 @@ echo "[STARTUP] Heartbeat Timeout:  ${HEARTBEAT_TIMEOUT}"
 echo "[STARTUP] Heartbeat Interval: ${HEARTBEAT_INTERVAL}"
 echo "[STARTUP] TLS Cert:           ${TLS_CERT}"
 echo "[STARTUP] TLS Key:            ${TLS_KEY}"
+echo "[STARTUP] TLS CA:             ${TLS_CA}"
 
 exec ./bin/metaserver \
   -port="${META_PORT}" \
@@ -49,4 +51,5 @@ exec ./bin/metaserver \
   -heartbeat_check_interval="${HEARTBEAT_INTERVAL}" \
   -tls_cert="${TLS_CERT}" \
   -tls_key="${TLS_KEY}" \
+  -ca_cert="${TLS_CA}" \
   "$@"

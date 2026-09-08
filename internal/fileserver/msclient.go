@@ -2,6 +2,7 @@ package fileserver
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"log"
@@ -16,15 +17,18 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// dialMetaServer dials the configured metaserver. If certs/ca.crt exists, it verifies TLS;
-// otherwise it falls back to plaintext (e.g. in mock unit tests).
+// dialMetaServer dials the configured metaserver. If certs/ca.crt exists, it verifies TLS
+// and presents mutual TLS (mTLS) client certificates; otherwise it falls back to plaintext (e.g. in mock unit tests).
 func (fs *FileServer) dialMetaServer() (*grpc.ClientConn, error) {
 	if fs.msAddr == "" {
 		return nil, fmt.Errorf("no metaserver address configured")
 	}
 
 	var opts []grpc.DialOption
-	caPath := "certs/ca.crt"
+	caPath := fs.caCertPath
+	if caPath == "" {
+		caPath = "certs/ca.crt"
+	}
 	if _, err := os.Stat(caPath); os.IsNotExist(err) {
 		if _, errDev := os.Stat("deploy_certs/ca.crt"); errDev == nil {
 			caPath = "deploy_certs/ca.crt"
@@ -40,10 +44,42 @@ func (fs *FileServer) dialMetaServer() (*grpc.ClientConn, error) {
 					host = fs.msAddr
 				}
 				serverName := host
-				if net.ParseIP(host) != nil {
-					serverName = "dvfs1"
+				if ip := net.ParseIP(host); ip != nil {
+					if ip.IsLoopback() {
+						serverName = "localhost"
+					} else {
+						serverName = "dvfs1"
+					}
 				}
-				creds := credentials.NewClientTLSFromCert(cp, serverName)
+
+				tlsConfig := &tls.Config{
+					RootCAs:    cp,
+					ServerName: serverName,
+				}
+
+				// Load client certificate for mTLS if available
+				certPath := fs.tlsCertPath
+				keyPath := fs.tlsKeyPath
+				if certPath == "" {
+					certPath = "certs/server.crt"
+				}
+				if keyPath == "" {
+					keyPath = "certs/server.key"
+				}
+				if _, err := os.Stat(certPath); os.IsNotExist(err) {
+					if _, errDev := os.Stat(filepath.Join("deploy_certs", fs.serverID, "server.crt")); errDev == nil {
+						certPath = filepath.Join("deploy_certs", fs.serverID, "server.crt")
+						keyPath = filepath.Join("deploy_certs", fs.serverID, "server.key")
+					}
+				}
+
+				if clientCert, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
+					tlsConfig.Certificates = []tls.Certificate{clientCert}
+				} else {
+					log.Printf("[FILESERVER] Warning: could not load mTLS client certificate (%s, %s): %v", certPath, keyPath, err)
+				}
+
+				creds := credentials.NewTLS(tlsConfig)
 				opts = append(opts, grpc.WithTransportCredentials(creds))
 			}
 		}
