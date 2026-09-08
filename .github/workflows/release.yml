@@ -53,6 +53,7 @@ jobs:
           go run scripts/build-release/main.go -version="${VERSION}"
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET || vars.GOOGLE_CLIENT_SECRET }}
 
       - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v2
