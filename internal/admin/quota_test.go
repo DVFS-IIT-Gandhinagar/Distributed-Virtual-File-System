@@ -199,3 +199,105 @@ func TestHandleUserQuotaSuccess(t *testing.T) {
 		t.Errorf("expected cached quota %d, got %d", newQuota, q)
 	}
 }
+
+func TestHandleUsers_DiscoveredMachineMappingAndShiftFix(t *testing.T) {
+	admin := NewAdminServer("", "")
+	// Bob is assigned to fsID "1", which in the cluster corresponds to dvfs3 (FS-3) because dvfs2 was skipped
+	admin.users["bob"] = "1"
+	admin.users["alice"] = "0"
+
+	admin.nodes["0"] = &NodeState{
+		FsID:        "0",
+		DisplayID:   1,
+		DisplayName: "FS-1",
+		MachineName: "dvfs1",
+		Address:     "10.0.171.38:50052",
+		Status:      StatusOnline,
+		Metrics: &FileserverMetrics{
+			PerUserStorage: map[string]uint64{
+				"alice": 100 * 1024 * 1024,
+			},
+			PerUserQuota: map[string]uint64{
+				"alice": 1024 * 1024 * 1024,
+			},
+		},
+	}
+	admin.nodes["1"] = &NodeState{
+		FsID:        "1",
+		DisplayID:   3,
+		DisplayName: "FS-3",
+		MachineName: "dvfs3",
+		Address:     "10.0.171.40:50052",
+		Status:      StatusOnline,
+		Metrics: &FileserverMetrics{
+			PerUserStorage: map[string]uint64{
+				"bob":   500 * 1024 * 1024,
+				"alice": 50 * 1024 * 1024,
+			},
+			PerUserQuota: map[string]uint64{
+				"bob": 2 * 1024 * 1024 * 1024,
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	rec := httptest.NewRecorder()
+
+	admin.handleUsers(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var userList []UserSummary
+	if err := json.NewDecoder(rec.Body).Decode(&userList); err != nil {
+		t.Fatalf("failed to decode user list: %v", err)
+	}
+
+	userMap := make(map[string]UserSummary)
+	for _, u := range userList {
+		userMap[u.Username] = u
+	}
+
+	bob, exists := userMap["bob"]
+	if !exists {
+		t.Fatalf("bob not found in user list")
+	}
+
+	// Bob's home fs is "1", but must be mapped to FS-3 and dvfs3, NOT FS-2 or dvfs2
+	if bob.HomeFsDisplay != "FS-3" {
+		t.Errorf("expected bob HomeFsDisplay to be 'FS-3', got %q", bob.HomeFsDisplay)
+	}
+	if bob.HomeFsMachine != "dvfs3" {
+		t.Errorf("expected bob HomeFsMachine to be 'dvfs3', got %q", bob.HomeFsMachine)
+	}
+	if bob.HomeFsAddress != "10.0.171.40:50052" {
+		t.Errorf("expected bob HomeFsAddress to be '10.0.171.40:50052', got %q", bob.HomeFsAddress)
+	}
+
+	// Also check Alice's storage node breakdown: node "1" must have DisplayName "FS-3" and MachineName "dvfs3"
+	alice, exists := userMap["alice"]
+	if !exists {
+		t.Fatalf("alice not found in user list")
+	}
+	var node1Storage *NodeUserStorage
+	for i := range alice.Nodes {
+		if alice.Nodes[i].FsID == "1" {
+			node1Storage = &alice.Nodes[i]
+			break
+		}
+	}
+	if node1Storage == nil {
+		t.Fatalf("alice node 1 breakdown not found")
+	}
+	if node1Storage.DisplayID != 3 {
+		t.Errorf("expected node 1 DisplayID 3, got %d", node1Storage.DisplayID)
+	}
+	if node1Storage.DisplayName != "FS-3" {
+		t.Errorf("expected node 1 DisplayName 'FS-3', got %q", node1Storage.DisplayName)
+	}
+	if node1Storage.MachineName != "dvfs3" {
+		t.Errorf("expected node 1 MachineName 'dvfs3', got %q", node1Storage.MachineName)
+	}
+}
+

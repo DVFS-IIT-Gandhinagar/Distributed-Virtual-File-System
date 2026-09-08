@@ -12,6 +12,7 @@ import type {
   AlertFilters,
   LogTailResponse,
 } from './types';
+import { updateClusterNodesCache } from './utils';
 
 const TOKEN_KEY = 'dvfs_admin_token';
 
@@ -88,13 +89,21 @@ export async function fetchAuthStatus(): Promise<{ authenticated: boolean }> {
 export async function fetchCluster(): Promise<ClusterResponse> {
   const res = await authFetch('/api/cluster');
   if (!res.ok) throw new Error(`fetchCluster: ${res.status} ${res.statusText}`);
-  return res.json() as Promise<ClusterResponse>;
+  const data = (await res.json()) as ClusterResponse;
+  if (data?.nodes) {
+    updateClusterNodesCache(data.nodes);
+  }
+  return data;
 }
 
 export async function fetchPerformance(): Promise<PerformanceResponse> {
   const res = await authFetch('/api/performance');
   if (!res.ok) throw new Error(`fetchPerformance: ${res.status} ${res.statusText}`);
-  return res.json() as Promise<PerformanceResponse>;
+  const data = (await res.json()) as PerformanceResponse;
+  if (data?.nodes) {
+    updateClusterNodesCache(data.nodes);
+  }
+  return data;
 }
 
 export function getPerformanceExportUrl(nodeId?: string): string {
@@ -115,7 +124,15 @@ export async function fetchHistory(fsID: string): Promise<Snapshot[]> {
 export async function fetchUsers(): Promise<UserSummary[]> {
   const res = await authFetch('/api/users');
   if (!res.ok) throw new Error(`fetchUsers: ${res.status} ${res.statusText}`);
-  return res.json() as Promise<UserSummary[]>;
+  const data = (await res.json()) as UserSummary[];
+  if (Array.isArray(data)) {
+    for (const u of data) {
+      if (u.nodes) {
+        updateClusterNodesCache(u.nodes);
+      }
+    }
+  }
+  return data;
 }
 
 export async function updateUserQuota(username: string, quotaBytes: number): Promise<{ success: boolean; quota_bytes: number }> {

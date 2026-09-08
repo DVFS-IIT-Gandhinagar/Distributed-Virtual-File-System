@@ -295,10 +295,13 @@ export default function Actions() {
     dispatchAction();
   };
 
-  // Deterministically sort target nodes numerically (0, 1, ... 8 -> FS-1 to FS-9)
+  // Deterministically sort target nodes by displayID or numerically
   const sortedTargetNodes = useMemo(() => {
     if (!cluster?.nodes) return [];
     return [...cluster.nodes].sort((a, b) => {
+      if (a.displayID && b.displayID && a.displayID !== b.displayID) {
+        return a.displayID - b.displayID;
+      }
       const numA = parseInt(a.fsID, 10);
       const numB = parseInt(b.fsID, 10);
       if (!isNaN(numA) && !isNaN(numB)) return numA - numB;

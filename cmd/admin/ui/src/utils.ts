@@ -79,27 +79,77 @@ export function getUserQuotaBadge(pct: number): { label: string; badgeClass: str
   return null;
 }
 
-export function formatNodeDisplayName(node: { displayName?: string; fsID?: string; fs_id?: string } | string): string {
-  if (typeof node === 'string') {
-    const n = parseInt(node, 10);
-    return !isNaN(n) ? `FS-${n + 1}` : `FS-${node}`;
-  }
-  if (node.displayName) return node.displayName;
-  const rawId = node.fsID || node.fs_id || '';
-  const n = parseInt(rawId, 10);
-  return !isNaN(n) ? `FS-${n + 1}` : `FS-${rawId}`;
+export interface CachedNodeInfo {
+  fsID: string;
+  displayID?: number;
+  displayName?: string;
+  machineName?: string;
+  address?: string;
 }
 
-export function formatMachineName(node: { machineName?: string; machine_name?: string; fsID?: string; fs_id?: string } | string): string {
-  if (typeof node === 'string') {
-    const n = parseInt(node, 10);
-    return !isNaN(n) ? `dvfs${n + 1}` : `dvfs-${node}`;
+const clusterNodesCache = new Map<string, CachedNodeInfo>();
+
+export function updateClusterNodesCache(nodes: any[]): void {
+  if (!Array.isArray(nodes)) return;
+  for (const n of nodes) {
+    if (!n) continue;
+    const id = String(n.fsID ?? n.fs_id ?? '');
+    if (id !== '') {
+      clusterNodesCache.set(id, {
+        fsID: id,
+        displayID: n.displayID ?? n.display_id,
+        displayName: n.displayName ?? n.display_name,
+        machineName: n.machineName ?? n.machine_name,
+        address: n.address,
+      });
+    }
+  }
+}
+
+export function formatNodeDisplayName(node: any): string {
+  if (!node && node !== 0) return '';
+  if (typeof node === 'string' || typeof node === 'number') {
+    const key = String(node);
+    const cached = clusterNodesCache.get(key);
+    if (cached?.displayName) return cached.displayName;
+    const n = parseInt(key, 10);
+    return !isNaN(n) ? `FS-${n + 1}` : `FS-${key}`;
+  }
+  if (node.displayName) return node.displayName;
+  if (node.display_name) return node.display_name;
+  if (node.home_fs_display) return node.home_fs_display;
+  const rawId = node.fsID ?? node.fs_id ?? node.home_fs_id;
+  if (rawId !== undefined && rawId !== null) {
+    const key = String(rawId);
+    const cached = clusterNodesCache.get(key);
+    if (cached?.displayName) return cached.displayName;
+    const n = parseInt(key, 10);
+    return !isNaN(n) ? `FS-${n + 1}` : `FS-${key}`;
+  }
+  return '';
+}
+
+export function formatMachineName(node: any): string {
+  if (!node && node !== 0) return '';
+  if (typeof node === 'string' || typeof node === 'number') {
+    const key = String(node);
+    const cached = clusterNodesCache.get(key);
+    if (cached?.machineName) return cached.machineName;
+    const n = parseInt(key, 10);
+    return !isNaN(n) ? `dvfs${n + 1}` : `dvfs-${key}`;
   }
   if (node.machineName) return node.machineName;
   if (node.machine_name) return node.machine_name;
-  const rawId = node.fsID || node.fs_id || '';
-  const n = parseInt(rawId, 10);
-  return !isNaN(n) ? `dvfs${n + 1}` : `dvfs-${rawId}`;
+  if (node.home_fs_machine) return node.home_fs_machine;
+  const rawId = node.fsID ?? node.fs_id ?? node.home_fs_id;
+  if (rawId !== undefined && rawId !== null) {
+    const key = String(rawId);
+    const cached = clusterNodesCache.get(key);
+    if (cached?.machineName) return cached.machineName;
+    const n = parseInt(key, 10);
+    return !isNaN(n) ? `dvfs${n + 1}` : `dvfs-${key}`;
+  }
+  return '';
 }
 
 

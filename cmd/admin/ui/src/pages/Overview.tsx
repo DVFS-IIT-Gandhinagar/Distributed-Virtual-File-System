@@ -21,6 +21,9 @@ export default function Overview() {
   const sortedNodes = useMemo(() => {
     if (!cluster?.nodes) return [];
     return [...cluster.nodes].sort((a, b) => {
+      if (a.displayID && b.displayID && a.displayID !== b.displayID) {
+        return a.displayID - b.displayID;
+      }
       const numA = parseInt(a.fsID, 10);
       const numB = parseInt(b.fsID, 10);
       if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
