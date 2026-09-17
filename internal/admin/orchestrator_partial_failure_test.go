@@ -11,7 +11,7 @@ import (
 // and some succeed while others fail or time out, the overall status is "failed"
 // and each individual node's execution result and exit code is accurately recorded.
 func TestOrchestratorMultiNodePartialFailure(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052", Status: StatusOnline}
 	srv.nodes["1"] = &NodeState{FsID: "1", Address: "10.0.0.2:50052", Status: StatusOnline}
 	srv.nodes["2"] = &NodeState{FsID: "2", Address: "10.0.0.3:50052", Status: StatusOnline}
@@ -72,7 +72,7 @@ func TestOrchestratorMultiNodePartialFailure(t *testing.T) {
 // TestOrchestratorCommandEscapingAdversarial tests formatting and executing
 // commands containing special shell metacharacters, quotes, backticks, subshells, and pipes.
 func TestOrchestratorCommandEscapingAdversarial(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052", Status: StatusOnline}
 
 	mockSSH := NewMockSSHExecutor()

@@ -10,7 +10,7 @@ import (
 
 // TestAdminUserQuotaEdgeCases tests edge cases and boundary conditions for PUT /api/users/{username}/quota.
 func TestAdminUserQuotaEdgeCases(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.users["alice"] = "0"
 	srv.nodes["0"] = &NodeState{
 		FsID:    "0",
@@ -69,7 +69,7 @@ func TestAdminUserQuotaEdgeCases(t *testing.T) {
 
 // TestAdminUsersListEmptyCluster tests GET /api/users when no users or nodes exist.
 func TestAdminUsersListEmptyCluster(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	w := httptest.NewRecorder()
@@ -87,7 +87,7 @@ func TestAdminUsersListEmptyCluster(t *testing.T) {
 
 // TestAdminUserQuotaMissingHomeNode verifies error handling when user has no home fileserver.
 func TestAdminUserQuotaMissingHomeNode(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.users["orphan"] = "99" // Node 99 does not exist in srv.nodes
 
 	body := bytes.NewBufferString(`{"quota_bytes":1048576}`)

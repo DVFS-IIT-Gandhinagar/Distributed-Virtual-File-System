@@ -14,7 +14,7 @@ import (
 )
 
 func TestActionRESTEndpoints(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()
@@ -79,7 +79,7 @@ func TestActionRESTEndpoints(t *testing.T) {
 }
 
 func TestWebSocketStreaming(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()

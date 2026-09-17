@@ -522,6 +522,7 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 
 	fsAddr := node.Address
 	displayName := node.DisplayName
+	nodeID := node.NodeID
 	delete(a.nodes, fsID)
 	if a.removedNodes == nil {
 		a.removedNodes = make(map[string]int64)
@@ -536,7 +537,6 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	stateFile := a.stateFile
 	msAddr := a.msAddr
 	if msAddr == "" && a.resolver != nil {
 		if resolved, err := a.resolver.ResolveMetaAddress("50051"); err == nil && resolved != "" {
@@ -547,19 +547,21 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[ADMIN] Node removed by admin: fsID=%s name=%s address=%s", fsID, displayName, fsAddr)
 
-	// Clean state file on disk directly if accessible
-	if stateFile != "" {
-		if err := RemoveNodeFromMetaStateFile(stateFile, fsID); err != nil {
-			log.Printf("[ADMIN] Notice: direct state file removal for %s: %v", fsID, err)
-		} else {
-			log.Printf("[ADMIN] Successfully purged fsID=%s from state file %s", fsID, stateFile)
-		}
-	}
-
+	// The metaserver owns cluster membership; this console never edits the
+	// store directly. Without a metaserver address the node is only hidden from
+	// this console, and the response must say so rather than implying the
+	// cluster was changed.
 	var msErr string
-	if msAddr != "" && fsAddr != "" {
-		if err := a.CallDeregisterFileServer(msAddr, fsAddr); err != nil {
-			log.Printf("[ADMIN] Warning: metaserver deregister for %s failed: %v", fsAddr, err)
+	switch {
+	case msAddr == "":
+		msErr = "no metaserver address configured (-metaserver_addr or DVFS_METASERVER_ADDR); node hidden from this console only, not deregistered from the cluster"
+		log.Printf("[ADMIN] Warning: %s", msErr)
+	case nodeID == "" && fsAddr == "":
+		msErr = "node has neither a stable id nor an address; cannot deregister it from the metaserver"
+		log.Printf("[ADMIN] Warning: %s", msErr)
+	default:
+		if err := a.CallDeregisterFileServer(msAddr, nodeID, fsAddr); err != nil {
+			log.Printf("[ADMIN] Warning: metaserver deregister for %s (%s) failed: %v", nodeID, fsAddr, err)
 			msErr = err.Error()
 		}
 	}
@@ -568,6 +570,7 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 		"success":         true,
 		"removed_fs_id":   fsID,
 		"removed_address": fsAddr,
+		"removed_node_id": nodeID,
 		"display_name":    displayName,
 	}
 	if msErr != "" {
@@ -1277,4 +1280,3 @@ func (a *AdminServer) handleGoogleLoginCallback(w http.ResponseWriter, r *http.R
 
 	_ = auth.RenderCallbackHTML(w, email, token, "")
 }
-

@@ -6,16 +6,28 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
+	"time"
 
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/memory"
 	"google.golang.org/grpc"
 )
 
+// newStoreBackedAdmin returns an AdminServer that reads the given store but
+// writes no files. Constructing with a nil store disables the snapshot,
+// history, alert and tombstone paths; the store is attached afterwards.
+func newStoreBackedAdmin(store storage.MetaStore) *AdminServer {
+	srv := NewAdminServer(nil, "")
+	srv.store = store
+	return srv
+}
+
 func TestHandleRemoveNode_MethodsAndValidation(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.authManager = nil // bypass auth for basic method tests
 
 	// 1. GET not allowed
@@ -52,11 +64,12 @@ func TestHandleRemoveNode_MethodsAndValidation(t *testing.T) {
 }
 
 func TestHandleRemoveNode_AuthEnforcement(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.authManager.SetHash("8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918") // "admin"
 
 	srv.nodes["3"] = &NodeState{
 		FsID:        "3",
+		NodeID:      "fs4",
 		DisplayName: "FS-4",
 		Address:     "10.0.171.41:50052",
 		Status:      StatusOffline,
@@ -94,10 +107,13 @@ func TestHandleRemoveNode_AuthEnforcement(t *testing.T) {
 	}
 }
 
+// The full path: admin -> gRPC -> metaserver -> store, with the admin reading
+// the same store the metaserver writes, as in production.
 func TestHandleRemoveNode_WithMetaServerDeregister(t *testing.T) {
-	// Start a real in-process metaserver gRPC server
-	tempDir := t.TempDir()
-	ms, err := metaserver.NewMetaServer(tempDir + "/ms_state.json")
+	ctx := context.Background()
+	store := memory.New()
+
+	ms, err := metaserver.NewMetaServer(ctx, store)
 	if err != nil {
 		t.Fatalf("failed to create metaserver: %v", err)
 	}
@@ -113,39 +129,42 @@ func TestHandleRemoveNode_WithMetaServerDeregister(t *testing.T) {
 	mspb.RegisterMetaServerServer(grpcServer, grpcHandler)
 	go grpcServer.Serve(lis)
 	defer grpcServer.Stop()
-
 	msAddr := lis.Addr().String()
 
-	// Register a fileserver on the metaserver
 	fsAddr := "10.0.171.41:50052"
-	_, err = grpcHandler.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
-		Address: fsAddr,
-		Users:   []string{"olduser"},
-	})
-	if err != nil {
-		t.Fatalf("failed to register fileserver: %v", err)
+	if _, err := grpcHandler.RegisterFileServer(ctx, &mspb.RegisterFileServerRequest{
+		FsId: "fs-old", Address: fsAddr, Users: []string{"olduser"},
+	}); err != nil {
+		t.Fatalf("failed to register fs-old: %v", err)
+	}
+	if _, err := grpcHandler.RegisterFileServer(ctx, &mspb.RegisterFileServerRequest{
+		FsId: "fs-keep", Address: "10.0.172.42:50052", Users: []string{"otheruser"},
+	}); err != nil {
+		t.Fatalf("failed to register fs-keep: %v", err)
 	}
 
-	// Configure admin server
-	srv := NewAdminServer("", "")
+	srv := newStoreBackedAdmin(store)
 	srv.authManager = nil // bypass auth for this integration test
 	srv.SetMetaServerAddr(msAddr)
 
-	srv.nodes["3"] = &NodeState{
-		FsID:        "3",
-		DisplayName: "FS-4",
-		MachineName: "dvfs4",
-		Address:     fsAddr,
-		Status:      StatusOffline,
+	// Discover from the store, exactly as the poller does.
+	srv.refreshNodes()
+	var oldFsID string
+	for id, n := range srv.nodes {
+		if n.NodeID == "fs-old" {
+			oldFsID = id
+		}
 	}
-	srv.users["olduser"] = "3"
-	srv.users["otheruser"] = "2"
+	if oldFsID == "" {
+		t.Fatalf("fs-old was not discovered from the store: %+v", srv.nodes)
+	}
+	if srv.users["olduser"] != oldFsID {
+		t.Fatalf("olduser should map to %s, got %q", oldFsID, srv.users["olduser"])
+	}
 
-	// Delete node via admin handler
-	req := httptest.NewRequest(http.MethodDelete, "/api/nodes/3", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/nodes/"+oldFsID, nil)
 	rec := httptest.NewRecorder()
 	srv.handleRemoveNode(rec, req)
-
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -154,138 +173,123 @@ func TestHandleRemoveNode_WithMetaServerDeregister(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-
 	if resp["success"] != true {
 		t.Fatalf("expected success: true, got %v", resp)
 	}
-	if resp["removed_fs_id"] != "3" {
-		t.Errorf("expected removed_fs_id: 3, got %v", resp["removed_fs_id"])
+	if resp["removed_node_id"] != "fs-old" {
+		t.Errorf("expected removed_node_id fs-old, got %v", resp["removed_node_id"])
+	}
+	if w, warned := resp["metaserver_warning"]; warned {
+		t.Fatalf("deregister should have reached the metaserver cleanly, got warning: %v", w)
 	}
 
-	// Verify Admin state
-	if _, exists := srv.nodes["3"]; exists {
-		t.Errorf("node 3 still exists in admin nodes")
+	// The console's own view.
+	if _, exists := srv.nodes[oldFsID]; exists {
+		t.Errorf("removed node still in admin nodes")
 	}
 	if _, exists := srv.users["olduser"]; exists {
-		t.Errorf("olduser still exists in admin users")
+		t.Errorf("olduser still in admin users")
 	}
 	if _, exists := srv.users["otheruser"]; !exists {
-		t.Errorf("otheruser should still exist in admin users")
+		t.Errorf("otheruser should be untouched")
 	}
 
-	// Verify MetaServer state file: fileserver should be gone
-	state, err := LoadMetaState(tempDir + "/ms_state.json")
+	// The store, which is what every other component reads.
+	snap, err := store.LoadSnapshot(ctx)
 	if err != nil {
-		t.Fatalf("failed to reload metaserver state: %v", err)
+		t.Fatalf("LoadSnapshot: %v", err)
 	}
-	for id, info := range state.FileServers {
-		if info.Address == fsAddr {
-			t.Errorf("fileserver %s (id=%s) still exists in metaserver state file", fsAddr, id)
+	if len(snap.FileServers) != 1 || snap.FileServers[0].NodeID != "fs-keep" {
+		t.Errorf("expected only fs-keep in the store, got %+v", snap.FileServers)
+	}
+	for _, u := range snap.Users {
+		if u.Username == "olduser" {
+			t.Errorf("olduser still in the store, pointing at %s", u.HomeNodeID)
 		}
 	}
-	if _, exists := state.Users["olduser"]; exists {
-		t.Errorf("olduser still exists in metaserver state file")
+
+	// And the next poll must not bring it back.
+	srv.refreshNodes()
+	if _, exists := srv.nodes[oldFsID]; exists {
+		t.Errorf("removed node was resurrected by the next refresh")
+	}
+	if _, exists := srv.users["otheruser"]; !exists {
+		t.Errorf("otheruser disappeared after refresh")
 	}
 }
 
+// With no metaserver address the console cannot change the cluster; the node
+// stays in the store. The tombstone must still keep it hidden from the console
+// across refreshes, until the node proves it was redeployed by heartbeating
+// again. The response must also admit that the cluster was not changed.
 func TestHandleRemoveNode_NoResurrectionOnRefresh(t *testing.T) {
-	tempDir := t.TempDir()
-	statePath := tempDir + "/metaserver_state.json"
+	ctx := context.Background()
+	store := memory.New()
+	now := time.Now().Unix()
 
-	// 1. Initial state file with stale node 3
-	initialJSON := `{
-  "fileservers": {
-    "2": {
-      "address": "10.0.172.42:50052",
-      "user_count": 0,
-      "last_heartbeat_unix": 1790705228,
-      "status": "healthy"
-    },
-    "3": {
-      "address": "10.0.171.41:50052",
-      "user_count": 0,
-      "last_heartbeat_unix": 1790173964,
-      "status": "stale"
-    }
-  },
-  "users": {},
-  "next_fs_id": 4
-}`
-	if err := os.WriteFile(statePath, []byte(initialJSON), 0644); err != nil {
-		t.Fatalf("failed to write test state file: %v", err)
+	if _, err := store.UpsertFileServer(ctx, storage.FileServerRecord{
+		NodeID: "fs2", Address: "10.0.172.42:50052", Status: domain.FileServerStatusHealthy, LastHeartbeatUnix: now,
+	}); err != nil {
+		t.Fatalf("upsert fs2: %v", err)
+	}
+	if _, err := store.UpsertFileServer(ctx, storage.FileServerRecord{
+		NodeID: "fs3", Address: "10.0.171.41:50052", Status: domain.FileServerStatusStale, LastHeartbeatUnix: now - 3600,
+	}); err != nil {
+		t.Fatalf("upsert fs3: %v", err)
 	}
 
-	srv := NewAdminServer(statePath, "")
-	srv.authManager = nil // bypass auth
+	srv := newStoreBackedAdmin(store)
+	srv.authManager = nil
+	// Deliberately no metaserver address.
 
-	// 2. Initial refresh discovers both node 2 and node 3
+	// 1. Initial refresh discovers both.
 	srv.refreshNodes()
 	if len(srv.nodes) != 2 {
 		t.Fatalf("expected 2 nodes discovered, got %d", len(srv.nodes))
 	}
-	if _, ok := srv.nodes["3"]; !ok {
-		t.Fatalf("expected node 3 to be discovered")
+	var staleID string
+	for id, n := range srv.nodes {
+		if n.NodeID == "fs3" {
+			staleID = id
+		}
+	}
+	if staleID == "" {
+		t.Fatalf("fs3 not discovered")
 	}
 
-	// 3. Admin deletes node 3
-	req := httptest.NewRequest(http.MethodDelete, "/api/nodes/3", nil)
+	// 2. Admin removes fs3.
+	req := httptest.NewRequest(http.MethodDelete, "/api/nodes/"+staleID, nil)
 	rec := httptest.NewRecorder()
 	srv.handleRemoveNode(rec, req)
-
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-
-	if _, ok := srv.nodes["3"]; ok {
-		t.Fatalf("expected node 3 to be deleted from in-memory pool")
+	var resp map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["metaserver_warning"] == nil {
+		t.Fatalf("without a metaserver address the response must say the cluster was not changed, got %v", resp)
+	}
+	if _, ok := srv.nodes[staleID]; ok {
+		t.Fatalf("expected fs3 to be removed from the console")
 	}
 
-	// 4. Verify disk file was updated
-	diskState, err := LoadMetaState(statePath)
-	if err != nil {
-		t.Fatalf("failed to reload state file: %v", err)
-	}
-	if _, ok := diskState.FileServers["3"]; ok {
-		t.Fatalf("expected node 3 to be deleted from disk state file")
-	}
-
-	// 5. Simulate stale metaserver re-writing old state file with stale node 3
-	if err := os.WriteFile(statePath, []byte(initialJSON), 0644); err != nil {
-		t.Fatalf("failed to re-write state file: %v", err)
-	}
-
-	// 6. Next refresh ticker runs — node 3 MUST NOT be resurrected!
+	// 3. The store still has fs3; the next refresh MUST NOT resurrect it.
 	srv.refreshNodes()
-	if _, ok := srv.nodes["3"]; ok {
-		t.Fatalf("CRITICAL BUG: node 3 was resurrected by refreshNodes despite admin deletion!")
+	if _, ok := srv.nodes[staleID]; ok {
+		t.Fatalf("fs3 was resurrected by refreshNodes despite admin removal")
 	}
 
-	// 7. Legitimate redeployment with fresh heartbeat after deletion
-	freshJSON := `{
-  "fileservers": {
-    "2": {
-      "address": "10.0.172.42:50052",
-      "user_count": 0,
-      "last_heartbeat_unix": 1790705228,
-      "status": "healthy"
-    },
-    "3": {
-      "address": "10.0.171.41:50052",
-      "user_count": 0,
-      "last_heartbeat_unix": 2000000000,
-      "status": "healthy"
-    }
-  },
-  "users": {},
-  "next_fs_id": 4
-}`
-	if err := os.WriteFile(statePath, []byte(freshJSON), 0644); err != nil {
-		t.Fatalf("failed to write fresh state file: %v", err)
+	// 4. A heartbeat newer than the removal means fs3 was redeployed; it comes back.
+	if err := store.RecordHeartbeat(ctx, "fs3", time.Now().Add(time.Hour), domain.FileServerStatusHealthy); err != nil {
+		t.Fatalf("record heartbeat: %v", err)
 	}
-
 	srv.refreshNodes()
-	if _, ok := srv.nodes["3"]; !ok {
-		t.Fatalf("expected node 3 to be accepted after legitimate fresh heartbeat")
+	if _, ok := srv.nodes[staleID]; !ok {
+		t.Fatalf("expected fs3 to be accepted after a heartbeat newer than its removal")
+	}
+	if _, tombstoned := srv.removedNodes[staleID]; tombstoned {
+		t.Errorf("tombstone should have been cleared by the fresh heartbeat")
 	}
 }
-

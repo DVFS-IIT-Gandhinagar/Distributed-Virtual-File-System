@@ -125,7 +125,7 @@ func TestPerformanceZeroOpsDivideByZero(t *testing.T) {
 // TestHandlePerformanceMixedOnlineOffline verifies /api/performance aggregates correctly
 // when some cluster nodes are offline or have nil metrics.
 func TestHandlePerformanceMixedOnlineOffline(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{
 		FsID:    "0",
 		Address: "10.0.0.1:50052",
@@ -180,7 +180,7 @@ func TestHandlePerformanceMixedOnlineOffline(t *testing.T) {
 // TestHandlePerformanceExportEmptyAndFiltered verifies streaming CSV export handles empty data
 // and filters cleanly without failing.
 func TestHandlePerformanceExportEmptyAndFiltered(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{
 		FsID:    "0",
 		Status:  StatusOnline,

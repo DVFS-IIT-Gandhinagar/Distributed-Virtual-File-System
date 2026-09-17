@@ -17,8 +17,8 @@ type NodeHistoryStore struct {
 
 // MetricsSnapshotFile captures the persisted state of all node ring buffers.
 type MetricsSnapshotFile struct {
-	SavedAt  int64                        `json:"saved_at"`
-	NodeData map[string]NodeHistoryStore  `json:"node_data"`
+	SavedAt  int64                       `json:"saved_at"`
+	NodeData map[string]NodeHistoryStore `json:"node_data"`
 }
 
 // SaveMetricsSnapshot serializes all node ring-buffer histories to disk atomically.

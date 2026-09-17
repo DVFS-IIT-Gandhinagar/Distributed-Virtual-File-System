@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +13,22 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// defaultMongoURI is the single-node development default, matching the one the
+// startup scripts and systemd units use.
+const defaultMongoURI = "mongodb://127.0.0.1:27017/dvfs"
+
+// resolveMongoURI picks the URI to hand a binary restarted over SSH.
+//
+// The admin console is itself started with a URI, so MONGO_URI is normally set
+// in its environment and the restarted process should inherit the same cluster.
+// Falling back to the local default keeps single-host deployments working.
+func resolveMongoURI() string {
+	if uri := strings.TrimSpace(os.Getenv("MONGO_URI")); uri != "" {
+		return uri
+	}
+	return defaultMongoURI
+}
 
 // Supported orchestration action types.
 const (
@@ -181,16 +198,22 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		}
 
 		if req.RestartMode == "binary" {
+			// Cluster metadata lives in MongoDB, so both binaries need a URI and
+			// refuse to start without one. They also reject the -state_file flag
+			// they used to take, so a stale flag here does not degrade the
+			// restart -- it makes the service fail to come back at all.
+			mongoURI := resolveMongoURI()
+
 			switch targetService {
 			case "metaserver":
 				return fmt.Sprintf(
-					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -state_file=%s/bin/metaserver_state.json > %s/metaserver.log 2>&1 < /dev/null &",
-					repoPath, repoPath, repoPath,
+					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -mongo_uri=%s > %s/metaserver.log 2>&1 < /dev/null &",
+					repoPath, mongoURI, repoPath,
 				)
 			case "admin":
 				return fmt.Sprintf(
-					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 -state_file=%s/bin/metaserver_state.json > %s/admin.log 2>&1 < /dev/null &",
-					repoPath, repoPath, repoPath,
+					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 -mongo_uri=%s > %s/admin.log 2>&1 < /dev/null &",
+					repoPath, mongoURI, repoPath,
 				)
 			case "all":
 				dataDir := params.DataDir
@@ -206,8 +229,8 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 					ownIP = params.Host
 				}
 				return fmt.Sprintf(
-					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -state_file=%s/bin/metaserver_state.json > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 -state_file=%s/bin/metaserver_state.json > %s/admin.log 2>&1 < /dev/null &",
-					params.Port, params.FsID, repoPath, repoPath, repoPath, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, repoPath, repoPath,
+					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -mongo_uri=%s > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 -mongo_uri=%s > %s/admin.log 2>&1 < /dev/null &",
+					params.Port, params.FsID, repoPath, mongoURI, repoPath, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, mongoURI, repoPath,
 				)
 			default: // "fileserver"
 				dataDir := params.DataDir

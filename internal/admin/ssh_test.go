@@ -144,3 +144,46 @@ func TestMockSSHExecutor(t *testing.T) {
 		t.Errorf("expected stderr, got %s", stderr.String())
 	}
 }
+
+// Binary restarts must pass the flags the current binaries actually accept.
+// The metaserver and admin console take -mongo_uri and reject the -state_file
+// flag they used to take, so a stale flag here does not degrade the restart --
+// Go's flag package exits non-zero and the service never comes back. Nothing
+// else in the suite exercises these command strings, which is how the stale
+// flag survived the migration.
+func TestFormatCommandBinaryRestartUsesMongoURI(t *testing.T) {
+	orchestrator := &Orchestrator{defaultRepoPath: "/home/ubuntu/repo"}
+	params := &NodeRestartParams{
+		FsID: "0", Address: "10.7.52.85:50052", Host: "10.7.52.85", Port: 50052,
+		MetaAddr: "10.7.52.85:50051", OwnIP: "10.7.52.85", DataDir: "./fileserver_data",
+	}
+
+	for _, service := range []string{"metaserver", "admin", "all"} {
+		t.Run(service, func(t *testing.T) {
+			cmd := orchestrator.FormatCommand(&ActionRequest{
+				ActionType:    ActionRestart,
+				RestartMode:   "binary",
+				TargetService: service,
+			}, "0", params)
+
+			if strings.Contains(cmd, "-state_file") {
+				t.Errorf("%s restart still passes the removed -state_file flag: %s", service, cmd)
+			}
+			if !strings.Contains(cmd, "-mongo_uri=") {
+				t.Errorf("%s restart does not pass -mongo_uri, so the binary will refuse to start: %s", service, cmd)
+			}
+		})
+	}
+}
+
+func TestResolveMongoURIPrefersEnvironment(t *testing.T) {
+	t.Setenv("MONGO_URI", "mongodb://db1:27017,db2:27017/dvfs?replicaSet=rs0")
+	if got := resolveMongoURI(); got != "mongodb://db1:27017,db2:27017/dvfs?replicaSet=rs0" {
+		t.Errorf("a restarted binary must inherit the console's cluster, got %q", got)
+	}
+
+	t.Setenv("MONGO_URI", "")
+	if got := resolveMongoURI(); got != defaultMongoURI {
+		t.Errorf("expected the local default, got %q", got)
+	}
+}

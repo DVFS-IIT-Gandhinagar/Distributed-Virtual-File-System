@@ -10,7 +10,7 @@ import (
 )
 
 func TestHandleCluster(t *testing.T) {
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	admin.authManager = nil
 	admin.users["alice"] = "0"
 	admin.users["bob"] = "0"
@@ -78,7 +78,7 @@ func TestHandleCluster(t *testing.T) {
 }
 
 func TestHandleHistory(t *testing.T) {
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	rb := NewRingBuffer(10)
 	rb.Push(Snapshot{Timestamp: 100})
 	rb.Push(Snapshot{Timestamp: 200})
@@ -173,7 +173,7 @@ func TestSpaHandler(t *testing.T) {
 }
 
 func TestHandleCluster_OnlineVsUnhealthyCounts(t *testing.T) {
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	admin.authManager = nil
 
 	admin.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052", Status: StatusOnline}

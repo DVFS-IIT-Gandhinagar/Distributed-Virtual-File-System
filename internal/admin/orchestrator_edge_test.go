@@ -15,7 +15,7 @@ import (
 // one of its target nodes because another action holds it, all previously acquired
 // node locks in the batch are cleanly rolled back without deadlocking or leaving orphan locks.
 func TestOrchestratorAtomicBatchLockRollback(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052", Status: StatusOnline}
 	srv.nodes["1"] = &NodeState{FsID: "1", Address: "10.0.0.2:50052", Status: StatusOnline}
 	srv.nodes["2"] = &NodeState{FsID: "2", Address: "10.0.0.3:50052", Status: StatusOnline}
@@ -81,7 +81,7 @@ func TestOrchestratorAtomicBatchLockRollback(t *testing.T) {
 // TestOrchestratorTimeoutLockRelease verifies that when an action times out,
 // the deferred lock release ensures target nodes are freed for subsequent actions.
 func TestOrchestratorTimeoutLockRelease(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052", Status: StatusOnline}
 
 	mockSSH := NewMockSSHExecutor()
