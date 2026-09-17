@@ -179,11 +179,27 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		})
 	}
 
+	// Clear orphan markers pointing at this node, whether or not it reported the
+	// users by name.
+	//
+	// Keying this off req.Users alone is not enough: req.Users comes from a disk
+	// scan, so a node whose data directory was empty or not yet mounted at boot
+	// registers with zero users. Its orphaned accounts would then stay orphaned
+	// forever, locked out with no way back short of a metaserver restart. The
+	// node being present is what makes them routable again; the account keeps
+	// its stored placement either way.
+	for username, homeNode := range ms.orphanedUsers {
+		if homeNode == nodeID {
+			delete(ms.orphanedUsers, username)
+			ms.users[username] = fsID
+			if ms.shared[username] == nil {
+				ms.shared[username] = []SharedDirEntry{}
+			}
+		}
+	}
+
 	for username := range incomingUsers {
 		ms.users[username] = fsID
-		// The node hosting this user is back, so any orphan marker for them is
-		// stale and the account is routable again.
-		delete(ms.orphanedUsers, username)
 		if ms.shared[username] == nil {
 			ms.shared[username] = []SharedDirEntry{}
 		}

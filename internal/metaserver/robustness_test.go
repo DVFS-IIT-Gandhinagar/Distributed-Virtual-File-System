@@ -438,3 +438,51 @@ func TestRobustness_Registration_ConflictLeavesNoPartialState(t *testing.T) {
 		}
 	}
 }
+
+// A returning node clears its orphaned accounts even when it reports no users.
+//
+// req.Users comes from a disk scan, so a node whose data directory was empty or
+// not yet mounted at boot registers with an empty user list. Clearing orphans
+// only for users named in that list would leave those accounts locked out
+// permanently, which is worse than the bug the orphan marker exists to prevent.
+func TestRobustness_Registration_ClearsOrphansWhenNodeReportsNoUsers(t *testing.T) {
+	store := memory.New()
+	ctx := context.Background()
+
+	require.NoError(t, store.AssignUser(ctx, "carol", "fs-returning"))
+
+	ms, err := NewMetaServer(ctx, store)
+	require.NoError(t, err)
+	require.Contains(t, ms.orphanedUsers, "carol")
+
+	h := NewGRPCHandler(ms)
+	// Note: no Users field -- the node reports nothing, as an empty data
+	// directory would.
+	resp, err := h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs-returning", Address: "10.0.0.9:50052",
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+
+	assert.NotContains(t, ms.orphanedUsers, "carol",
+		"a returning node must clear its orphans even when it reports no users")
+	_, routed := ms.users["carol"]
+	assert.True(t, routed, "carol must be routable again")
+
+	rootsResp, err := h.GetRoots(ctx, &pb.GetRootsRequest{Username: "carol"})
+	require.NoError(t, err)
+	assert.True(t, rootsResp.Success, "carol must be able to log in once her node is back")
+
+	// An unrelated node registering must NOT clear her marker.
+	store2 := memory.New()
+	require.NoError(t, store2.AssignUser(ctx, "dave", "fs-gone"))
+	ms2, err := NewMetaServer(ctx, store2)
+	require.NoError(t, err)
+	h2 := NewGRPCHandler(ms2)
+	_, err = h2.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs-other", Address: "10.0.0.8:50052",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, ms2.orphanedUsers, "dave",
+		"an unrelated node must not make dave routable to the wrong host")
+}
