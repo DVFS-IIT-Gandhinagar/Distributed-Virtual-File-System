@@ -390,6 +390,10 @@ func (s *Store) SetUserCount(ctx context.Context, nodeID string, count int) erro
 	return s.setFileServerField(ctx, nodeID, "user_count", count)
 }
 
+func (s *Store) SetAddress(ctx context.Context, nodeID, address string) error {
+	return s.setFileServerField(ctx, nodeID, "address", address)
+}
+
 func (s *Store) setFileServerField(ctx context.Context, nodeID, field string, value any) error {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()

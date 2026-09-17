@@ -2,133 +2,214 @@ package metaserver
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage"
 )
 
-// helper func
-func contains(slice []SharedDirEntry, target string) bool {
-	for _, s := range slice {
-		if s.Owner == target {
-			return true
-		}
-	}
-	return false
-}
-
-func removeValue(slice []SharedDirEntry, target string) []SharedDirEntry {
-	out := make([]SharedDirEntry, 0, len(slice))
-	for _, s := range slice {
-		if s.Owner != target {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-func (h *GRPCHandler) removeRootFromAllSharedLocked(rootUser string) {
-	for username, roots := range h.MetaServer.shared {
-		h.MetaServer.shared[username] = removeValue(roots, rootUser)
-	}
-}
-
-// GRPCHandler implements the gRPC meta server interface
+// GRPCHandler implements the gRPC meta server interface.
 type GRPCHandler struct {
 	pb.UnimplementedMetaServerServer
 	MetaServer *MetaServer
 }
 
-// NewGRPCHandler creates a new gRPC handler
+// NewGRPCHandler creates a new gRPC handler.
 func NewGRPCHandler(metaServer *MetaServer) *GRPCHandler {
-	return &GRPCHandler{
-		MetaServer: metaServer,
+	return &GRPCHandler{MetaServer: metaServer}
+}
+
+// removeSharesByOwnerLocked drops every visibility entry published by rootUser.
+func (h *GRPCHandler) removeSharesByOwnerLocked(rootUser string) {
+	for grantee, roots := range h.MetaServer.shared {
+		out := make([]SharedDirEntry, 0, len(roots))
+		for _, s := range roots {
+			if s.Owner != rootUser {
+				out = append(out, s)
+			}
+		}
+		h.MetaServer.shared[grantee] = out
 	}
 }
 
-// RegisterFileServer handles file server registration
+// resolveNodeIDLocked determines the stable node identity for a request,
+// falling back to the address for fileservers predating the fs_id field.
+func resolveNodeID(fsID, address string) string {
+	if fsID != "" {
+		return fsID
+	}
+	return "addr:" + address
+}
+
+// RegisterFileServer records a storage node, the users it hosts, and the
+// directories those users share.
 func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFileServerRequest) (*pb.RegisterFileServerResponse, error) {
-	log.Printf("[METASERVER] Registering FS %s with %d users: %v", req.Address, len(req.Users), req.Users)
+	log.Printf("[METASERVER] Registering FS id=%q addr=%s with %d users: %v", req.FsId, req.Address, len(req.Users), req.Users)
 
 	if req.Address == "" {
-		return &pb.RegisterFileServerResponse{
-			Success: false,
-			Error:   "empty file server address",
-		}, nil
+		return &pb.RegisterFileServerResponse{Success: false, Error: "empty file server address"}, nil
+	}
+	nodeID := resolveNodeID(req.FsId, req.Address)
+	if req.FsId == "" {
+		log.Printf("[METASERVER] WARN: fileserver at %s did not send fs_id; falling back to address-derived identity %q", req.Address, nodeID)
 	}
 
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
+	ms := h.MetaServer
+	var writes deferredWrites
 
-	fsID, exists := h.MetaServer.findFileServerByAddressLocked(req.Address)
+	ms.mu.Lock()
+
+	fsID, exists := ms.findFileServerByNodeIDLocked(nodeID)
 	if !exists {
-		fsID = h.MetaServer.nextFsID
-		h.MetaServer.fileservers[fsID] = &domain.FileServerInfo{
-			Address:   req.Address,
-			UserCount: 0,
+		// Legacy fallback: adopt an existing address-keyed entry so upgrading a
+		// fileserver does not orphan its users.
+		if legacyID, legacyFound := ms.findFileServerByAddressLocked(req.Address); legacyFound {
+			fsID = legacyID
+			exists = true
+			if info := ms.fileservers[fsID]; info != nil {
+				info.NodeID = nodeID
+			}
 		}
-		h.MetaServer.nextFsID++
 	}
 
-	fsInfo := h.MetaServer.fileservers[fsID]
-	if fsInfo == nil {
-		fsInfo = &domain.FileServerInfo{Address: req.Address}
-		h.MetaServer.fileservers[fsID] = fsInfo
+	if !exists {
+		// Allocate through the store so the numeric id is durable and unique.
+		ms.mu.Unlock()
+		allocCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		numericID, err := ms.store.UpsertFileServer(allocCtx, storage.FileServerRecord{
+			NodeID:            nodeID,
+			Address:           req.Address,
+			LastHeartbeatUnix: time.Now().Unix(),
+			Status:            domain.FileServerStatusHealthy,
+		})
+		cancel()
+		if err != nil {
+			log.Printf("[METASERVER] ERROR: could not allocate node %s: %v", nodeID, err)
+			return &pb.RegisterFileServerResponse{Success: false, Error: "failed to persist metaserver state"}, nil
+		}
+
+		ms.mu.Lock()
+		fsID = numericID
+		if ms.fileservers[fsID] == nil {
+			ms.fileservers[fsID] = &domain.FileServerInfo{NodeID: nodeID}
+		}
 	}
-	fsInfo.Address = req.Address
-	fsInfo.LastHeartbeatUnix = time.Now().Unix()
-	fsInfo.Status = domain.FileServerStatusHealthy
 
 	incomingUsers := make(map[string]struct{}, len(req.Users))
 	for _, username := range req.Users {
 		incomingUsers[username] = struct{}{}
 	}
 
-	// Remove users that no longer belong to this fileserver.
-	for username, mappedID := range h.MetaServer.users {
-		if mappedID == fsID {
-			if _, ok := incomingUsers[username]; !ok {
-				delete(h.MetaServer.users, username)
-				delete(h.MetaServer.shared, username)
-				h.removeRootFromAllSharedLocked(username)
-			}
-		}
-	}
-
+	// Validate before mutating anything.
+	//
+	// This check used to run inside the assignment loop below, which meant a
+	// conflict on the fifth user returned an error *after* four users had
+	// already been reassigned in memory, the node record had been rewritten and
+	// absent users had been purged -- with no rollback and no store write.
+	// Memory and the store then disagreed until the next successful
+	// registration, and map iteration order decided which users were affected.
 	for username := range incomingUsers {
-		mappedID, alreadyMapped := h.MetaServer.users[username]
+		mappedID, alreadyMapped := ms.users[username]
 		if alreadyMapped && mappedID != fsID {
-			mappedFS := h.MetaServer.fileservers[mappedID]
 			mappedAddr := "unknown"
-			if mappedFS != nil {
+			if mappedFS := ms.fileservers[mappedID]; mappedFS != nil {
 				mappedAddr = mappedFS.Address
 			}
+			ms.mu.Unlock()
 			log.Printf("[METASERVER] ERROR: User %s already exists in FS %s", username, mappedAddr)
 			return &pb.RegisterFileServerResponse{
 				Success: false,
 				Error:   "User " + username + " already exists in file server: " + mappedAddr,
 			}, nil
 		}
-		h.MetaServer.users[username] = fsID
-		if h.MetaServer.shared[username] == nil {
-			h.MetaServer.shared[username] = []SharedDirEntry{}
+	}
+
+	// Past this point the registration commits: no path below returns early.
+	fsInfo := ms.fileservers[fsID]
+	if fsInfo == nil {
+		fsInfo = &domain.FileServerInfo{NodeID: nodeID}
+		ms.fileservers[fsID] = fsInfo
+	}
+	fsInfo.NodeID = nodeID
+	fsInfo.Address = req.Address
+	fsInfo.LastHeartbeatUnix = time.Now().Unix()
+	fsInfo.Status = domain.FileServerStatusHealthy
+
+	// Users this node previously hosted but no longer reports.
+	var missing []string
+	for username, mappedID := range ms.users {
+		if mappedID == fsID {
+			if _, ok := incomingUsers[username]; !ok {
+				missing = append(missing, username)
+			}
 		}
 	}
 
-	// Rebuild sharing entries for roots that belong to this fileserver.
+	if len(missing) > 0 && !ms.allowUserPurge {
+		// A disk scan is the only source of req.Users, so an unmounted or
+		// mistyped data directory presents as "this node has no users". Deleting
+		// on that signal is unrecoverable, so the default is to keep the
+		// mappings and make the discrepancy loud instead.
+		log.Printf("[METASERVER] WARN: node %s reported %d users but %d known mappings are absent (%v); retaining them. "+
+			"Start the metaserver with -allow_user_purge to permit deletion.",
+			nodeID, len(req.Users), len(missing), missing)
+		missing = nil
+	}
+
+	for _, username := range missing {
+		delete(ms.users, username)
+		delete(ms.shared, username)
+		h.removeSharesByOwnerLocked(username)
+	}
+	if len(missing) > 0 {
+		purged := append([]string(nil), missing...)
+		writes = append(writes, func(c context.Context) error {
+			if err := ms.store.RemoveUsers(c, purged); err != nil {
+				return err
+			}
+			for _, u := range purged {
+				if err := ms.store.RemoveSharesInvolving(c, u); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
 	for username := range incomingUsers {
-		h.removeRootFromAllSharedLocked(username)
+		ms.users[username] = fsID
+		// The node hosting this user is back, so any orphan marker for them is
+		// stale and the account is routable again.
+		delete(ms.orphanedUsers, username)
+		if ms.shared[username] == nil {
+			ms.shared[username] = []SharedDirEntry{}
+		}
+
+		u := username
+		writes = append(writes, func(c context.Context) error {
+			return ms.store.AssignUser(c, u, nodeID)
+		})
+	}
+
+	// This node is authoritative for the shares its users publish, so clear and
+	// rebuild exactly those. Grants those users merely receive belong to other
+	// nodes and are left alone.
+	for username := range incomingUsers {
+		h.removeSharesByOwnerLocked(username)
+		owner := username
+		writes = append(writes, func(c context.Context) error {
+			return ms.store.RemoveSharesByOwner(c, owner)
+		})
 	}
 
 	log.Printf("[METASERVER] Processing %d shared directory entries from registration", len(req.Shared))
 	for _, sharedDir := range req.Shared {
 		owner := sharedDir.Owner
-		dirPath := sharedDir.Path
+		dirPath := storage.NormalizeSharePath(sharedDir.Path)
 		dirName := sharedDir.Name
-		log.Printf("[METASERVER] Processing shared dir: owner=%s, path=%s, name=%s, users=%v",
-			owner, dirPath, dirName, sharedDir.Users)
 
 		if _, ownedByThisFS := incomingUsers[owner]; !ownedByThisFS {
 			log.Printf("[METASERVER] Skipping owner %s (not on this FS)", owner)
@@ -136,109 +217,140 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		}
 
 		for _, sharedWith := range sharedDir.Users {
-			log.Printf("[METASERVER] Processing share: %s (path=%s) -> %s", owner, dirPath, sharedWith)
-
-			// Skip if owner is trying to share with themselves
 			if sharedWith == owner {
-				log.Printf("[METASERVER] Skipping self-share: %s cannot share with themselves", owner)
 				continue
 			}
-
-			if h.MetaServer.shared[sharedWith] == nil {
-				h.MetaServer.shared[sharedWith] = []SharedDirEntry{}
+			if ms.shared[sharedWith] == nil {
+				ms.shared[sharedWith] = []SharedDirEntry{}
 			}
-
-			// Check if this specific directory is already shared (by path, not just owner)
-			alreadyShared := false
-			for _, existing := range h.MetaServer.shared[sharedWith] {
-				if existing.Owner == owner && existing.Path == "/"+dirPath {
-					alreadyShared = true
-					break
-				}
-			}
-
-			if !alreadyShared {
-				log.Printf("[METASERVER] Adding %s (path=%s, name=%s) to %s's shared list",
-					owner, dirPath, dirName, sharedWith)
-				h.MetaServer.shared[sharedWith] = append(h.MetaServer.shared[sharedWith], SharedDirEntry{
+			if !containsShare(ms.shared[sharedWith], owner, dirPath) {
+				ms.shared[sharedWith] = append(ms.shared[sharedWith], SharedDirEntry{
 					Owner:       owner,
-					Path:        "/" + dirPath, // Use actual directory path from registration
-					DisplayName: dirName,       // Use actual directory name from registration
+					Path:        dirPath,
+					DisplayName: dirName,
 				})
-			} else {
-				log.Printf("[METASERVER] Skipping duplicate: %s/%s already in %s's shared list",
-					owner, dirPath, sharedWith)
 			}
+
+			rec := storage.ShareRecord{Grantee: sharedWith, Owner: owner, Path: dirPath, DisplayName: dirName}
+			writes = append(writes, func(c context.Context) error {
+				return ms.store.AddShare(c, rec)
+			})
 		}
 	}
 
-	fsInfo.UserCount = h.MetaServer.countUsersForFileServerLocked(fsID)
+	fsInfo.UserCount = ms.countUsersForFileServerLocked(fsID)
+	userCount := fsInfo.UserCount
+	address := fsInfo.Address
+	heartbeat := fsInfo.LastHeartbeatUnix
 
-	if err := h.MetaServer.saveStateLocked(); err != nil {
+	ms.mu.Unlock()
+
+	// The node record itself is written first so later share and user writes
+	// never reference a node the store has not seen.
+	writes = append(deferredWrites{func(c context.Context) error {
+		_, err := ms.store.UpsertFileServer(c, storage.FileServerRecord{
+			NodeID:            nodeID,
+			Address:           address,
+			UserCount:         userCount,
+			LastHeartbeatUnix: heartbeat,
+			Status:            domain.FileServerStatusHealthy,
+		})
+		return err
+	}}, writes...)
+
+	writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := writes.run(writeCtx); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after registration: %v", err)
-		return &pb.RegisterFileServerResponse{
-			Success: false,
-			Error:   "failed to persist metaserver state",
-		}, nil
+		return &pb.RegisterFileServerResponse{Success: false, Error: "failed to persist metaserver state"}, nil
 	}
 
-	log.Printf("[METASERVER] FS registered successfully: ID=%d, Address=%s, Users=%d", fsID, req.Address, fsInfo.UserCount)
-	return &pb.RegisterFileServerResponse{
-		Success: true,
-	}, nil
+	log.Printf("[METASERVER] FS registered successfully: ID=%d, Node=%s, Address=%s, Users=%d", fsID, nodeID, req.Address, userCount)
+	return &pb.RegisterFileServerResponse{Success: true}, nil
 }
 
-// Heartbeat updates liveness for an already-registered fileserver.
+func containsShare(entries []SharedDirEntry, owner, path string) bool {
+	for _, e := range entries {
+		if e.Owner == owner && e.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// Heartbeat refreshes liveness for an already-registered fileserver.
 func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	if req.Address == "" {
 		log.Printf("[METASERVER] WARN: heartbeat rejected due to empty file server address")
 		return &pb.HeartbeatResponse{Success: false, Error: "empty file server address"}, nil
 	}
+	nodeID := resolveNodeID(req.FsId, req.Address)
 
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
+	ms := h.MetaServer
+	ms.mu.Lock()
 
-	fsID, exists := h.MetaServer.findFileServerByAddressLocked(req.Address)
+	fsID, exists := ms.findFileServerByNodeIDLocked(nodeID)
 	if !exists {
-		log.Printf("[METASERVER] WARN: heartbeat from unknown file server address=%s", req.Address)
+		fsID, exists = ms.findFileServerByAddressLocked(req.Address)
+	}
+	if !exists {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] WARN: heartbeat from unknown file server node=%s address=%s", nodeID, req.Address)
 		return &pb.HeartbeatResponse{Success: false, Error: "unknown file server"}, nil
 	}
 
-	fsInfo := h.MetaServer.fileservers[fsID]
+	fsInfo := ms.fileservers[fsID]
 	if fsInfo == nil {
+		ms.mu.Unlock()
 		log.Printf("[METASERVER] WARN: heartbeat received for missing file server entry id=%d address=%s", fsID, req.Address)
 		return &pb.HeartbeatResponse{Success: false, Error: "file server entry missing"}, nil
 	}
 
 	prevStatus := fsInfo.Status
-	fsInfo.LastHeartbeatUnix = time.Now().Unix()
+	now := time.Now()
+	fsInfo.LastHeartbeatUnix = now.Unix()
 	fsInfo.Status = domain.FileServerStatusHealthy
+	// An address change on an existing identity is a new DHCP lease, not a new
+	// machine; update in place.
+	addressChanged := fsInfo.Address != req.Address
+	if addressChanged {
+		log.Printf("[METASERVER] Node %s changed address: %s -> %s", nodeID, fsInfo.Address, req.Address)
+		fsInfo.Address = req.Address
+	}
+	storedNodeID := fsInfo.NodeID
+	ms.mu.Unlock()
+
 	if prevStatus != domain.FileServerStatusHealthy {
-		log.Printf("[METASERVER] File server recovered: id=%d address=%s status=%s->%s", fsID, fsInfo.Address, prevStatus, domain.FileServerStatusHealthy)
+		log.Printf("[METASERVER] File server recovered: id=%d node=%s status=%s->%s", fsID, storedNodeID, prevStatus, domain.FileServerStatusHealthy)
 	}
 
-	if err := h.MetaServer.saveStateLocked(); err != nil {
-		log.Printf("[METASERVER] ERROR: failed to persist state after heartbeat: %v", err)
-		return &pb.HeartbeatResponse{Success: false, Error: "failed to persist metaserver state"}, nil
+	// Liveness is best-effort by design: the in-memory table already reflects
+	// it, and a missed write is corrected by the next heartbeat one interval
+	// later. Failing the RPC here would take routing down for a transient
+	// backend blip.
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if addressChanged {
+		// Targeted update, not a whole-record upsert. An upsert here would also
+		// write UserCount, which this handler never computed, so it defaulted to
+		// zero and every DHCP lease change silently reset the node's persisted
+		// user count. That stayed invisible until the next metaserver restart,
+		// when hydration reported the node as empty and the least-loaded picker
+		// sent every new user to it.
+		if err := ms.store.SetAddress(writeCtx, storedNodeID, req.Address); err != nil {
+			log.Printf("[METASERVER] WARN: could not persist address change for %s: %v", storedNodeID, err)
+		}
+	}
+	if err := ms.store.RecordHeartbeat(writeCtx, storedNodeID, now, domain.FileServerStatusHealthy); err != nil {
+		log.Printf("[METASERVER] WARN: could not persist heartbeat for %s: %v", storedNodeID, err)
 	}
 
 	return &pb.HeartbeatResponse{Success: true}, nil
 }
 
-// Navigate client to the appropriate file server based on user
+// Navigate resolves which fileserver hosts a given root user.
 func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*pb.NavigateResponse, error) {
 	log.Printf("[METASERVER] Navigate request for user: %s", req.RootUser)
-
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
-
-	nowUnix := time.Now().Unix()
-	if changed := h.MetaServer.markStaleFileServersLocked(nowUnix); changed {
-		if err := h.MetaServer.saveStateLocked(); err != nil {
-			log.Printf("[METASERVER] ERROR: failed to persist stale transition: %v", err)
-			return &pb.NavigateResponse{Success: false, Error: "failed to persist metaserver state"}, nil
-		}
-	}
 
 	user := req.Username
 	rootUser := req.RootUser
@@ -246,38 +358,35 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 		return &pb.NavigateResponse{Success: false, Error: "username and root_user are required"}, nil
 	}
 
-	_, exists1 := h.MetaServer.users[user]
-	if !exists1 {
+	ms := h.MetaServer
+	// Read-only: isHealthyLocked evaluates the heartbeat deadline directly, so
+	// routing is correct without mutating Status here. The monitor goroutine
+	// owns the stale transition and its persistence.
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	nowUnix := time.Now().Unix()
+
+	if _, exists := ms.users[user]; !exists {
 		log.Printf("[METASERVER] Navigate failed: username '%s' does not exist", req.Username)
-		return &pb.NavigateResponse{
-			Success: false,
-			Error:   "username '" + req.Username + "' does not exist",
-		}, nil
+		return &pb.NavigateResponse{Success: false, Error: "username '" + req.Username + "' does not exist"}, nil
 	}
 
-	fs, exists2 := h.MetaServer.users[rootUser]
-	if !exists2 {
+	fs, exists := ms.users[rootUser]
+	if !exists {
 		log.Printf("[METASERVER] Navigate failed: root user '%s' does not exist", req.RootUser)
-		return &pb.NavigateResponse{
-			Success: false,
-			Error:   "root user '" + req.RootUser + "' does not exist",
-		}, nil
+		return &pb.NavigateResponse{Success: false, Error: "root user '" + req.RootUser + "' does not exist"}, nil
 	}
 
-	rootFS, present := h.MetaServer.fileservers[fs]
-	if !present || !h.MetaServer.isHealthyLocked(rootFS, nowUnix) {
+	rootFS, present := ms.fileservers[fs]
+	if !present || !ms.isHealthyLocked(rootFS, nowUnix) {
 		log.Printf("[METASERVER] Navigate failed: root user '%s' is on unavailable file server", rootUser)
-		return &pb.NavigateResponse{
-			Success: false,
-			Error:   "root user '" + rootUser + "' is currently unavailable",
-		}, nil
+		return &pb.NavigateResponse{Success: false, Error: "root user '" + rootUser + "' is currently unavailable"}, nil
 	}
 
-	allowed := false
-	if user == rootUser {
-		allowed = true
-	} else {
-		for _, s := range h.MetaServer.shared[user] {
+	allowed := user == rootUser
+	if !allowed {
+		for _, s := range ms.shared[user] {
 			if s.Owner == rootUser {
 				allowed = true
 				break
@@ -293,236 +402,371 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 	}
 
 	log.Printf("[METASERVER] Routing user %s to FS %s", user, rootFS.Address)
-	return &pb.NavigateResponse{
-		Success: true,
-		Address: rootFS.Address,
-	}, nil
+	return &pb.NavigateResponse{Success: true, Address: rootFS.Address}, nil
 }
 
-// Navigate client to the appropriate file server based on user
+// GetRoots returns the personal and shared roots visible to a user, assigning
+// them a home fileserver on first contact.
 func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*pb.GetRootsResponse, error) {
 	log.Printf("[METASERVER] Get roots request for user: %s", req.Username)
 
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
-
 	user := req.Username
-	fs, exists := h.MetaServer.users[user]
-	if !exists {
-		nowUnix := time.Now().Unix()
-		if changed := h.MetaServer.markStaleFileServersLocked(nowUnix); changed {
-			if err := h.MetaServer.saveStateLocked(); err != nil {
-				log.Printf("[METASERVER] ERROR: failed to persist stale transition: %v", err)
-				return &pb.GetRootsResponse{Success: false, Error: "failed to persist metaserver state"}, nil
-			}
-		}
-
-		minFS, ok := h.MetaServer.getLeastLoadedHealthyFileServerLocked(nowUnix)
-		if !ok {
-			return &pb.GetRootsResponse{Success: false, Error: "no healthy file server registered"}, nil
-		}
-
-		fs = minFS
-		h.MetaServer.users[user] = fs
-		h.MetaServer.fileservers[fs].UserCount++
-		h.MetaServer.shared[user] = []SharedDirEntry{}
-
-		if err := h.MetaServer.saveStateLocked(); err != nil {
-			log.Printf("[METASERVER] ERROR: failed to persist state after user assignment: %v", err)
-			return &pb.GetRootsResponse{Success: false, Error: "failed to persist metaserver state"}, nil
-		}
-
-		log.Printf("[METASERVER] Assigned user %s to FS %s (users: %d)", user, h.MetaServer.fileservers[fs].Address, h.MetaServer.fileservers[fs].UserCount)
+	if user == "" {
+		return &pb.GetRootsResponse{Success: false, Error: "username is required"}, nil
 	}
 
+	ms := h.MetaServer
+
+	// Fast path: an already-assigned user needs no write and no exclusive lock.
+	ms.mu.RLock()
+	if _, exists := ms.users[user]; exists {
+		roots := buildRootsLocked(ms, user)
+		ms.mu.RUnlock()
+		return &pb.GetRootsResponse{Success: true, Roots: roots}, nil
+	}
+	ms.mu.RUnlock()
+
+	ms.mu.Lock()
+	// Re-check: another request may have assigned this user while we upgraded.
+	if _, exists := ms.users[user]; exists {
+		roots := buildRootsLocked(ms, user)
+		ms.mu.Unlock()
+		return &pb.GetRootsResponse{Success: true, Roots: roots}, nil
+	}
+
+	// An orphaned user is assigned, just not routable right now: their home node
+	// is not registered. Refuse rather than assigning them a new one, because
+	// reassignment would overwrite the stored assignment and strand whatever
+	// data is still sitting on the original node.
+	if homeNode, orphaned := ms.orphanedUsers[user]; orphaned {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] GetRoots for %s deferred: home node %q is not registered", user, homeNode)
+		return &pb.GetRootsResponse{
+			Success: false,
+			Error:   "your home file server (" + homeNode + ") is currently unavailable; please try again once it is back online",
+		}, nil
+	}
+
+	nowUnix := time.Now().Unix()
+	transitioned := ms.markStaleFileServersLocked(nowUnix)
+
+	minFS, ok := ms.getLeastLoadedHealthyFileServerLocked(nowUnix)
+	if !ok {
+		ms.mu.Unlock()
+		h.persistStaleTransitions(ctx, transitioned)
+		return &pb.GetRootsResponse{Success: false, Error: "no healthy file server registered"}, nil
+	}
+
+	ms.users[user] = minFS
+	ms.fileservers[minFS].UserCount++
+	ms.shared[user] = []SharedDirEntry{}
+
+	nodeID := ms.fileservers[minFS].NodeID
+	userCount := ms.fileservers[minFS].UserCount
+	address := ms.fileservers[minFS].Address
+	roots := buildRootsLocked(ms, user)
+	ms.mu.Unlock()
+
+	h.persistStaleTransitions(ctx, transitioned)
+
+	// Assignment is durable state: if it is lost, the user is re-assigned on
+	// their next login and may land on a different node from their data.
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := ms.store.AssignUser(writeCtx, user, nodeID); err != nil {
+		log.Printf("[METASERVER] ERROR: failed to persist user assignment: %v", err)
+		// Roll the in-memory assignment back so memory and store agree.
+		ms.mu.Lock()
+		delete(ms.users, user)
+		delete(ms.shared, user)
+		if info := ms.fileservers[minFS]; info != nil && info.UserCount > 0 {
+			info.UserCount--
+		}
+		ms.mu.Unlock()
+		return &pb.GetRootsResponse{Success: false, Error: "failed to persist metaserver state"}, nil
+	}
+	if err := ms.store.SetUserCount(writeCtx, nodeID, userCount); err != nil {
+		log.Printf("[METASERVER] WARN: could not persist user count for %s: %v", nodeID, err)
+	}
+
+	log.Printf("[METASERVER] Assigned user %s to FS %s (users: %d)", user, address, userCount)
+	return &pb.GetRootsResponse{Success: true, Roots: roots}, nil
+}
+
+func (h *GRPCHandler) persistStaleTransitions(ctx context.Context, nodeIDs []string) {
+	for _, nodeID := range nodeIDs {
+		c, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := h.MetaServer.store.SetFileServerStatus(c, nodeID, domain.FileServerStatusStale); err != nil {
+			log.Printf("[METASERVER] WARN: could not persist stale status for %s: %v", nodeID, err)
+		}
+		cancel()
+	}
+}
+
+func buildRootsLocked(ms *MetaServer, user string) []*pb.SharedRoot {
 	roots := []*pb.SharedRoot{
-		{
-			Owner:       user,
-			Path:        user,
-			DisplayName: "mydrive",
-		},
+		{Owner: user, Path: user, DisplayName: "mydrive"},
 	}
-	for _, sharedRoot := range h.MetaServer.shared[user] {
+	for _, sharedRoot := range ms.shared[user] {
 		roots = append(roots, &pb.SharedRoot{
 			Owner:       sharedRoot.Owner,
 			Path:        sharedRoot.Path,
 			DisplayName: sharedRoot.DisplayName,
 		})
 	}
-
-	return &pb.GetRootsResponse{
-		Success: true,
-		Roots:   roots,
-	}, nil
+	return roots
 }
 
-// Share a root
+// RootShare records that a directory is visible to another user.
 func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (*pb.RootShareResponse, error) {
 	log.Printf("[METASERVER] Root share request for dir: %s to share with: %s", req.RootPath, req.ShareWith)
 
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
+	ms := h.MetaServer
+	path := storage.NormalizeSharePath(req.RootPath)
 
-	// Consistency check 1: root user must exist
-	if _, exists := h.MetaServer.users[req.Owner]; !exists {
-		log.Printf(
-			"[METASERVER] Share failed: root user '%s' does not exist",
-			req.Owner,
-		)
+	ms.mu.Lock()
 
-		return &pb.RootShareResponse{
-			Success: false,
-			Error:   "root user '%s' does not exist" + req.Owner,
-		}, nil
+	if _, exists := ms.users[req.Owner]; !exists {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] Share failed: root user '%s' does not exist", req.Owner)
+		return &pb.RootShareResponse{Success: false, Error: fmt.Sprintf("root user '%s' does not exist", req.Owner)}, nil
+	}
+	if _, exists := ms.users[req.ShareWith]; !exists {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] Share failed: target user '%s' does not exist", req.ShareWith)
+		return &pb.RootShareResponse{Success: false, Error: fmt.Sprintf("target user '%s' does not exist", req.ShareWith)}, nil
 	}
 
-	// Consistency check 2: shared_with user must exist
-	if _, exists := h.MetaServer.users[req.ShareWith]; !exists {
-		log.Printf(
-			"[METASERVER] Share failed: target user '%s' does not exist",
-			req.ShareWith,
-		)
-
-		return &pb.RootShareResponse{
-			Success: false,
-			Error:   "target user '%s' does not exist" + req.ShareWith,
-		}, nil
+	// Deduplicate on (owner, path). Matching on owner alone previously dropped
+	// every directory after the first that an owner shared with the same person.
+	if containsShare(ms.shared[req.ShareWith], req.Owner, path) {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] Share skipped: '%s' already shared with '%s'", path, req.ShareWith)
+		return &pb.RootShareResponse{Success: true}, nil
 	}
 
-	// Consistency check 3: avoid duplicate sharing entries
-	for _, existing := range h.MetaServer.shared[req.ShareWith] {
-		if existing.Owner == req.Owner {
-			log.Printf(
-				"[METASERVER] Share skipped: root '%s' already shared with '%s'",
-				req.Owner,
-				req.ShareWith,
-			)
+	ms.shared[req.ShareWith] = append(ms.shared[req.ShareWith], SharedDirEntry{
+		Owner:       req.Owner,
+		DisplayName: req.Name,
+		Path:        path,
+	})
+	ms.mu.Unlock()
 
-			return &pb.RootShareResponse{
-				Success: true,
-			}, nil
-		}
-	}
-
-	// Do sharing
-	h.MetaServer.shared[req.ShareWith] = append(h.MetaServer.shared[req.ShareWith], SharedDirEntry{Owner: req.Owner, DisplayName: req.Name, Path: req.RootPath})
-	if err := h.MetaServer.saveStateLocked(); err != nil {
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := ms.store.AddShare(writeCtx, storage.ShareRecord{
+		Grantee:     req.ShareWith,
+		Owner:       req.Owner,
+		Path:        path,
+		DisplayName: req.Name,
+	}); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after share: %v", err)
+		ms.mu.Lock()
+		ms.shared[req.ShareWith] = removeShareEntry(ms.shared[req.ShareWith], req.Owner, path)
+		ms.mu.Unlock()
 		return &pb.RootShareResponse{Success: false, Error: "failed to persist metaserver state"}, nil
 	}
-	log.Printf("[METASERVER] Dir %s successfully shared with %s", req.RootPath, req.ShareWith)
-	return &pb.RootShareResponse{
-		Success: true,
-	}, nil
+
+	log.Printf("[METASERVER] Dir %s successfully shared with %s", path, req.ShareWith)
+	return &pb.RootShareResponse{Success: true}, nil
 }
 
-// Unshare a root
+// RootUnshare revokes a directory's visibility.
 func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareRequest) (*pb.RootUnshareResponse, error) {
 	log.Printf("[METASERVER] Root unshare request for dir: %s to unshare with: %s", req.RootPath, req.UnshareWith)
 
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
+	ms := h.MetaServer
+	path := storage.NormalizeSharePath(req.RootPath)
 
-	// Consistency check 1: root user must exist
-	if _, exists := h.MetaServer.users[req.Owner]; !exists {
-		log.Printf(
-			"[METASERVER] Share failed: root user '%s' does not exist",
-			req.Owner,
-		)
+	ms.mu.Lock()
 
-		return &pb.RootUnshareResponse{
-			Success: false,
-			Error:   "root user '%s' does not exist" + req.Owner,
-		}, nil
+	if _, exists := ms.users[req.Owner]; !exists {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] Unshare failed: root user '%s' does not exist", req.Owner)
+		return &pb.RootUnshareResponse{Success: false, Error: fmt.Sprintf("root user '%s' does not exist", req.Owner)}, nil
+	}
+	if _, exists := ms.users[req.UnshareWith]; !exists {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] Unshare failed: target user '%s' does not exist", req.UnshareWith)
+		return &pb.RootUnshareResponse{Success: false, Error: fmt.Sprintf("target user '%s' does not exist", req.UnshareWith)}, nil
 	}
 
-	// Consistency check 2: shared_with user must exist
-	if _, exists := h.MetaServer.users[req.UnshareWith]; !exists {
-		log.Printf(
-			"[METASERVER] Share failed: target user '%s' does not exist",
-			req.UnshareWith,
-		)
+	before := len(ms.shared[req.UnshareWith])
+	ms.shared[req.UnshareWith] = removeShareEntry(ms.shared[req.UnshareWith], req.Owner, path)
+	removed := len(ms.shared[req.UnshareWith]) != before
+	ms.mu.Unlock()
 
-		return &pb.RootUnshareResponse{
-			Success: false,
-			Error:   "target user '%s' does not exist" + req.UnshareWith,
-		}, nil
-	}
-
-	// Check 3: verify sharing actually exists
-	sharedRoots := h.MetaServer.shared[req.UnshareWith]
-	index := -1
-	for i, root := range sharedRoots {
-		if root.Owner == req.Owner && root.Path == req.RootPath {
-			index = i
-			break
-		}
-	}
-
-	if index == -1 {
-		log.Printf(
-			"[METASERVER] Unshare skipped: dir '%s' was not shared with '%s'", req.RootPath, req.UnshareWith)
-
-		return &pb.RootUnshareResponse{
-			Success: true,
-		}, nil
-	}
-
-	// Remove entry from slice
-	h.MetaServer.shared[req.UnshareWith] = append(
-		sharedRoots[:index],
-		sharedRoots[index+1:]...,
-	)
-	if err := h.MetaServer.saveStateLocked(); err != nil {
+	// Always issue the delete, even when memory held no entry: the store is the
+	// authority for revocation and a keyed delete is idempotent.
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := ms.store.RemoveShare(writeCtx, req.UnshareWith, req.Owner, path); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after unshare: %v", err)
 		return &pb.RootUnshareResponse{Success: false, Error: "failed to persist metaserver state"}, nil
 	}
 
-	log.Printf("[METASERVER] Dir '%s' successfully unshared from '%s'", req.RootPath, req.UnshareWith)
-	return &pb.RootUnshareResponse{
-		Success: true,
-	}, nil
+	if !removed {
+		log.Printf("[METASERVER] Unshare: dir '%s' was not present for '%s'; store delete issued anyway", path, req.UnshareWith)
+	} else {
+		log.Printf("[METASERVER] Dir '%s' successfully unshared from '%s'", path, req.UnshareWith)
+	}
+	return &pb.RootUnshareResponse{Success: true}, nil
 }
 
-// DeregisterFileServer forcibly removes a fileserver and any user mappings for it.
-// This is an admin-initiated operation intended for decommissioned or replaced nodes.
+func removeShareEntry(entries []SharedDirEntry, owner, path string) []SharedDirEntry {
+	out := make([]SharedDirEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.Owner == owner && e.Path == path {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// DeregisterFileServer removes a node and releases every user assigned to it,
+// so they are placed afresh on their next login.
+//
+// This is an admin-initiated decommission and is deliberately destructive:
+// whatever data is still on the node becomes unreachable through DVFS. It is
+// the complement of the orphan marker. That marker protects users whose node
+// is *transiently* absent by refusing to reassign them; deregistering is the
+// operator saying the absence is permanent, which releases them. Orphaned
+// users pointing at the node are released too, so a node that was already
+// gone when the metaserver last started can still be cleaned up.
 func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.DeregisterFileServerRequest) (*pb.DeregisterFileServerResponse, error) {
-	if req.Address == "" {
-		return &pb.DeregisterFileServerResponse{Success: false, Error: "empty address"}, nil
+	if req.FsId == "" && req.Address == "" {
+		return &pb.DeregisterFileServerResponse{Success: false, Error: "fs_id or address is required"}, nil
 	}
 
-	h.MetaServer.mu.Lock()
-	defer h.MetaServer.mu.Unlock()
+	ms := h.MetaServer
+	ms.mu.Lock()
 
-	fsID, exists := h.MetaServer.findFileServerByAddressLocked(req.Address)
-	if !exists {
-		log.Printf("[METASERVER] DeregisterFileServer: address %s not found (idempotent)", req.Address)
-		return &pb.DeregisterFileServerResponse{Success: true}, nil
+	// Resolve by stable identity first; address is the fallback for callers
+	// that predate fs_id.
+	nodeID := req.FsId
+	var (
+		fsID   uint64
+		exists bool
+	)
+	if nodeID != "" {
+		fsID, exists = ms.findFileServerByNodeIDLocked(nodeID)
 	}
-
-	// Remove user mappings pointing to this fileserver
-	removedUsers := make([]string, 0)
-	for username, mappedID := range h.MetaServer.users {
-		if mappedID == fsID {
-			delete(h.MetaServer.users, username)
-			delete(h.MetaServer.shared, username)
-			h.removeRootFromAllSharedLocked(username)
-			removedUsers = append(removedUsers, username)
+	if !exists && req.Address != "" {
+		if fsID, exists = ms.findFileServerByAddressLocked(req.Address); exists {
+			if info := ms.fileservers[fsID]; info != nil {
+				nodeID = info.NodeID
+			}
 		}
 	}
 
-	delete(h.MetaServer.fileservers, fsID)
-
-	if err := h.MetaServer.saveStateLocked(); err != nil {
-		log.Printf("[METASERVER] ERROR: failed to persist state after deregister: %v", err)
-		return &pb.DeregisterFileServerResponse{
-			Success: false,
-			Error:   "failed to persist metaserver state: " + err.Error(),
-		}, nil
+	// Everyone routed to this node, plus anyone orphaned on it.
+	var removed []string
+	if exists {
+		for username, mappedID := range ms.users {
+			if mappedID == fsID {
+				removed = append(removed, username)
+			}
+		}
+	}
+	if nodeID != "" {
+		for username, home := range ms.orphanedUsers {
+			if home == nodeID {
+				removed = append(removed, username)
+			}
+		}
 	}
 
-	log.Printf("[METASERVER] DeregisterFileServer: removed fsID=%d address=%s, affected users=%v",
-		fsID, req.Address, removedUsers)
+	if !exists && len(removed) == 0 {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] DeregisterFileServer: node=%q address=%q not found (idempotent)", req.FsId, req.Address)
+		return &pb.DeregisterFileServerResponse{Success: true}, nil
+	}
+
+	// Snapshot enough to undo the in-memory change if the store rejects it.
+	// A failed decommission must leave the cluster exactly as it was, so the
+	// operator can simply retry rather than being left with memory and store
+	// disagreeing.
+	var prevNode *domain.FileServerInfo
+	if exists {
+		prevNode = ms.fileservers[fsID]
+	}
+	prevUsers := make(map[string]uint64, len(removed))
+	prevOrphans := make(map[string]string, len(removed))
+	for _, u := range removed {
+		if id, ok := ms.users[u]; ok {
+			prevUsers[u] = id
+		}
+		if home, ok := ms.orphanedUsers[u]; ok {
+			prevOrphans[u] = home
+		}
+	}
+	prevShared := cloneShared(ms.shared)
+
+	for _, u := range removed {
+		delete(ms.users, u)
+		delete(ms.orphanedUsers, u)
+		delete(ms.shared, u)
+		h.removeSharesByOwnerLocked(u)
+	}
+	if exists {
+		delete(ms.fileservers, fsID)
+	}
+	ms.mu.Unlock()
+
+	// Node first, then users, then shares. If this sequence is interrupted the
+	// users are left pointing at an absent node, which hydration treats as
+	// orphaned and refuses to reassign. The reverse order could leave users
+	// deleted while their node still exists, and they would then be silently
+	// placed elsewhere on their next login.
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := func() error {
+		if exists {
+			if err := ms.store.RemoveFileServer(writeCtx, nodeID); err != nil {
+				return err
+			}
+		}
+		if len(removed) == 0 {
+			return nil
+		}
+		if err := ms.store.RemoveUsers(writeCtx, removed); err != nil {
+			return err
+		}
+		for _, u := range removed {
+			if err := ms.store.RemoveSharesInvolving(writeCtx, u); err != nil {
+				return err
+			}
+		}
+		return nil
+	}()
+	if err != nil {
+		log.Printf("[METASERVER] ERROR: failed to persist state after deregister of %s: %v", nodeID, err)
+		ms.mu.Lock()
+		if prevNode != nil {
+			ms.fileservers[fsID] = prevNode
+		}
+		for u, id := range prevUsers {
+			ms.users[u] = id
+		}
+		for u, home := range prevOrphans {
+			ms.orphanedUsers[u] = home
+		}
+		ms.shared = prevShared
+		ms.mu.Unlock()
+		return &pb.DeregisterFileServerResponse{Success: false, Error: "failed to persist metaserver state: " + err.Error()}, nil
+	}
+
+	log.Printf("[METASERVER] DeregisterFileServer: removed node=%s id=%d address=%s, released users=%v", nodeID, fsID, req.Address, removed)
 	return &pb.DeregisterFileServerResponse{Success: true}, nil
 }
 
+// cloneShared deep-copies the visibility index so a failed store write can
+// restore it exactly.
+func cloneShared(m map[string][]SharedDirEntry) map[string][]SharedDirEntry {
+	out := make(map[string][]SharedDirEntry, len(m))
+	for k, v := range m {
+		out[k] = append([]SharedDirEntry(nil), v...)
+	}
+	return out
+}

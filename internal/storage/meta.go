@@ -77,10 +77,11 @@ type MetaStore interface {
 	// RemoveFileServer deletes a node's record. Removing an absent node is not
 	// an error, so an admin can retry a decommission safely.
 	//
-	// It touches only the node document. The caller removes that node's users
-	// and their shares explicitly, in that order, so a partial failure leaves a
-	// harmless userless node rather than users pointing at a node that no
-	// longer exists.
+	// It touches only the node document. The caller removes the node first and
+	// its users and shares after, so that an interrupted sequence leaves users
+	// pointing at an absent node, which hydration treats as orphaned and
+	// refuses to reassign. The reverse order could delete users while their
+	// node still exists, and they would then be silently placed elsewhere.
 	RemoveFileServer(ctx context.Context, nodeID string) error
 
 	// RecordHeartbeat refreshes liveness for one node. Best-effort: the caller
@@ -89,6 +90,14 @@ type MetaStore interface {
 
 	// SetFileServerStatus marks a node healthy or stale.
 	SetFileServerStatus(ctx context.Context, nodeID, status string) error
+
+	// SetAddress records a node's new address, leaving every other field alone.
+	//
+	// This is deliberately targeted rather than a full UpsertFileServer: a
+	// whole-record write would carry a UserCount the caller did not intend to
+	// change, and a DHCP lease change would silently reset the node's persisted
+	// user count to zero.
+	SetAddress(ctx context.Context, nodeID, address string) error
 
 	// SetUserCount records how many users a node currently hosts.
 	SetUserCount(ctx context.Context, nodeID string, count int) error

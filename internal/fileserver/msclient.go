@@ -164,6 +164,7 @@ func (fs *FileServer) RegisterWithMetaServer(selfAddr string) error {
 
 	client := mspb.NewMetaServerClient(conn)
 	resp, err := client.RegisterFileServer(context.Background(), &mspb.RegisterFileServerRequest{
+		FsId:    fs.serverID,
 		Address: selfAddr,
 		Users:   users,
 		Shared:  acls,
@@ -247,7 +248,10 @@ func (fs *FileServer) HeartbeatWithMetaServer(selfAddr string) error {
 	defer conn.Close()
 
 	client := mspb.NewMetaServerClient(conn)
-	resp, err := client.Heartbeat(context.Background(), &mspb.HeartbeatRequest{Address: selfAddr})
+	resp, err := client.Heartbeat(context.Background(), &mspb.HeartbeatRequest{
+		FsId:    fs.serverID,
+		Address: selfAddr,
+	})
 	if err != nil {
 		return fmt.Errorf("Heartbeat RPC failed: %w", err)
 	}

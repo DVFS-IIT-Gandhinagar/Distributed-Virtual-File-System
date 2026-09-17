@@ -21,6 +21,11 @@ message RegisterFileServerRequest {
   string address = 1;
   repeated string users = 2;
   repeated SharedDir shared = 3; // ACL information for each user
+  // Stable operator-assigned node identity (the fileserver's -id flag, e.g.
+  // "fs1"). The metaserver keys nodes on this rather than on address, so a
+  // DHCP lease change updates the node in place instead of registering a
+  // second, phantom node.
+  string fs_id = 4;
 }
 
 message RegisterFileServerResponse {
@@ -75,6 +80,7 @@ message RootUnshareResponse {
 
 message HeartbeatRequest {
   string address = 1;
+  string fs_id = 2; // stable node identity; see RegisterFileServerRequest
 }
 
 message HeartbeatResponse {
@@ -84,6 +90,10 @@ message HeartbeatResponse {
 
 message DeregisterFileServerRequest {
   string address = 1;
+  // Stable node identity (see RegisterFileServerRequest). Preferred over
+  // address, which can change with a DHCP lease; address remains as a
+  // fallback for older callers.
+  string fs_id = 2;
 }
 
 message DeregisterFileServerResponse {

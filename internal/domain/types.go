@@ -92,15 +92,15 @@ type Inode struct {
 	ACL      ACL
 	Children []*FID // for directories
 	Size     uint64 // for files
-	Parent	 *Inode
+	Parent   *Inode
 }
 
 // Access Control List
 type ACL struct {
-    Owner  string   // user who owns this root
+	Owner  string // user who owns this root
 	Shared []string
-    // Read  []string // users with read-only access
-    // Write []string // users with full access
+	// Read  []string // users with read-only access
+	// Write []string // users with full access
 }
 
 // func (a *ACL) CanRead(user string) bool {
@@ -123,6 +123,9 @@ const (
 )
 
 type FileServerInfo struct {
+	// NodeID is the stable operator-assigned identity from the fileserver's
+	// -id flag (e.g. "fs1"). It, not Address, is the node's primary key.
+	NodeID            string `json:"node_id,omitempty"`
 	Address           string `json:"address"`
 	UserCount         int    `json:"user_count"`
 	LastHeartbeatUnix int64  `json:"last_heartbeat_unix,omitempty"`

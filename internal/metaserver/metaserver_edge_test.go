@@ -30,14 +30,9 @@ func TestNavigateValidationAndUnavailableRoot(t *testing.T) {
 	h := NewGRPCHandler(ms)
 	now := time.Now().Unix()
 
-	ms.fileservers[0] = &domain.FileServerInfo{
-		Address:           "127.0.0.1:5001",
-		UserCount:         1,
-		LastHeartbeatUnix: now,
-		Status:            domain.FileServerStatusStale,
-	}
-	ms.users["alice"] = 0
-	ms.users["bob"] = 0
+	fsID := seedFileServer(t, ms, "fs1", "127.0.0.1:5001", 1, now, domain.FileServerStatusStale)
+	ms.users["alice"] = fsID
+	ms.users["bob"] = fsID
 
 	missingFields, _ := h.Navigate(context.Background(), &pb.NavigateRequest{Username: "", RootUser: ""})
 	if missingFields.Success {
@@ -73,12 +68,7 @@ func TestStartHeartbeatMonitorMarksServerStale(t *testing.T) {
 	ms := newTestMetaServer(t)
 	now := time.Now().Unix()
 
-	ms.fileservers[0] = &domain.FileServerInfo{
-		Address:           "127.0.0.1:5001",
-		UserCount:         0,
-		LastHeartbeatUnix: now - 5,
-		Status:            domain.FileServerStatusHealthy,
-	}
+	fsID := seedFileServer(t, ms, "fs1", "127.0.0.1:5001", 0, now-5, domain.FileServerStatusHealthy)
 
 	ms.SetHeartbeatConfig(1*time.Second, 50*time.Millisecond)
 	stop := ms.StartHeartbeatMonitor()
@@ -87,7 +77,7 @@ func TestStartHeartbeatMonitorMarksServerStale(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		ms.mu.RLock()
-		status := ms.fileservers[0].Status
+		status := ms.fileservers[fsID].Status
 		ms.mu.RUnlock()
 		if status == domain.FileServerStatusStale {
 			return

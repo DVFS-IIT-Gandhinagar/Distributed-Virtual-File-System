@@ -25,7 +25,7 @@ func TestMainHelpFlag(t *testing.T) {
 		t.Fatalf("expected help usage output, got err=%v output=%s", err, output)
 	}
 
-	if !strings.Contains(output, "-state_file") {
-		t.Fatalf("expected help output to include -state_file flag, got: %s", output)
+	if !strings.Contains(output, "-mongo_uri") {
+		t.Fatalf("expected help output to include -mongo_uri flag, got: %s", output)
 	}
 }
