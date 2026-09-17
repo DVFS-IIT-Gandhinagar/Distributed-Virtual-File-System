@@ -83,15 +83,22 @@ Worth addressing given the deployment target is Raspberry Pis on SD cards.
 place with no temp file at all, so an interrupted write leaves a truncated cache. It is a
 disposable cache with a network fallback, so impact is low.
 
-## 7. Unrelated changes reverted from the migration branch
+## 7. CI Go version was already behind go.mod
+
+`go.mod` on `main` requires `go 1.26.0`, but both CI workflows pinned `1.24.0`. CI was behind
+its own toolchain directive before this migration started.
+
+`.github/workflows/ci.yml` was bumped to `1.26.0` as part of the migration because the
+MongoDB driver needs Go 1.25+ and CI cannot build without it. `.github/workflows/release.yml`
+has the **same latent problem** and was left alone to keep this diff focused — bump it
+separately.
+
+## 8. Unrelated changes reverted from the migration branch
 
 These were correct but had nothing to do with MongoDB, so they were reverted to keep the
 migration reviewable. Re-apply them as their own commits:
 
-- **CI Go version bump**, `1.24.0` → `1.26.0` in `.github/workflows/ci.yml` and
-  `release.yml`. Note `go.mod` already required `1.26.0`, so CI was behind its own toolchain
-  directive. The floor is real: the MongoDB driver needs Go 1.25+.
 - **A `make test-google-auth` CI step.** Valuable, because `go test ./...` does not compile
-  the auth code that `make build` actually ships.
+  the auth code that `make build` actually ships, so auth regressions can pass CI today.
 - **gofmt realignment and blank-line cleanup** across roughly 20 files. Correct gofmt output,
   but pure noise in a migration diff.
