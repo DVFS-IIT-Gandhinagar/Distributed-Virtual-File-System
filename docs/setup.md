@@ -139,7 +139,7 @@ sudo systemctl status dvfs-admin --no-pager
 # Note: Password authentication uses ADMIN_PASSWORD_HASH loaded from .env
 ./bin/admin \
   -port=8080 \
-  -state_file=./metaserver_state.json \
+  -mongo_uri=mongodb://127.0.0.1:27017/dvfs \
   -static=./cmd/admin/static \
   -ssh_user=dvfs \
   -ssh_key=~/.ssh/id_ed25519 \
@@ -283,7 +283,7 @@ DVFS_AUTH_MOCK=true go run ./cmd/fileserver/main.go \
 # 4. Terminal 3: Start Admin Console
 go run ./cmd/admin/main.go \
   -port=8080 \
-  -state_file=./metaserver_state.json \
+  -mongo_uri=mongodb://127.0.0.1:27017/dvfs \
   -static=./cmd/admin/static
 
 # 5. Terminal 4: Launch Client (using email as identity)
@@ -376,7 +376,7 @@ The root `Makefile` automates building, testing, code generation, TLS certificat
 | `make certs-nodes` | Mints verified 2-year leaf certificates for `dvfs1`–`dvfs9`, `localhost`, `fs1`, `mds`. | `go run scripts/gen-certs/cmd/gen_node_certs/main.go` |
 | `make run-server` | Builds and runs local FileServer (`-id=fs1 -port=50051 -data=./fileserver_data`). | `./bin/fileserver ...` |
 | `make run-metaserver` | Builds and runs local MetaServer (`-port=50052`). | `./bin/metaserver -port=50052` |
-| `make run-admin` | Builds and runs Admin Console (`-port=8080 -state_file=./metaserver_state.json`). | `./bin/admin -port=8080 ...` |
+| `make run-admin` | Builds and runs Admin Console (`-port=8080 -mongo_uri=...`). | `./bin/admin -port=8080 ...` |
 | `make run-client` | Builds and runs interactive client (`USER=alice IP_ADDR=127.0.0.1`). | `./bin/client -username=$(USER) -ip_addr=$(IP_ADDR)` |
 | `make release` | Cross-compiles client and node packages for all platforms with SHA256 checksums. | `go run scripts/build-release/main.go` |
 | `make release-client` | Builds standalone client archives for Windows, macOS, and Linux (AMD64 & ARM64). | `go run scripts/build-release/main.go -client-only` |
@@ -407,5 +407,7 @@ For multi-user environments or systems where explicit user parameterization is r
 Each template unit sets `User=%i`, `WorkingDirectory=%h/Distributed-Virtual-File-System`, and resolves state and binary directories relative to the user's home directory (`%h`).
 
 ### State File Path Conventions
-- Under systemd execution via `scripts/start-metaserver.sh` and `scripts/start-admin.sh`, `STATE_FILE` defaults to `./bin/metaserver_state.json`.
-- When running binaries directly from the repository root, `-state_file` defaults to `./metaserver_state.json` (for MetaServer) or `./bin/metaserver_state.json` (for Admin Server). Always verify that both daemons are configured with matching `-state_file` parameters.
+- Cluster metadata lives in MongoDB, not on local disk. Both the MetaServer and the Admin Console take `-mongo_uri` (or the `MONGO_URI` environment variable) and `-mongo_db` (default `dvfs`).
+- Under systemd execution via `scripts/start-metaserver.sh` and `scripts/start-admin.sh`, `MONGO_URI` defaults to `mongodb://127.0.0.1:27017/dvfs`. Point it at the replica set in production, e.g. `mongodb://dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0`.
+- Because membership is read from the shared database rather than a local file, the Admin Console no longer has to run on the MetaServer host.
+- There is no import path from the old `metaserver_state.json`. A cluster starts with an empty database and repopulates itself: fileservers re-register on startup (republishing their users and shares from their own on-disk ACLs), and users are re-assigned a home node on their next login.

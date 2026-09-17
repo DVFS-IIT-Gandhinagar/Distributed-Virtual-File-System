@@ -9,7 +9,8 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
 ADMIN_PORT="${ADMIN_PORT:-8080}"
-STATE_FILE="${STATE_FILE:-./bin/metaserver_state.json}"
+MONGO_URI="${MONGO_URI:-mongodb://127.0.0.1:27017/dvfs}"
+MONGO_DB="${MONGO_DB:-dvfs}"
 STATIC_DIR="${STATIC_DIR:-./cmd/admin/static}"
 SSH_USER="${SSH_USER:-$(id -un 2>/dev/null || whoami)}"
 REPO_PATH="${REPO_PATH:-$HOME/Distributed-Virtual-File-System}"
@@ -70,7 +71,8 @@ GIST_URL="https://gist.githubusercontent.com/dvfs-iitgn/6eb8da397735b83f76b54af4
 
 echo "[STARTUP] Starting DVFS Admin Console..."
 echo "[STARTUP] Port:       ${ADMIN_PORT}"
-echo "[STARTUP] State File: ${STATE_FILE}"
+echo "[STARTUP] Mongo URI: ${MONGO_URI}"
+echo "[STARTUP] Mongo DB:  ${MONGO_DB}"
 echo "[STARTUP] Static Dir: ${STATIC_DIR}"
 echo "[STARTUP] SSH User:   ${SSH_USER}"
 echo "[STARTUP] SSH Key:    ${SSH_KEY}"
@@ -89,7 +91,8 @@ fi
 
 exec ./bin/admin \
   -port="${ADMIN_PORT}" \
-  -state_file="${STATE_FILE}" \
+  -mongo_uri="${MONGO_URI}" \
+  -mongo_db="${MONGO_DB}" \
   -static="${STATIC_DIR}" \
   -ssh_user="${SSH_USER}" \
   -ssh_key="${SSH_KEY}" \

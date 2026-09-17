@@ -63,8 +63,17 @@ When a FileServer crashes and restarts, its volatile in-memory client registrati
 3. The restarted FileServer re-establishes the callback session and returns its root FID.
 4. The client validates that the root FID returned matches its cached root FID (ensured by `.dvfs_inodes_index.json`), seamlessly restoring push invalidations.
 
-### 2.2 MetaServer State Recovery (`metaserver_state.json`)
-The MetaServer coordinator persists its complete operational state in `metaserver_state.json`:
+### 2.2 MetaServer State Recovery (MongoDB)
+
+> **Updated:** MetaServer state moved from `metaserver_state.json` to MongoDB. The
+> collections are `fileservers` (keyed on the node's stable `-id`), `users`, and
+> `shares` (keyed on grantee+owner+path). Recovery is a single `LoadSnapshot`
+> read at boot; the in-memory maps remain the read path for `GetRoots` and
+> `Navigate`. There is no import path from the old file — the cluster starts
+> empty and rebuilds itself as fileservers register. The JSON shape below is
+> retained for historical reference only.
+
+The MetaServer coordinator used to persist its complete operational state in `metaserver_state.json`:
 
 ```json
 {
@@ -93,9 +102,25 @@ The MetaServer coordinator persists its complete operational state in `metaserve
 }
 ```
 
-- **Startup Reconstitution**: On launch, `NewMetaServer(*stateFile)` parses the JSON snapshot, immediately restoring known fileservers, user-to-fileserver assignments, and shared directory registries.
-- **Heartbeat Evaluation**: Heartbeat timestamps are evaluated against the current Unix time. If a node has not checked in within the timeout window, it transitions to `stale`.
-- **ID Allocation**: `next_fs_id` is an auto-incrementing integer used by the MetaServer to assign unique IDs to newly registered FileServers that are not already known.
+The bullets below describe the *former* JSON behaviour, alongside what replaced it:
+
+- **Startup Reconstitution**: `NewMetaServer(*stateFile)` used to parse the JSON snapshot at
+  launch. It now takes a `MetaStore` and issues a single `LoadSnapshot` read, restoring known
+  fileservers, user-to-fileserver assignments, and shared directory registries into the
+  in-memory maps. A store that cannot be read is fatal rather than a warning: starting with
+  empty routing state would strand every user.
+- **Heartbeat Evaluation**: Unchanged. Heartbeat timestamps are evaluated against the current
+  Unix time, and a node that has not checked in within the timeout window transitions to
+  `stale`.
+- **ID Allocation**: `next_fs_id` was an auto-incrementing integer in the JSON file. Numeric
+  ids are now allocated from the `counters` collection, and a node's identity is its stable
+  `-id` (`fs1`) rather than its address, so a DHCP lease change no longer registers the same
+  machine twice.
+- **Unregistered Home Nodes**: A user whose home node is absent from the snapshot is retained
+  as *orphaned* rather than dropped. They get no live route, and `GetRoots` refuses to assign
+  them a new home node, because reassignment would overwrite their stored placement and strand
+  whatever data is still on the original node. The account becomes routable again as soon as
+  that node registers. The boot log reports the count as `orphaned_users`.
 
 ### 2.3 Heartbeat & Stale Transitions
 - **FileServer Heartbeat Loop**: A background goroutine in `internal/fileserver/msclient.go` executes `Heartbeat(address)` to the MetaServer every 5 seconds (configurable via `-meta_heartbeat_interval`).
@@ -132,7 +157,7 @@ This test verifies that the MetaServer coordinator persists its routing table, r
 ```bash
 ./bin/metaserver \
   -port=50051 \
-  -state_file=./metaserver_state.json \
+  -mongo_uri=mongodb://127.0.0.1:27017/dvfs \
   -heartbeat_timeout=30s \
   -heartbeat_check_interval=5s
 ```
@@ -162,20 +187,20 @@ In Terminal 4 (optional), launch Client B to populate another user:
 ```bash
 ./bin/client -username=bob -ip_addr=127.0.0.1 -port=50051 -meta=true
 ```
-Confirm the state snapshot is written:
+Confirm the routing state is written to MongoDB:
 ```bash
-cat ./metaserver_state.json
+mongosh dvfs --quiet --eval 'printjson(db.users.find().toArray())'
 ```
 
 #### Step 4: Crash and Restart MetaServer
 1. In Terminal 1, stop the MetaServer with `Ctrl+C` (or `kill -9`).
 2. Keep the FileServer running in Terminal 2. Note in FS logs that retry/heartbeat attempts temporarily fail.
-3. Restart the MetaServer using the exact same state file:
+3. Restart the MetaServer against the same database:
 ```bash
-./bin/metaserver -port=50051 -state_file=./metaserver_state.json
+./bin/metaserver -port=50051 -mongo_uri=mongodb://127.0.0.1:27017/dvfs
 ```
 4. Observe the logs:
-   - **MDS Logs**: State recovery log reporting restored counts (`fileservers`, `users`, `next_fs_id`).
+   - **MDS Logs**: State recovery log reporting restored counts (`fileservers`, `users`, `shares`, `orphaned_users`).
    - **FS Logs**: Re-connection and heartbeat success logs resume within the retry interval.
 
 #### Step 5: Validate Resumption
@@ -195,7 +220,7 @@ To verify the MetaServer's liveness tracker and stale node isolation without wai
 ```bash
 ./bin/metaserver \
   -port=50051 \
-  -state_file=./metaserver_state.json \
+  -mongo_uri=mongodb://127.0.0.1:27017/dvfs \
   -heartbeat_timeout=6s \
   -heartbeat_check_interval=1s
 ```
@@ -289,11 +314,11 @@ stateDiagram-v2
     state "Recovering" as Recovering
 
     [*] --> Starting
-    Starting --> LoadingState : "parse metaserver_state.json"
+    Starting --> LoadingState : "LoadSnapshot from MongoDB"
     LoadingState --> Ready : "state valid (loadState)"
     LoadingState --> Ready : "file missing (start fresh)"
     Ready --> Serving : "Start gRPC server"
     Serving --> Crashed : "process killed"
     Crashed --> Recovering : "process restarted"
-    Recovering --> LoadingState : "reload state file"
+    Recovering --> LoadingState : "reload snapshot"
 ```

@@ -126,11 +126,11 @@ stateDiagram-v2
     state "Recovering" as Recovering
 
     [*] --> Starting
-    Starting --> LoadingState : "parse metaserver_state.json"
+    Starting --> LoadingState : "LoadSnapshot from MongoDB"
     LoadingState --> Ready : "state valid (loadState)"
     LoadingState --> Ready : "file missing (start fresh)"
     Ready --> Serving : "Start gRPC server"
     Serving --> Crashed : "process killed"
     Crashed --> Recovering : "process restarted"
-    Recovering --> LoadingState : "reload state file"
+    Recovering --> LoadingState : "reload snapshot"
 ```

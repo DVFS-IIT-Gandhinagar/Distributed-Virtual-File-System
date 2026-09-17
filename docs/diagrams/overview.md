@@ -17,7 +17,7 @@ graph TB
     end
 
     subgraph Coordinator["MetaServer Coordinator (:50051)"]
-        MDS["Routing & Health Advisory<br>Atomic State (metaserver_state.json)"]
+        MDS["Routing & Health Advisory<br>Durable State (MongoDB)"]
     end
 
     subgraph Storage["FileServer Cluster (:50052, :9052)"]
@@ -66,7 +66,7 @@ graph TD
     subgraph MetaServer["MetaServer Coordinator (:50051)"]
         MG["gRPC Coordinator Handler"]
         MH["Heartbeat Liveness Monitor"]
-        MS[("State Persistence (metaserver_state.json)")]
+        MS[("State Persistence (MongoDB)")]
 
         MG <-->|"Persist Routing / Reconstitute"| MS
         MH -->|"Evaluate Timeouts (30s) and Mark Stale"| MS
@@ -187,7 +187,7 @@ sequenceDiagram
 | FileServer | MetaServer | mTLS gRPC | Zero-Trust Root CA | RegisterFileServer, Heartbeats |
 | Admin Console | FileServer | HTTP | None (internal sidecar) | Scrape `/metrics` for telemetry |
 | Admin Console | FileServer | SSH | SSH Keys / scoped sudoers | Remote command orchestration |
-| Admin Console | MetaServer | File I/O | FS Permissions | Reads `metaserver_state.json` |
+| Admin Console | MetaServer | MongoDB | FS Permissions | Reads the shared `dvfs` database |
 | FileServer | Client | mTLS gRPC | Zero-Trust Root CA | Push Invalidation callbacks |
 
 ## 5. Deployment Topology on IITGN Cluster
@@ -199,7 +199,7 @@ graph TD
         
         subgraph PhysicalNodes["Physical Cluster Nodes"]
             ADMIN_HOST["Admin Machine (1x)<br>Admin Console :8080<br>SSH key holder"]
-            META_HOST["MetaServer Node (1x)<br>gRPC :50051<br>state file"]
+            META_HOST["MetaServer Node (1x)<br>gRPC :50051<br>MongoDB-backed"]
             FS1_HOST["FileServer Node dvfs1<br>gRPC :50052, metrics :9052"]
             FS9_HOST["FileServer Node dvfs9<br>gRPC :50052, metrics :9052"]
             CLIENT_HOST["Client Machines<br>interactive REPL"]
@@ -233,7 +233,7 @@ sequenceDiagram
     participant AdminConsole
     participant DVFSClient
 
-    MetaServer->>MetaServer: load state (metaserver_state.json)
+    MetaServer->>MetaServer: load state (MongoDB snapshot)
     MetaServer->>MetaServer: start gRPC listener (:50051)
     
     FileServer1->>FileServer1: load InodeStore (.dvfs_inodes_index.json)
@@ -244,7 +244,7 @@ sequenceDiagram
     FileServer2->>MetaServer: RegisterFileServer
     FileServer2->>MetaServer: start heartbeat (periodic)
     
-    AdminConsole->>AdminConsole: load metaserver_state.json
+    AdminConsole->>AdminConsole: load cluster state from MongoDB
     AdminConsole->>AdminConsole: start polling metrics (:9052)
     
     DVFSClient->>MetaServer: GetRoots

@@ -8,7 +8,7 @@ Type=simple
 User=%i
 WorkingDirectory=%h/Distributed-Virtual-File-System
 Environment=ADMIN_PORT=8080
-Environment=STATE_FILE=%h/Distributed-Virtual-File-System/bin/metaserver_state.json
+Environment=MONGO_URI=mongodb://127.0.0.1:27017/dvfs
 
 ExecStart=/bin/bash -l %h/Distributed-Virtual-File-System/scripts/start-admin.sh
 

@@ -8,7 +8,7 @@ Type=simple
 User=%i
 WorkingDirectory=%h/Distributed-Virtual-File-System
 Environment=META_PORT=50051
-Environment=STATE_FILE=%h/Distributed-Virtual-File-System/bin/metaserver_state.json
+Environment=MONGO_URI=mongodb://127.0.0.1:27017/dvfs
 
 ExecStart=/bin/bash %h/Distributed-Virtual-File-System/scripts/start-metaserver.sh
 
