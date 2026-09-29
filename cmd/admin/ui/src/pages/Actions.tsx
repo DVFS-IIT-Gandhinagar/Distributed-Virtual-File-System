@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchCluster, fetchActionPresets, fetchCommandHistory } from '../api';
+import { fetchCluster, fetchActionPresets, fetchCommandHistory, getAdminToken } from '../api';
 import type { ActionType, ActionRequest, NodeRestartParams, CommandRecord, ActionEvent } from '../types';
 import { getStatusBadgeClass, formatUptime, formatNodeDisplayName, formatMachineName } from '../utils';
 import { useAuth } from '../context/AuthContext';
@@ -216,7 +216,11 @@ export default function Actions() {
     setWsStatus('connecting');
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const ws = new WebSocket(`${protocol}//${host}/ws/actions`);
+    const token = getAdminToken();
+    const wsUrl = token
+      ? `${protocol}//${host}/ws/actions?token=${encodeURIComponent(token)}`
+      : `${protocol}//${host}/ws/actions`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -409,7 +413,9 @@ export default function Actions() {
                       <span className={`badge ${getStatusBadgeClass(node.status)}`}>{node.status}</span>
                     </div>
                     <small className="text-muted text-truncate">{node.address}</small>
-                    <small className="text-muted mt-1">Uptime: {formatUptime(node.metrics.uptime_seconds)}</small>
+                    <small className="text-muted mt-1">
+                      Uptime: {node.metrics ? formatUptime(node.metrics.uptime_seconds) : 'Offline'}
+                    </small>
                   </div>
                 </div>
               );
