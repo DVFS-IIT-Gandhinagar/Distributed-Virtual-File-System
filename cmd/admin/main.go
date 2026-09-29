@@ -23,6 +23,7 @@ func main() {
 	tlsKey := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
 	tlsEnabled := flag.Bool("tls", false, "Force enable TLS (auto-enabled if cert and key exist)")
 	gistURL := flag.String("gist_url", "", "Custom GitHub Gist URL for machines discovery (optional)")
+	metaserverAddr := flag.String("metaserver_addr", "", "gRPC address of the metaserver (e.g. 10.0.171.40:50051 or dvfs1:50051)")
 	flag.Parse()
 
 	log.Printf("[ADMIN] Starting Admin Console on port %d...", *port)
@@ -31,6 +32,14 @@ func main() {
 	log.Printf("[ADMIN] SSH User: '%s', SSH Key: '%s', Port: %d, Repo Path: '%s'", *sshUser, *sshKey, *sshPort, *repoPath)
 
 	server := admin.NewAdminServer(*stateFile, *staticDir)
+	msAddr := *metaserverAddr
+	if msAddr == "" {
+		msAddr = os.Getenv("DVFS_METASERVER_ADDR")
+	}
+	if msAddr != "" {
+		server.SetMetaServerAddr(msAddr)
+		log.Printf("[ADMIN] MetaServer address configured: %s", msAddr)
+	}
 	if *gistURL != "" {
 		server.SetDiscoveryResolver(client.NewDiscoveryResolver(client.WithGistURL(*gistURL)))
 	}

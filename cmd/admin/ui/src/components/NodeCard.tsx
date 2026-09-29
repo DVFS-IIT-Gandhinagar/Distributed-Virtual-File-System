@@ -5,9 +5,10 @@ import { useAuth } from '../context/AuthContext';
 interface Props {
   node: NodeInfo;
   onClick: () => void;
+  onRemove?: (node: NodeInfo) => void;
 }
 
-export default function NodeCard({ node, onClick }: Props) {
+export default function NodeCard({ node, onClick, onRemove }: Props) {
   const { isAuthenticated } = useAuth();
   const m = node.metrics;
   const statusColor = getStatusColor(node.status);
@@ -43,6 +44,22 @@ export default function NodeCard({ node, onClick }: Props) {
             <span>⏱ Offline</span>
             <span>🔗 0 connections</span>
           </div>
+
+          {isAuthenticated && onRemove && (
+            <div className="mt-3 pt-2 border-top">
+              <button
+                type="button"
+                className="btn btn-outline-danger btn-sm w-100 d-flex align-items-center justify-content-center gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(node);
+                }}
+                title="Permanently remove this offline node from cluster registry"
+              >
+                <i className="bi bi-trash3"></i> Remove Node
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -152,6 +169,22 @@ export default function NodeCard({ node, onClick }: Props) {
           </span>
         </div>
       </div>
+
+      {isAuthenticated && node.status === 'offline' && onRemove && (
+        <div className="card-footer bg-white border-top py-2">
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm w-100 d-flex align-items-center justify-content-center gap-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(node);
+            }}
+            title="Permanently remove this offline node from cluster registry"
+          >
+            <i className="bi bi-trash3"></i> Remove Node
+          </button>
+        </div>
+      )}
     </div>
   );
 }

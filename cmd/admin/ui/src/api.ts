@@ -230,3 +230,15 @@ export async function fetchLogTail(nodeId: string, lines = 100, service = 'files
   if (!res.ok) throw new Error(`fetchLogTail: ${res.status} ${res.statusText}`);
   return res.json() as Promise<LogTailResponse>;
 }
+
+export async function removeNode(fsID: string): Promise<{ success: boolean; removed_fs_id?: string; error?: string }> {
+  const res = await authFetch(`/api/nodes/${encodeURIComponent(fsID)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `removeNode: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+

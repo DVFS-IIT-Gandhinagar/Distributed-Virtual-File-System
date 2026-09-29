@@ -340,3 +340,101 @@ func TestHandlerRootShareAndUnshareLifecycle(t *testing.T) {
 		t.Fatalf("shared list length after unshare mismatch: got=%d want=0", got)
 	}
 }
+
+func TestHandlerDeregisterFileServer(t *testing.T) {
+	ms := newTestMetaServer(t)
+	h := NewGRPCHandler(ms)
+
+	// 1. Empty address
+	resp, err := h.DeregisterFileServer(context.Background(), &pb.DeregisterFileServerRequest{
+		Address: "",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Success {
+		t.Fatalf("expected failure for empty address")
+	}
+
+	// 2. Non-existent address (should be idempotent success)
+	resp, err = h.DeregisterFileServer(context.Background(), &pb.DeregisterFileServerRequest{
+		Address: "192.168.1.100:50052",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.Success {
+		t.Fatalf("expected idempotent success for non-existent server: %v", resp.Error)
+	}
+
+	// 3. Register FS 1 with users alice and bob, and FS 2 with user charlie
+	_, err = h.RegisterFileServer(context.Background(), &pb.RegisterFileServerRequest{
+		Address: "10.0.0.1:50052",
+		Users:   []string{"alice", "bob"},
+		Shared: []*pb.SharedDir{
+			{Owner: "alice", Path: "alice/docs", Name: "docs", Users: []string{"bob"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register FS 1 failed: %v", err)
+	}
+
+	_, err = h.RegisterFileServer(context.Background(), &pb.RegisterFileServerRequest{
+		Address: "10.0.0.2:50052",
+		Users:   []string{"charlie"},
+	})
+	if err != nil {
+		t.Fatalf("register FS 2 failed: %v", err)
+	}
+
+	// Verify initial state
+	if len(ms.fileservers) != 2 {
+		t.Fatalf("expected 2 fileservers, got %d", len(ms.fileservers))
+	}
+	if len(ms.users) != 3 {
+		t.Fatalf("expected 3 users, got %d", len(ms.users))
+	}
+
+	// Deregister FS 1
+	resp, err = h.DeregisterFileServer(context.Background(), &pb.DeregisterFileServerRequest{
+		Address: "10.0.0.1:50052",
+	})
+	if err != nil {
+		t.Fatalf("deregister FS 1 error: %v", err)
+	}
+	if !resp.Success {
+		t.Fatalf("deregister FS 1 failed: %s", resp.Error)
+	}
+
+	// Verify FS 1 and its users (alice, bob) are removed, charlie remains
+	if len(ms.fileservers) != 1 {
+		t.Fatalf("expected 1 fileserver remaining, got %d", len(ms.fileservers))
+	}
+	if _, exists := ms.users["alice"]; exists {
+		t.Errorf("alice should have been removed")
+	}
+	if _, exists := ms.users["bob"]; exists {
+		t.Errorf("bob should have been removed")
+	}
+	if _, exists := ms.users["charlie"]; !exists {
+		t.Errorf("charlie on FS 2 should still exist")
+	}
+
+	// Reload state from disk to ensure persistence
+	reloaded, err := NewMetaServer(ms.stateFile)
+	if err != nil {
+		t.Fatalf("failed to reload state: %v", err)
+	}
+	if len(reloaded.fileservers) != 1 {
+		t.Fatalf("reloaded fileservers mismatch: got %d, want 1", len(reloaded.fileservers))
+	}
+
+	// Calling deregister again on FS 1 should be idempotent success
+	resp, err = h.DeregisterFileServer(context.Background(), &pb.DeregisterFileServerRequest{
+		Address: "10.0.0.1:50052",
+	})
+	if err != nil || !resp.Success {
+		t.Fatalf("subsequent deregister failed: err=%v, resp=%+v", err, resp)
+	}
+}
+

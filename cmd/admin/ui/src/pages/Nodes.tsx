@@ -1,18 +1,36 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { fetchCluster } from '../api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchCluster, removeNode } from '../api';
 import NodeCard from '../components/NodeCard';
 import NodeDetailPanel from '../components/NodeDetailPanel';
 import type { NodeInfo } from '../types';
+import { formatNodeDisplayName, formatMachineName } from '../utils';
 
 export default function Nodes() {
   const [selected, setSelected] = useState<NodeInfo | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: cluster, isLoading, isError } = useQuery({
     queryKey: ['cluster'],
     queryFn: fetchCluster,
     refetchInterval: 5000,
   });
+
+  const handleRemoveNode = async (node: NodeInfo) => {
+    const nodeName = `${formatNodeDisplayName(node)} (${formatMachineName(node)} - ${node.address})`;
+    if (!window.confirm(`Are you sure you want to permanently remove ${nodeName} from the cluster registry?\n\nThis will deregister the node from the MetaServer and delete its entry from the Admin Console.`)) {
+      return;
+    }
+    try {
+      await removeNode(node.fsID);
+      await queryClient.invalidateQueries({ queryKey: ['cluster'] });
+      if (selected?.fsID === node.fsID) {
+        setSelected(null);
+      }
+    } catch (err: any) {
+      alert(`Failed to remove node: ${err.message || err}`);
+    }
+  };
 
   const sortedNodes = useMemo(() => {
     if (!cluster?.nodes) return [];
@@ -137,6 +155,7 @@ export default function Nodes() {
                 <NodeCard
                   node={node}
                   onClick={() => setSelected(node)}
+                  onRemove={handleRemoveNode}
                 />
               </div>
             ))}

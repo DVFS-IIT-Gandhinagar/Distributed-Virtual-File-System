@@ -474,6 +474,94 @@ func (a *AdminServer) handleUserQuota(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleRemoveNode handles DELETE /api/nodes/{fsID}
+// Requires admin authentication. Removes the node from the Admin's in-memory pool
+// and invokes DeregisterFileServer on the MetaServer to prune it from the central registry.
+func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodDelete {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	fsID := strings.TrimPrefix(r.URL.Path, "/api/nodes/")
+	fsID = strings.TrimSpace(fsID)
+	if fsID == "" {
+		http.Error(w, `{"error":"missing fsID in URL"}`, http.StatusBadRequest)
+		return
+	}
+
+	a.mu.Lock()
+	node, exists := a.nodes[fsID]
+	if !exists {
+		// Fallback: match by DisplayName or DisplayID string
+		for id, n := range a.nodes {
+			if strings.EqualFold(n.DisplayName, fsID) || fmt.Sprintf("%d", n.DisplayID) == fsID {
+				node = n
+				fsID = id
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists || node == nil {
+		a.mu.Unlock()
+		http.Error(w, fmt.Sprintf(`{"error":"node '%s' not found"}`, fsID), http.StatusNotFound)
+		return
+	}
+
+	fsAddr := node.Address
+	displayName := node.DisplayName
+	delete(a.nodes, fsID)
+
+	// Also remove user mappings assigned to this fsID
+	for username, homeFsID := range a.users {
+		if homeFsID == fsID {
+			delete(a.users, username)
+		}
+	}
+
+	msAddr := a.msAddr
+	if msAddr == "" && a.resolver != nil {
+		if resolved, err := a.resolver.ResolveMetaAddress("50051"); err == nil && resolved != "" {
+			msAddr = resolved
+		}
+	}
+	a.mu.Unlock()
+
+	log.Printf("[ADMIN] Node removed by admin: fsID=%s name=%s address=%s", fsID, displayName, fsAddr)
+
+	var msErr string
+	if msAddr != "" && fsAddr != "" {
+		if err := a.CallDeregisterFileServer(msAddr, fsAddr); err != nil {
+			log.Printf("[ADMIN] Warning: metaserver deregister for %s failed: %v", fsAddr, err)
+			msErr = err.Error()
+		}
+	}
+
+	resp := map[string]interface{}{
+		"success":         true,
+		"removed_fs_id":   fsID,
+		"removed_address": fsAddr,
+		"display_name":    displayName,
+	}
+	if msErr != "" {
+		resp["metaserver_warning"] = msErr
+	}
+
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 // handleActionPresets returns pre-filled restart parameters for all cluster nodes.
 func (a *AdminServer) handleActionPresets(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -1089,6 +1177,7 @@ func (a *AdminServer) Run(port int) error {
 	mux.HandleFunc("/api/auth/login", a.handleAuthLogin)
 	mux.HandleFunc("/api/auth/logout", a.handleAuthLogout)
 	mux.HandleFunc("/api/auth/status", a.handleAuthStatus)
+	mux.HandleFunc("/api/nodes/", a.requireAuth(a.handleRemoveNode))
 	mux.HandleFunc("/api/cluster", a.handleCluster)
 	mux.HandleFunc("/api/cluster/summary", a.handleCluster)
 	mux.HandleFunc("/api/performance", a.handlePerformance)

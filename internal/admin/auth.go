@@ -192,6 +192,10 @@ func (am *AuthManager) IsAuthenticated(r *http.Request) bool {
 // RequireAuth wraps an http.HandlerFunc, returning 401 Unauthorized if the request is unauthenticated.
 func (am *AuthManager) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			next(w, r)
+			return
+		}
 		if !am.IsAuthenticated(r) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")

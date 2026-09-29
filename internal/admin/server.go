@@ -44,6 +44,7 @@ type NodeState struct {
 type AdminServer struct {
 	stateFile    string
 	staticDir    string
+	msAddr       string                // MetaServer gRPC address for administrative commands (e.g. 10.0.171.40:50051)
 	nodes        map[string]*NodeState // fsID -> NodeState
 	users        map[string]string     // username -> fsID string
 	mu           sync.RWMutex
@@ -105,6 +106,20 @@ func (a *AdminServer) DiscoveryResolver() *client.DiscoveryResolver {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.resolver
+}
+
+// SetMetaServerAddr configures the metaserver gRPC address for cluster operations.
+func (a *AdminServer) SetMetaServerAddr(addr string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.msAddr = addr
+}
+
+// MetaServerAddr returns the configured metaserver gRPC address.
+func (a *AdminServer) MetaServerAddr() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.msAddr
 }
 
 // SetAuthManager sets the authentication manager (useful for testing).

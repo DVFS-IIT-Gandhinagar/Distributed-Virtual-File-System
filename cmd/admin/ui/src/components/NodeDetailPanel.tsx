@@ -1,11 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, LabelList,
 } from 'recharts';
 import type { NodeInfo, Snapshot } from '../types';
-import { fetchHistory } from '../api';
+import { fetchHistory, removeNode } from '../api';
 import { formatBytes, formatUptime, getStatusBadgeClass, getStatusColor, getCpuTempColor, formatNodeDisplayName, formatMachineName } from '../utils';
 import { useAuth } from '../context/AuthContext';
 
@@ -22,6 +23,8 @@ function bytesToGB(b: number) {
 export default function NodeDetailPanel({ node, show, onClose }: Props) {
   const navigate = useNavigate();
   const { isAuthenticated, openLoginModal } = useAuth();
+  const [isRemoving, setIsRemoving] = useState(false);
+  const queryClient = useQueryClient();
 
   const handleProtectedAction = (path: string) => {
     if (!isAuthenticated) {
@@ -30,6 +33,27 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
     }
     onClose();
     navigate(path);
+  };
+
+  const handleRemoveNodeClick = async () => {
+    if (!isAuthenticated) {
+      openLoginModal();
+      return;
+    }
+    const nodeName = `${formatNodeDisplayName(node)} (${formatMachineName(node)} - ${node.address})`;
+    if (!window.confirm(`Are you sure you want to permanently remove ${nodeName} from the cluster registry?\n\nThis will deregister the node from the MetaServer and delete its entry from the Admin Console.`)) {
+      return;
+    }
+    try {
+      setIsRemoving(true);
+      await removeNode(node.fsID);
+      await queryClient.invalidateQueries({ queryKey: ['cluster'] });
+      onClose();
+    } catch (err: any) {
+      alert(`Failed to remove node: ${err.message || err}`);
+    } finally {
+      setIsRemoving(false);
+    }
   };
   const m = node.metrics;
 
@@ -137,12 +161,28 @@ export default function NodeDetailPanel({ node, show, onClose }: Props) {
             </button>
           </div>
 
-          {!m && (
-            <div className="alert alert-secondary d-flex align-items-center mb-4" role="alert">
-              <i className="bi bi-exclamation-circle-fill me-2 fs-5 text-secondary"></i>
-              <div>
-                <strong>Node is Offline.</strong> Real-time telemetry is unavailable. You can use the buttons above to restart, reboot, or check logs.
+          {(!m || node.status === 'offline') && (
+            <div className="alert alert-secondary mb-4" role="alert">
+              <div className="d-flex align-items-center mb-2">
+                <i className="bi bi-exclamation-circle-fill me-2 fs-5 text-secondary"></i>
+                <div>
+                  <strong>Node is Offline.</strong> Real-time telemetry is unavailable. You can use the buttons above to restart, reboot, or check logs.
+                </div>
               </div>
+              {isAuthenticated && (
+                <div className="d-flex justify-content-end pt-2 border-top">
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm d-flex align-items-center gap-1"
+                    disabled={isRemoving}
+                    onClick={handleRemoveNodeClick}
+                    title={`Permanently remove ${formatNodeDisplayName(node)} from cluster registry`}
+                  >
+                    <i className="bi bi-trash3"></i>
+                    {isRemoving ? 'Removing Node...' : 'Remove Node'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

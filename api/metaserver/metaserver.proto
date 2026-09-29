@@ -82,6 +82,15 @@ message HeartbeatResponse {
   string error = 2;
 }
 
+message DeregisterFileServerRequest {
+  string address = 1;
+}
+
+message DeregisterFileServerResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
@@ -90,4 +99,5 @@ service MetaServer {
   rpc GetRoots(GetRootsRequest) returns (GetRootsResponse);
   rpc RootShare(RootShareRequest) returns (RootShareResponse);
   rpc RootUnshare(RootUnshareRequest) returns (RootUnshareResponse);
+  rpc DeregisterFileServer(DeregisterFileServerRequest) returns (DeregisterFileServerResponse);
 }

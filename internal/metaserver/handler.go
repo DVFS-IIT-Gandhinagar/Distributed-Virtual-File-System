@@ -483,3 +483,46 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 		Success: true,
 	}, nil
 }
+
+// DeregisterFileServer forcibly removes a fileserver and any user mappings for it.
+// This is an admin-initiated operation intended for decommissioned or replaced nodes.
+func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.DeregisterFileServerRequest) (*pb.DeregisterFileServerResponse, error) {
+	if req.Address == "" {
+		return &pb.DeregisterFileServerResponse{Success: false, Error: "empty address"}, nil
+	}
+
+	h.MetaServer.mu.Lock()
+	defer h.MetaServer.mu.Unlock()
+
+	fsID, exists := h.MetaServer.findFileServerByAddressLocked(req.Address)
+	if !exists {
+		log.Printf("[METASERVER] DeregisterFileServer: address %s not found (idempotent)", req.Address)
+		return &pb.DeregisterFileServerResponse{Success: true}, nil
+	}
+
+	// Remove user mappings pointing to this fileserver
+	removedUsers := make([]string, 0)
+	for username, mappedID := range h.MetaServer.users {
+		if mappedID == fsID {
+			delete(h.MetaServer.users, username)
+			delete(h.MetaServer.shared, username)
+			h.removeRootFromAllSharedLocked(username)
+			removedUsers = append(removedUsers, username)
+		}
+	}
+
+	delete(h.MetaServer.fileservers, fsID)
+
+	if err := h.MetaServer.saveStateLocked(); err != nil {
+		log.Printf("[METASERVER] ERROR: failed to persist state after deregister: %v", err)
+		return &pb.DeregisterFileServerResponse{
+			Success: false,
+			Error:   "failed to persist metaserver state: " + err.Error(),
+		}, nil
+	}
+
+	log.Printf("[METASERVER] DeregisterFileServer: removed fsID=%d address=%s, affected users=%v",
+		fsID, req.Address, removedUsers)
+	return &pb.DeregisterFileServerResponse{Success: true}, nil
+}
+

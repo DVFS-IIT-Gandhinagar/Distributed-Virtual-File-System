@@ -18,6 +18,9 @@ site/
 
 # Dependency directories
 vendor/
+node_modules/
+cmd/admin/ui/node_modules/
+cmd/admin/static
 
 # Go workspace file
 go.work
