@@ -32,7 +32,7 @@ DVFS enforces dynamic per-user quotas with three guarantees:
 
 ### 2.1 The Dynamic Quota Store (`quota_config.json`)
 In early DVFS releases, quotas were hardcoded to a 1 GB constant (`const storageQuota = 1024*1024*1024`). 
-In Phase 2, `internal/fileserver/quota.go` introduced dynamic quota management:
+`internal/fileserver/quota.go` introduced dynamic quota management:
 
 ```go
 type QuotaConfig struct {
@@ -40,7 +40,7 @@ type QuotaConfig struct {
 }
 ```
 
-- **Default Value**: Any user without an explicit entry in `quota_config.json` defaults to `defaultStorageQuota = 1024 * 1024 * 1024` (1 GiB).
+- **Default Value**: Any user without an explicit entry in `quota_config.json` defaults to `defaultStorageQuota = 16 * 1024 * 1024 * 1024` (16 GiB).
 - **Persistent Location**: Stored as `quota_config.json` directly within the FileServer's `-data` root.
 - **Thread Safety & Atomic Persistence**: Updates acquire `fs.mu.Lock()` and write through a temporary file committed via `os.Rename`.
 
@@ -109,6 +109,74 @@ const DiskSafetyBuffer uint64 = 20 * 1024 * 1024 * 1024 // 20 GiB safety buffer
   ```
 - **System Stability Rationale**: This invariant protects the host node against out-of-disk crashes, kernel panics, systemd journal dropouts, and swap exhaustion caused by concurrent large uploads.
 
+---
+
+## 3. Configuration & Changing the Default Storage Quota (16 GiB)
+
+The default storage quota across the cluster is **16 GiB** (`16 * 1024 * 1024 * 1024` bytes, or 17,179,869,184 bytes).
+
+If you want to modify this default storage quota to another limit (for example, 32 GiB, 64 GiB, or back to 1 GiB), the following files and configurations govern the default quota:
+
+### 3.1 Backend Files
+
+| File | Location | Description |
+| :--- | :--- | :--- |
+| [`internal/fileserver/quota.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/fileserver/quota.go) | `const defaultStorageQuota = 16 * 1024 * 1024 * 1024` (Line 14) | **Authoritative fileserver constant.** Controls the default quota assigned to any user who does not have an explicit override in `quota_config.json`. Used in `getUserQuotaLocked` and published via `/metrics` (`per_user_quota`). |
+| [`internal/admin/handlers.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/handlers.go) | `QuotaLimit: 16 * 1024 * 1024 * 1024` in `handleUsers` (Line 306) | **Admin Console API fallback.** Returned by `GET /api/users` if the user's home fileserver has not yet reported metrics or has no `PerUserQuota` entry. |
+| [`internal/admin/poller.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/poller.go) | `quota := uint64(16 * 1024 * 1024 * 1024)` in `refreshNodes` (Line 115) | **Admin alert engine fallback.** Used by the background poller when evaluating quota threshold alerts (80% warning / 95% critical) if node metrics are pending. |
+
+> [!NOTE]
+> `internal/fileserver/fileserver.go` defines `const storageQuota uint64 = defaultStorageQuota` (Line 60) as a backwards-compatibility alias; it automatically inherits any change made to `defaultStorageQuota`.
+
+### 3.2 Automated Unit & Integration Tests
+
+The following test suites reference the default quota and should be verified after changing the constant:
+
+1. **[`internal/fileserver/quota_test.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/fileserver/quota_test.go)**:
+   - `TestGetUserQuotaDefault`: Compares against `defaultStorageQuota` directly (automatically tracks the constant).
+2. **[`internal/fileserver/robustness_test.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/fileserver/robustness_test.go)**:
+   - `testQuota`: Verifies fallback to `defaultStorageQuota` when quota entry is zero (automatically tracks the constant).
+3. **[`internal/fileserver/metrics_test.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/fileserver/metrics_test.go)**:
+   - `TestMetricsEndpoint`: Verifies `/metrics` contains `storageQuota` (automatically tracks `defaultStorageQuota`).
+4. **[`internal/admin/quota_test.go`](file:///C:/Users/GSRAJA/Desktop/IIT%20GN/DVFS_project/Distributed-Virtual-File-System/internal/admin/quota_test.go)**:
+   - Contains mock fileserver configurations initializing mock users with specific quota values for testing aggregations.
+
+Run the test suite to verify:
+```bash
+go test -tags use_google_auth ./internal/fileserver -run "TestQuota|TestGetUserQuota" -v
+go test ./internal/admin -run "TestHandleUserQuota" -v
+```
+
+### 3.3 Existing Deployed Data (`quota_config.json`)
+
+- **New Users & Unmodified Users**: Any user without an entry in `<fileserver_data>/quota_config.json` will automatically receive the new default quota as soon as the updated `fileserver` binary is restarted.
+- **Existing Users with Explicit Overrides**: If a user was previously assigned an explicit quota limit via the Admin Web Console or `SetQuota` gRPC, their quota is recorded in `<fileserver_data>/quota_config.json`. To apply the new default to those users, either:
+  1. Update their quota through the Admin Web Console (**Users** &rarr; **Edit Quota**).
+  2. Remove their specific key from `quota_config.json` on the fileserver host while the server is stopped.
+
+### 3.4 Frontend UI Compatibility
+
+The Admin Web Console frontend ([`cmd/admin/ui`](./../../cmd/admin/ui)):
+- Dynamically reads `quota_limit` from the `/api/users` REST endpoint.
+- Dynamically parses `per_user_quota` from `/api/cluster` node metrics.
+- No frontend TypeScript or JSX files hardcode the default quota value; the UI automatically reflects whatever quota is returned by the backend.
+
+### 3.5 Rebuilding and Deployment
+
+After updating the constants:
+```bash
+# 1. Build local binaries
+make build
+
+# 2. Or cross-compile for cluster nodes (ARM64 / AMD64)
+make release-nodes
+
+# 3. Deploy the new fileserver binaries to nodes and restart fileserver services
+```
+
+---
+
 ## Diagrams
 See the [Quota Enforcement Layers](../diagrams/fileserver_engine.md#4-quota-enforcement-layers) in the FileServer Engine architecture document for a visual breakdown of logical and physical quota enforcement.
+
 

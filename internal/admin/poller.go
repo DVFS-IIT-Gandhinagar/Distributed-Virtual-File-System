@@ -112,7 +112,7 @@ func (a *AdminServer) refreshNodes() {
 	if a.alertManager != nil {
 		for username, homeFsID := range a.users {
 			if homeNode, exists := a.nodes[homeFsID]; exists && homeNode.Metrics != nil {
-				quota := uint64(1024 * 1024 * 1024)
+				quota := uint64(16 * 1024 * 1024 * 1024)
 				if q, ok := homeNode.Metrics.PerUserQuota[username]; ok && q > 0 {
 					quota = q
 				}

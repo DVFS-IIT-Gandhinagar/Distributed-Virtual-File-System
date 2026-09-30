@@ -11,12 +11,12 @@ import (
 
 const (
 	quotaConfigFile     = "quota_config.json"
-	defaultStorageQuota = 1024 * 1024 * 1024 // 1 GB default per user
+	defaultStorageQuota = 16 * 1024 * 1024 * 1024 // 16 GiB default per user
 )
 
 // getUserQuotaLocked returns the configured quota for a user in bytes.
 // If a user has a custom quota configured in fs.quotas, that is used.
-// Otherwise, it returns defaultStorageQuota (1 GB).
+// Otherwise, it returns defaultStorageQuota (16 GiB).
 // Caller must hold fs.mu (either read or write lock).
 func (fs *FileServer) getUserQuotaLocked(username string) uint64 {
 	if q, exists := fs.quotas[username]; exists && q > 0 {
@@ -26,7 +26,7 @@ func (fs *FileServer) getUserQuotaLocked(username string) uint64 {
 }
 
 // GetUserQuota returns the configured quota for a user in bytes.
-// If no custom quota is configured, it returns the default quota (1 GB).
+// If no custom quota is configured, it returns the default quota (16 GiB).
 func (fs *FileServer) GetUserQuota(username string) uint64 {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()

@@ -26,9 +26,9 @@ func TestQuotaArithmeticUint64Overflow(t *testing.T) {
 	}
 	rootInode.Size = 1024 // 1 KiB existing usage
 
-	// Quota is defaultStorageQuota (1 GiB)
+	// Quota is defaultStorageQuota (16 GiB)
 	// If additionalBytes wraps around uint64:
-	// 1024 + (math.MaxUint64 - 512) = 511 (which is < 1 GiB!)
+	// 1024 + (math.MaxUint64 - 512) = 511 (which is < 16 GiB!)
 	hugeAdditional := math.MaxUint64 - uint64(512)
 
 	err = fs.checkStorageQuotaWithAdditional("alice", hugeAdditional)

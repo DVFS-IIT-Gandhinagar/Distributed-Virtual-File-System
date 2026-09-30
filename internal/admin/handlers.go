@@ -303,7 +303,7 @@ func (a *AdminServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 			HomeFsAddress: homeAddress,
 			HomeFsDisplay: homeDisplayName,
 			HomeFsMachine: homeMachineName,
-			QuotaLimit:    1024 * 1024 * 1024, // 1 GB default
+			QuotaLimit:    16 * 1024 * 1024 * 1024, // 16 GiB default
 			Nodes:         make([]NodeUserStorage, 0),
 		}
 
