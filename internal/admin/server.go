@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -55,10 +57,12 @@ type AdminServer struct {
 	alertManager *AlertManager
 	snapshotPath string
 	authManager  *AuthManager
-	tlsCertFile  string
-	tlsKeyFile   string
-	isTLS        bool
-	resolver     *client.DiscoveryResolver
+	tlsCertFile      string
+	tlsKeyFile       string
+	isTLS            bool
+	resolver         *client.DiscoveryResolver
+	removedNodes     map[string]int64 // fsID -> removal timestamp (tombstone)
+	removedNodesFile string
 }
 
 // NewAdminServer creates a new AdminServer instance.
@@ -66,10 +70,12 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 	snapshotPath := "./bin/admin_metrics_snapshot.json"
 	historyPath := "./bin/command_history.json"
 	alertsPath := "./bin/admin_alerts.json"
+	removedNodesPath := "./bin/admin_removed_nodes.json"
 	if stateFile == "" {
 		snapshotPath = ""
 		historyPath = ""
 		alertsPath = ""
+		removedNodesPath = ""
 	}
 
 	srv := &AdminServer{
@@ -80,10 +86,12 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		stopCh:       make(chan struct{}),
-		snapshotPath: snapshotPath,
-		authManager:  NewAuthManager(".env", "../.env", "../../.env"),
-		resolver:     client.NewDiscoveryResolver(),
+		stopCh:           make(chan struct{}),
+		snapshotPath:     snapshotPath,
+		authManager:      NewAuthManager(".env", "../.env", "../../.env"),
+		resolver:         client.NewDiscoveryResolver(),
+		removedNodes:     make(map[string]int64),
+		removedNodesFile: removedNodesPath,
 	}
 	history := NewCommandHistory(100, historyPath)
 	ssh := NewRemoteSSHExecutor()
@@ -91,7 +99,72 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 	srv.orchestrator = NewOrchestrator(srv, ssh, history, "", "", "")
 	srv.alertManager = NewAlertManager(500, alertsPath)
 	_ = srv.LoadMetricsSnapshot(srv.snapshotPath)
+	srv.loadRemovedNodes()
 	return srv
+}
+
+// RecordNodeRemoval flags a node as explicitly removed by admin to prevent resurrection.
+func (a *AdminServer) RecordNodeRemoval(fsID string, timestamp int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.removedNodes == nil {
+		a.removedNodes = make(map[string]int64)
+	}
+	a.removedNodes[fsID] = timestamp
+	a.saveRemovedNodesLocked()
+}
+
+// IsNodeRemoved checks whether a node was removed by admin and has not sent a newer heartbeat since.
+func (a *AdminServer) IsNodeRemoved(fsID string, lastHeartbeatUnix int64) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.isNodeRemovedLocked(fsID, lastHeartbeatUnix)
+}
+
+func (a *AdminServer) isNodeRemovedLocked(fsID string, lastHeartbeatUnix int64) bool {
+	if a.removedNodes == nil {
+		return false
+	}
+	removalTime, removed := a.removedNodes[fsID]
+	if !removed {
+		return false
+	}
+	// If the node produced a legitimate heartbeat AFTER removal time, it has been redeployed.
+	if lastHeartbeatUnix > removalTime {
+		delete(a.removedNodes, fsID)
+		a.saveRemovedNodesLocked()
+		return false
+	}
+	return true
+}
+
+func (a *AdminServer) saveRemovedNodesLocked() {
+	if a.removedNodesFile == "" {
+		return
+	}
+	data, err := json.Marshal(a.removedNodes)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(a.removedNodesFile, data, 0644)
+}
+
+func (a *AdminServer) loadRemovedNodes() {
+	if a.removedNodesFile == "" {
+		return
+	}
+	data, err := os.ReadFile(a.removedNodesFile)
+	if err != nil {
+		return
+	}
+	var loaded map[string]int64
+	if err := json.Unmarshal(data, &loaded); err == nil {
+		a.mu.Lock()
+		for k, v := range loaded {
+			a.removedNodes[k] = v
+		}
+		a.mu.Unlock()
+	}
 }
 
 // SetDiscoveryResolver sets the discovery resolver (useful for testing or custom Gist URLs).

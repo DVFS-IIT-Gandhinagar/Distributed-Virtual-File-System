@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
@@ -136,3 +137,63 @@ func TestClusterAuthInterceptor_mTLSEnforcement(t *testing.T) {
 		assert.Equal(t, "mock_ok", res)
 	})
 }
+
+func TestClusterAuthInterceptor_DeregisterFileServer(t *testing.T) {
+	interceptor := GetServerAuthInterceptor()
+	deregisterInfo := &grpc.UnaryServerInfo{
+		FullMethod: "/metaserver.MetaServer/DeregisterFileServer",
+	}
+	req := &pb.DeregisterFileServerRequest{Address: "10.0.171.41:50052"}
+	const testHash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+
+	t.Run("FailsWithoutCredentialsOrCert", func(t *testing.T) {
+		t.Setenv("DVFS_AUTH_MOCK", "false")
+		t.Setenv("ADMIN_PASSWORD_HASH", testHash)
+
+		_, err := interceptor(context.Background(), req, deregisterInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+			return "ok", nil
+		})
+		require.Error(t, err)
+		assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("SucceedsWithAdminPasswordHashHeader", func(t *testing.T) {
+		t.Setenv("DVFS_AUTH_MOCK", "false")
+		t.Setenv("ADMIN_PASSWORD_HASH", testHash)
+
+		md := metadata.New(map[string]string{
+			"x-admin-password-hash": testHash,
+		})
+		ctx := metadata.NewIncomingContext(context.Background(), md)
+
+		res, err := interceptor(ctx, req, deregisterInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+			return "deregistered", nil
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "deregistered", res)
+	})
+
+	t.Run("SucceedsWithClusterPeerCert", func(t *testing.T) {
+		t.Setenv("DVFS_AUTH_MOCK", "false")
+		t.Setenv("ADMIN_PASSWORD_HASH", testHash)
+
+		validCert := &x509.Certificate{
+			Subject:  pkix.Name{CommonName: "dvfs1"},
+			DNSNames: []string{"dvfs1"},
+		}
+		tlsInfo := credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{validCert},
+			},
+		}
+		p := &peer.Peer{AuthInfo: tlsInfo}
+		ctxWithPeer := peer.NewContext(context.Background(), p)
+
+		res, err := interceptor(ctxWithPeer, req, deregisterInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+			return "deregistered", nil
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "deregistered", res)
+	})
+}
+

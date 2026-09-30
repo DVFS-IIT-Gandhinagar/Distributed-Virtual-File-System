@@ -523,6 +523,11 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 	fsAddr := node.Address
 	displayName := node.DisplayName
 	delete(a.nodes, fsID)
+	if a.removedNodes == nil {
+		a.removedNodes = make(map[string]int64)
+	}
+	a.removedNodes[fsID] = time.Now().Unix()
+	a.saveRemovedNodesLocked()
 
 	// Also remove user mappings assigned to this fsID
 	for username, homeFsID := range a.users {
@@ -531,6 +536,7 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	stateFile := a.stateFile
 	msAddr := a.msAddr
 	if msAddr == "" && a.resolver != nil {
 		if resolved, err := a.resolver.ResolveMetaAddress("50051"); err == nil && resolved != "" {
@@ -540,6 +546,15 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 	a.mu.Unlock()
 
 	log.Printf("[ADMIN] Node removed by admin: fsID=%s name=%s address=%s", fsID, displayName, fsAddr)
+
+	// Clean state file on disk directly if accessible
+	if stateFile != "" {
+		if err := RemoveNodeFromMetaStateFile(stateFile, fsID); err != nil {
+			log.Printf("[ADMIN] Notice: direct state file removal for %s: %v", fsID, err)
+		} else {
+			log.Printf("[ADMIN] Successfully purged fsID=%s from state file %s", fsID, stateFile)
+		}
+	}
 
 	var msErr string
 	if msAddr != "" && fsAddr != "" {

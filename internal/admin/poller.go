@@ -46,6 +46,11 @@ func (a *AdminServer) refreshNodes() {
 
 	// Update or add fileservers
 	for fsID, fsInfo := range state.FileServers {
+		// Do not resurrect nodes that were explicitly removed by admin
+		if a.isNodeRemovedLocked(fsID, fsInfo.LastHeartbeatUnix) {
+			continue
+		}
+
 		metricsURL := deriveMetricsURL(fsInfo.Address)
 		displayID := 1
 		if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
@@ -90,6 +95,17 @@ func (a *AdminServer) refreshNodes() {
 				History:     NewRingBuffer(720),
 			}
 			log.Printf("[ADMIN] Discovered fileserver %s (%s / %s) at %s (metrics: %s)", fsID, displayName, machineName, fsInfo.Address, metricsURL)
+		}
+	}
+
+	// Prune nodes that are marked removed or no longer exist in metaserver state
+	for fsID := range a.nodes {
+		if a.isNodeRemovedLocked(fsID, 0) {
+			delete(a.nodes, fsID)
+			continue
+		}
+		if _, exists := state.FileServers[fsID]; !exists {
+			delete(a.nodes, fsID)
 		}
 	}
 

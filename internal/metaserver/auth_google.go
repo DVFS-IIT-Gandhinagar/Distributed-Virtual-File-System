@@ -4,6 +4,10 @@ package metaserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"net"
 	"os"
 	"strings"
 
@@ -32,6 +36,42 @@ func GetServerAuthInterceptor() grpc.UnaryServerInterceptor {
 				return nil, err
 			}
 			return handler(ctx, req)
+		}
+
+		// DeregisterFileServer: administrative operation
+		if info.FullMethod == "/metaserver.MetaServer/DeregisterFileServer" {
+			// 1. Allow if valid admin credentials are provided via metadata
+			if md, ok := metadata.FromIncomingContext(ctx); ok {
+				expectedHash := strings.TrimSpace(strings.ToLower(os.Getenv("ADMIN_PASSWORD_HASH")))
+				if expectedHash != "" {
+					if hashes := md.Get("x-admin-password-hash"); len(hashes) > 0 {
+						if subtle.ConstantTimeCompare([]byte(strings.ToLower(hashes[0])), []byte(expectedHash)) == 1 {
+							return handler(ctx, req)
+						}
+					}
+					if passes := md.Get("x-admin-password"); len(passes) > 0 {
+						sum := sha256.Sum256([]byte(passes[0]))
+						if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(expectedHash)) == 1 {
+							return handler(ctx, req)
+						}
+					}
+				}
+			}
+			// 2. Allow if valid cluster peer mTLS certificate or mock mode
+			if err := verifyClusterPeer(ctx); err == nil {
+				return handler(ctx, req)
+			}
+			// 3. Fallback: if from loopback and expectedHash is not configured
+			expectedHash := strings.TrimSpace(strings.ToLower(os.Getenv("ADMIN_PASSWORD_HASH")))
+			if expectedHash == "" {
+				if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+					host, _, _ := net.SplitHostPort(p.Addr.String())
+					if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+						return handler(ctx, req)
+					}
+				}
+			}
+			return nil, status.Errorf(codes.PermissionDenied, "unauthorized deregister request: requires valid cluster certificate or admin credentials")
 		}
 
 		md, ok := metadata.FromIncomingContext(ctx)

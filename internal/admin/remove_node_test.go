@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
@@ -186,3 +187,105 @@ func TestHandleRemoveNode_WithMetaServerDeregister(t *testing.T) {
 		t.Errorf("olduser still exists in metaserver state file")
 	}
 }
+
+func TestHandleRemoveNode_NoResurrectionOnRefresh(t *testing.T) {
+	tempDir := t.TempDir()
+	statePath := tempDir + "/metaserver_state.json"
+
+	// 1. Initial state file with stale node 3
+	initialJSON := `{
+  "fileservers": {
+    "2": {
+      "address": "10.0.172.42:50052",
+      "user_count": 0,
+      "last_heartbeat_unix": 1790705228,
+      "status": "healthy"
+    },
+    "3": {
+      "address": "10.0.171.41:50052",
+      "user_count": 0,
+      "last_heartbeat_unix": 1790173964,
+      "status": "stale"
+    }
+  },
+  "users": {},
+  "next_fs_id": 4
+}`
+	if err := os.WriteFile(statePath, []byte(initialJSON), 0644); err != nil {
+		t.Fatalf("failed to write test state file: %v", err)
+	}
+
+	srv := NewAdminServer(statePath, "")
+	srv.authManager = nil // bypass auth
+
+	// 2. Initial refresh discovers both node 2 and node 3
+	srv.refreshNodes()
+	if len(srv.nodes) != 2 {
+		t.Fatalf("expected 2 nodes discovered, got %d", len(srv.nodes))
+	}
+	if _, ok := srv.nodes["3"]; !ok {
+		t.Fatalf("expected node 3 to be discovered")
+	}
+
+	// 3. Admin deletes node 3
+	req := httptest.NewRequest(http.MethodDelete, "/api/nodes/3", nil)
+	rec := httptest.NewRecorder()
+	srv.handleRemoveNode(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if _, ok := srv.nodes["3"]; ok {
+		t.Fatalf("expected node 3 to be deleted from in-memory pool")
+	}
+
+	// 4. Verify disk file was updated
+	diskState, err := LoadMetaState(statePath)
+	if err != nil {
+		t.Fatalf("failed to reload state file: %v", err)
+	}
+	if _, ok := diskState.FileServers["3"]; ok {
+		t.Fatalf("expected node 3 to be deleted from disk state file")
+	}
+
+	// 5. Simulate stale metaserver re-writing old state file with stale node 3
+	if err := os.WriteFile(statePath, []byte(initialJSON), 0644); err != nil {
+		t.Fatalf("failed to re-write state file: %v", err)
+	}
+
+	// 6. Next refresh ticker runs — node 3 MUST NOT be resurrected!
+	srv.refreshNodes()
+	if _, ok := srv.nodes["3"]; ok {
+		t.Fatalf("CRITICAL BUG: node 3 was resurrected by refreshNodes despite admin deletion!")
+	}
+
+	// 7. Legitimate redeployment with fresh heartbeat after deletion
+	freshJSON := `{
+  "fileservers": {
+    "2": {
+      "address": "10.0.172.42:50052",
+      "user_count": 0,
+      "last_heartbeat_unix": 1790705228,
+      "status": "healthy"
+    },
+    "3": {
+      "address": "10.0.171.41:50052",
+      "user_count": 0,
+      "last_heartbeat_unix": 2000000000,
+      "status": "healthy"
+    }
+  },
+  "users": {},
+  "next_fs_id": 4
+}`
+	if err := os.WriteFile(statePath, []byte(freshJSON), 0644); err != nil {
+		t.Fatalf("failed to write fresh state file: %v", err)
+	}
+
+	srv.refreshNodes()
+	if _, ok := srv.nodes["3"]; !ok {
+		t.Fatalf("expected node 3 to be accepted after legitimate fresh heartbeat")
+	}
+}
+
