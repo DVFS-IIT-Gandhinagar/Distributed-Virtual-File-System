@@ -24,10 +24,11 @@ const (
 
 // GistNode represents a node entry in the cluster's machines.json.
 type GistNode struct {
-	Username string `json:"username"` // e.g. "dvfs1", "dvfs2"
-	MAC      string `json:"mac"`      // e.g. "28:cd:c1:0e:25:70"
-	IP       string `json:"ip"`       // e.g. "10.0.171.38"
-	LastSeen string `json:"last_seen"`
+	Username string   `json:"username"` // e.g. "dvfs1", "dvfs2"
+	MAC      string   `json:"mac"`      // e.g. "28:cd:c1:0e:25:70"
+	IP       string   `json:"ip"`       // e.g. "10.0.171.38"
+	LastSeen string   `json:"last_seen"`
+	Services []string `json:"services,omitempty"` // e.g. ["metaserver", "admin", "fileserver"]
 }
 
 // DiscoveryOption configures a DiscoveryResolver.
@@ -77,6 +78,7 @@ type DiscoveryResolver struct {
 	mu        sync.RWMutex
 	hostToIP  map[string]string // "dvfs1" -> "10.0.171.38"
 	ipToHost  map[string]string // "10.0.171.38" -> "dvfs1"
+	nodes     []GistNode        // raw Gist nodes with service roles
 	lastFetch time.Time
 }
 
@@ -190,6 +192,7 @@ func (d *DiscoveryResolver) applyNodes(nodes []GistNode) {
 
 	d.hostToIP = freshHostToIP
 	d.ipToHost = freshIPToHost
+	d.nodes = append([]GistNode(nil), nodes...)
 	d.lastFetch = time.Now()
 }
 
@@ -281,6 +284,40 @@ func (d *DiscoveryResolver) ResolveMetaAddress(defaultPort string) (string, erro
 		defaultPort = "50051"
 	}
 	return fmt.Sprintf("%s:%s", ip, defaultPort), nil
+}
+
+// MetaServerAddresses returns all node addresses (host:port) tagged with "metaserver".
+// If no nodes have the services tag (e.g. older Gist schema), it falls back to
+// resolving "dvfs1" to maintain 100% backward compatibility.
+func (d *DiscoveryResolver) MetaServerAddresses(defaultPort string) []string {
+	if defaultPort == "" {
+		defaultPort = "50051"
+	}
+
+	d.mu.RLock()
+	var addrs []string
+	for _, n := range d.nodes {
+		for _, s := range n.Services {
+			if strings.EqualFold(strings.TrimSpace(s), "metaserver") {
+				if ip := strings.TrimSpace(n.IP); ip != "" {
+					addrs = append(addrs, fmt.Sprintf("%s:%s", ip, defaultPort))
+				}
+				break
+			}
+		}
+	}
+	dvfs1IP := d.hostToIP["dvfs1"]
+	d.mu.RUnlock()
+
+	if len(addrs) > 0 {
+		return addrs
+	}
+
+	// Fallback to dvfs1 if no node was explicitly tagged with "metaserver"
+	if dvfs1IP != "" {
+		return []string{fmt.Sprintf("%s:%s", dvfs1IP, defaultPort)}
+	}
+	return nil
 }
 
 // SetNodes manually sets node mappings (primarily for unit tests and local overrides).

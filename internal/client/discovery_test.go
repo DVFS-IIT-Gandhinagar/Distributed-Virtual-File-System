@@ -147,3 +147,39 @@ func TestDiscoveryResolver_ResolveMetaAddress(t *testing.T) {
 		t.Errorf("ResolveMetaAddress = %q; want %q", metaAddr, expected)
 	}
 }
+
+func TestDiscoveryResolver_MetaServerAddresses(t *testing.T) {
+	resolver := NewDiscoveryResolver()
+
+	// 1. Test fallback to dvfs1 when no nodes have services tags
+	resolver.SetNodes([]GistNode{
+		{Username: "dvfs1", IP: "10.0.171.38"},
+		{Username: "dvfs2", IP: "10.0.171.39"},
+	})
+	fallbackAddrs := resolver.MetaServerAddresses("50051")
+	if len(fallbackAddrs) != 1 || fallbackAddrs[0] != "10.0.171.38:50051" {
+		t.Errorf("expected fallback [10.0.171.38:50051], got %v", fallbackAddrs)
+	}
+
+	// 2. Test multi-node tagged with "metaserver"
+	resolver.SetNodes([]GistNode{
+		{Username: "dvfs1", IP: "10.0.171.40", Services: []string{"metaserver", "admin", "fileserver"}},
+		{Username: "dvfs2", IP: "10.0.171.41", Services: []string{"fileserver"}},
+		{Username: "dvfs8", IP: "10.0.172.48", Services: []string{"metaserver", "admin", "fileserver"}},
+		{Username: "dvfs9", IP: "10.0.172.49", Services: []string{"metaserver", "admin", "fileserver"}},
+	})
+	taggedAddrs := resolver.MetaServerAddresses("50051")
+	if len(taggedAddrs) != 3 {
+		t.Fatalf("expected 3 metaserver addresses, got %d: %v", len(taggedAddrs), taggedAddrs)
+	}
+	expectedMap := map[string]bool{
+		"10.0.171.40:50051": true,
+		"10.0.172.48:50051": true,
+		"10.0.172.49:50051": true,
+	}
+	for _, a := range taggedAddrs {
+		if !expectedMap[a] {
+			t.Errorf("unexpected address in taggedAddrs: %s", a)
+		}
+	}
+}
