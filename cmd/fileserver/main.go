@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
@@ -21,7 +22,7 @@ func main() {
 	port := flag.Int("port", 50052, "Port to listen on")
 	rootDir := flag.String("data", "./fileserver_data", "Data directory")
 	// metaserver is the meta server's host:port; leave empty to skip registration.
-	msAddr := flag.String("meta_addr", "127.0.0.1:50051", "Meta server address (e.g. 127.0.0.1:50052)")
+	msAddr := flag.String("meta_addr", "127.0.0.1:50051", "Meta server address or comma-separated list of addresses (e.g. 10.0.171.40:50051,10.0.172.48:50051)")
 	ownIp := flag.String("own_ip", "127.0.0.1", "Own IP to advertise to meta server (e.g. 127.0.0.1)")
 	msRetry := flag.Duration("meta_retry_interval", 3*time.Second, "Retry interval for metaserver registration")
 	msHeartbeat := flag.Duration("meta_heartbeat_interval", 5*time.Second, "Heartbeat interval for metaserver liveness")
@@ -32,8 +33,14 @@ func main() {
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
+	// Extract primary metaserver address if comma-separated list was provided
+	primaryMS := strings.TrimSpace(*msAddr)
+	if idx := strings.Index(primaryMS, ","); idx != -1 {
+		primaryMS = strings.TrimSpace(primaryMS[:idx])
+	}
+
 	// Create file server
-	server, err := fileserver.NewFileServer(*serverID, *rootDir, *msAddr)
+	server, err := fileserver.NewFileServer(*serverID, *rootDir, primaryMS)
 	if err != nil {
 		log.Fatalf("Failed to create file server: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
@@ -260,9 +261,25 @@ func (fs *FileServer) HeartbeatWithMetaServer(selfAddr string) error {
 
 // StartMetaServerSync keeps trying registration in the background so this file
 // server can automatically re-attach when the metaserver restarts.
+// msAddr can be a single host:port or a comma-separated list of addresses.
 func (fs *FileServer) StartMetaServerSync(msAddr, selfAddr string, retryInterval, heartbeatInterval time.Duration) func() {
 	if msAddr == "" {
 		return func() {}
+	}
+
+	rawAddrs := strings.Split(msAddr, ",")
+	var addrs []string
+	for _, a := range rawAddrs {
+		if tr := strings.TrimSpace(a); tr != "" {
+			addrs = append(addrs, tr)
+		}
+	}
+	if len(addrs) == 0 {
+		return func() {}
+	}
+	// Ensure fs.msAddr is initialized to the first valid address
+	if fs.msAddr == "" || strings.Contains(fs.msAddr, ",") {
+		fs.msAddr = addrs[0]
 	}
 
 	if retryInterval <= 0 {
