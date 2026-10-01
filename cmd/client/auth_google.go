@@ -81,7 +81,7 @@ func performUserAuth(cliUsername string) (string, string, error) {
 	var token string
 	for {
 		fmt.Print("\nPaste your token: ")
-		line, err := reader.ReadString('\n')
+		line, err := readTokenLine(reader)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to read token: %w", err)
 		}
