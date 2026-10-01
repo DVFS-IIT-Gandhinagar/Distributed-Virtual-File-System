@@ -26,20 +26,27 @@ func GetServerAuthInterceptor() grpc.UnaryServerInterceptor {
 	cfg := auth.LoadDesktopConfig()
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Cluster control plane RPCs (daemon synchronization and heartbeats)
+		// LeaderInfo: unauthenticated cluster status check for discovery and health inspection
+		if info.FullMethod == "/metaserver.MetaServer/LeaderInfo" {
+			return handler(ctx, req)
+		}
+
+		// Cluster control plane RPCs (daemon synchronization, heartbeats, and cluster membership)
 		switch info.FullMethod {
 		case "/metaserver.MetaServer/RegisterFileServer",
 			"/metaserver.MetaServer/Heartbeat",
 			"/metaserver.MetaServer/RootShare",
-			"/metaserver.MetaServer/RootUnshare":
+			"/metaserver.MetaServer/RootUnshare",
+			"/metaserver.MetaServer/JoinCluster":
 			if err := verifyClusterPeer(ctx); err != nil {
 				return nil, err
 			}
 			return handler(ctx, req)
 		}
 
-		// DeregisterFileServer: administrative operation
-		if info.FullMethod == "/metaserver.MetaServer/DeregisterFileServer" {
+		// Administrative operations: DeregisterFileServer, GetClusterState
+		if info.FullMethod == "/metaserver.MetaServer/DeregisterFileServer" ||
+			info.FullMethod == "/metaserver.MetaServer/GetClusterState" {
 			// 1. Allow if valid admin credentials are provided via metadata
 			if md, ok := metadata.FromIncomingContext(ctx); ok {
 				expectedHash := strings.TrimSpace(strings.ToLower(os.Getenv("ADMIN_PASSWORD_HASH")))
@@ -71,7 +78,7 @@ func GetServerAuthInterceptor() grpc.UnaryServerInterceptor {
 					}
 				}
 			}
-			return nil, status.Errorf(codes.PermissionDenied, "unauthorized deregister request: requires valid cluster certificate or admin credentials")
+			return nil, status.Errorf(codes.PermissionDenied, "unauthorized administrative request: requires valid cluster certificate or admin credentials")
 		}
 
 		md, ok := metadata.FromIncomingContext(ctx)

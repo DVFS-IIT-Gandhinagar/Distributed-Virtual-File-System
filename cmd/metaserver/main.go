@@ -3,10 +3,12 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -25,9 +27,56 @@ func main() {
 	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
 	tlsKeyPath := flag.String("tls_key", "certs/server.key", "Path to TLS private key")
 	caCertPath := flag.String("ca_cert", "certs/ca.crt", "Path to Root CA certificate for mTLS client verification")
+
+	// Raft configuration flags (Phase 1: inactive when raft_enabled=false)
+	raftEnabled := flag.Bool("raft_enabled", false, "Enable Raft consensus clustering")
+	raftNodeID := flag.String("raft_node_id", "", "Unique Raft node ID (e.g. dvfs1)")
+	raftBindAddr := flag.String("raft_bind_addr", "", "Raft TCP transport address (host:port)")
+	raftPeers := flag.String("raft_peers", "", "Comma-separated list of Raft peers (nodeID=host:port,...)")
+	raftDataDir := flag.String("raft_data_dir", "./bin/raft/", "Directory for Raft logs and snapshots")
+	raftBootstrap := flag.Bool("raft_bootstrap", false, "Bootstrap as initial Raft cluster leader")
+	raftElectionTimeout := flag.Duration("raft_election_timeout", 1*time.Second, "Raft election timeout")
+	raftHeartbeatTimeout := flag.Duration("raft_heartbeat_timeout", 200*time.Millisecond, "Raft leader heartbeat timeout")
+	httpPort := flag.Int("http_port", 8090, "HTTP port for unauthenticated status/leader endpoint")
 	flag.Parse()
 
+	if *raftEnabled {
+		log.Printf("[RAFT] Raft clustering enabled: node=%s bind=%s bootstrap=%v", *raftNodeID, *raftBindAddr, *raftBootstrap)
+	} else {
+		log.Println("[RAFT] Raft clustering disabled (single-node mode)")
+	}
+	_ = raftPeers
+	_ = raftDataDir
+	_ = raftElectionTimeout
+	_ = raftHeartbeatTimeout
+
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
+
+	// Start lightweight HTTP status server for /leader checks
+	if *httpPort > 0 {
+		httpMux := http.NewServeMux()
+		httpMux.HandleFunc("/leader", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			leaderResp := map[string]interface{}{
+				"is_leader":   true,
+				"leader_id":   "dvfs1",
+				"leader_addr": fmt.Sprintf("0.0.0.0:%d", *port),
+				"raft_state":  "Leader",
+			}
+			if *raftNodeID != "" {
+				leaderResp["leader_id"] = *raftNodeID
+			}
+			_ = json.NewEncoder(w).Encode(leaderResp)
+		})
+
+		httpAddr := fmt.Sprintf("0.0.0.0:%d", *httpPort)
+		go func() {
+			log.Printf("[HTTP] Status server listening on %s (endpoint: /leader)", httpAddr)
+			if err := http.ListenAndServe(httpAddr, httpMux); err != nil && err != http.ErrServerClosed {
+				log.Printf("[HTTP ERROR] Status server error: %v", err)
+			}
+		}()
+	}
 
 	// Create meta server
 	server, err := metaserver.NewMetaServer(*stateFile)

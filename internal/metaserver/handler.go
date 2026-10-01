@@ -526,3 +526,68 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 	return &pb.DeregisterFileServerResponse{Success: true}, nil
 }
 
+// JoinCluster handles Raft cluster join requests (Phase 1 stub).
+func (h *GRPCHandler) JoinCluster(ctx context.Context, req *pb.JoinClusterRequest) (*pb.JoinClusterResponse, error) {
+	log.Printf("[METASERVER] JoinCluster received for node %s (%s) [stub]", req.NodeId, req.RaftAddr)
+	return &pb.JoinClusterResponse{
+		Success: true,
+	}, nil
+}
+
+// LeaderInfo returns the current Raft leader status and peer topology.
+// In Phase 1 (pre-Raft), the standalone node always identifies as the leader.
+func (h *GRPCHandler) LeaderInfo(ctx context.Context, req *pb.LeaderInfoRequest) (*pb.LeaderInfoResponse, error) {
+	return &pb.LeaderInfoResponse{
+		IsLeader:   true,
+		LeaderId:   "dvfs1",
+		LeaderAddr: "",
+		RaftState:  "Leader",
+		Peers:      []string{"dvfs1"},
+	}, nil
+}
+
+// GetClusterState returns the in-memory state snapshot of the cluster.
+func (h *GRPCHandler) GetClusterState(ctx context.Context, req *pb.ClusterStateRequest) (*pb.ClusterStateResponse, error) {
+	h.MetaServer.mu.RLock()
+	defer h.MetaServer.mu.RUnlock()
+
+	var fsEntries []*pb.FileServerEntry
+	for id, info := range h.MetaServer.fileservers {
+		if info != nil {
+			fsEntries = append(fsEntries, &pb.FileServerEntry{
+				FsId:              id,
+				Address:           info.Address,
+				UserCount:         int64(info.UserCount),
+				LastHeartbeatUnix: info.LastHeartbeatUnix,
+				Status:            info.Status,
+			})
+		}
+	}
+
+	userMap := make(map[string]uint64, len(h.MetaServer.users))
+	for u, id := range h.MetaServer.users {
+		userMap[u] = id
+	}
+
+	sharedMap := make(map[string]*pb.UserSharedRoots)
+	for u, entries := range h.MetaServer.shared {
+		var protoEntries []*pb.SharedDirEntryProto
+		for _, e := range entries {
+			protoEntries = append(protoEntries, &pb.SharedDirEntryProto{
+				Owner:       e.Owner,
+				Path:        e.Path,
+				DisplayName: e.DisplayName,
+			})
+		}
+		sharedMap[u] = &pb.UserSharedRoots{Roots: protoEntries}
+	}
+
+	return &pb.ClusterStateResponse{
+		Success:     true,
+		Fileservers: fsEntries,
+		Users:       userMap,
+		Shared:      sharedMap,
+		NextFsId:    h.MetaServer.nextFsID,
+	}, nil
+}
+

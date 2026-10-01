@@ -438,3 +438,75 @@ func TestHandlerDeregisterFileServer(t *testing.T) {
 	}
 }
 
+func TestGRPCHandler_Phase1Stubs(t *testing.T) {
+	ms := newTestMetaServer(t)
+	h := NewGRPCHandler(ms)
+	ctx := context.Background()
+
+	// 1. LeaderInfo test
+	liResp, err := h.LeaderInfo(ctx, &pb.LeaderInfoRequest{})
+	if err != nil {
+		t.Fatalf("LeaderInfo failed: %v", err)
+	}
+	if !liResp.IsLeader {
+		t.Errorf("expected IsLeader=true in Phase 1 stub")
+	}
+	if liResp.RaftState != "Leader" {
+		t.Errorf("expected RaftState=Leader, got %s", liResp.RaftState)
+	}
+	if len(liResp.Peers) == 0 {
+		t.Errorf("expected non-empty Peers in LeaderInfo")
+	}
+
+	// 2. JoinCluster test
+	jcResp, err := h.JoinCluster(ctx, &pb.JoinClusterRequest{
+		NodeId:   "dvfs8",
+		RaftAddr: "10.0.172.48:50053",
+	})
+	if err != nil {
+		t.Fatalf("JoinCluster failed: %v", err)
+	}
+	if !jcResp.Success {
+		t.Errorf("expected JoinCluster success in Phase 1 stub")
+	}
+}
+
+func TestGRPCHandler_GetClusterState(t *testing.T) {
+	ms := newTestMetaServer(t)
+	h := NewGRPCHandler(ms)
+	ctx := context.Background()
+
+	// Register an initial fileserver with users
+	_, err := h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		Address: "10.0.171.40:50052",
+		Users:   []string{"alice", "bob"},
+		Shared: []*pb.SharedDir{
+			{Path: "/alice/proj", Users: []string{"bob"}, Name: "proj", Owner: "alice"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RegisterFileServer failed: %v", err)
+	}
+
+	// Query cluster state
+	csResp, err := h.GetClusterState(ctx, &pb.ClusterStateRequest{})
+	if err != nil {
+		t.Fatalf("GetClusterState failed: %v", err)
+	}
+	if !csResp.Success {
+		t.Fatalf("GetClusterState returned failure: %s", csResp.Error)
+	}
+	if len(csResp.Fileservers) != 1 {
+		t.Fatalf("expected 1 fileserver in cluster state, got %d", len(csResp.Fileservers))
+	}
+	if csResp.Fileservers[0].Address != "10.0.171.40:50052" {
+		t.Errorf("expected FS address 10.0.171.40:50052, got %s", csResp.Fileservers[0].Address)
+	}
+	if len(csResp.Users) != 2 {
+		t.Errorf("expected 2 users in cluster state, got %d", len(csResp.Users))
+	}
+	if sharedRoots, ok := csResp.Shared["bob"]; !ok || len(sharedRoots.Roots) == 0 {
+		t.Errorf("expected shared roots for bob in cluster state, got %v", sharedRoots)
+	}
+}
+
