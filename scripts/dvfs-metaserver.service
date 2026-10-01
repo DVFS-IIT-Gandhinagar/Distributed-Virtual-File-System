@@ -21,8 +21,8 @@ ExecStart=/bin/bash -c '\
     exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-metaserver.sh'\''"; \
   fi'
 
-Restart=on-failure
-RestartSec=3s
+Restart=always
+RestartSec=5s
 LimitNOFILE=65536
 StandardOutput=journal
 StandardError=journal

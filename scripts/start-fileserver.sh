@@ -39,34 +39,48 @@ elif [ -n "$META_IP" ]; then
     META_ADDR="${META_IP}:50051"
     echo "[STARTUP] Using user-specified META_IP: ${META_ADDR}"
 else
-    echo "[STARTUP] Querying Metaserver (dvfs1) IP from Gist..."
-    META_IP=""
+    echo "[STARTUP] Querying Metaserver IP(s) from Gist..."
+    META_ADDRS=""
 
     # Attempt fetch via curl and python3 parser
     if command -v python3 >/dev/null 2>&1; then
-        META_IP=$(curl -sSL --connect-timeout 5 "$GIST_MACHINES_URL" 2>/dev/null | python3 -c '
+        META_ADDRS=$(curl -sSL --connect-timeout 5 "$GIST_MACHINES_URL" 2>/dev/null | python3 -c '
 import sys, json
 try:
     data = json.load(sys.stdin)
+    addrs = []
+    # 1. Look for nodes with "metaserver" in their services list
     for m in data:
-        if m.get("username") == "dvfs1" and m.get("ip"):
-            print(m["ip"].strip())
-            sys.exit(0)
+        if "metaserver" in m.get("services", []) and m.get("ip"):
+            addrs.append(m["ip"].strip() + ":50051")
+    # 2. Backward-compatible fallback: find dvfs1 if no services tags exist
+    if not addrs:
+        for m in data:
+            if m.get("username") == "dvfs1" and m.get("ip"):
+                addrs.append(m["ip"].strip() + ":50051")
+                break
+    if addrs:
+        print(",".join(addrs))
+        sys.exit(0)
 except Exception:
     pass
 ' 2>/dev/null || true)
     fi
 
     # Fallback parser using grep/sed if python3 is unavailable
-    if [ -z "$META_IP" ]; then
+    if [ -z "$META_ADDRS" ]; then
         META_IP=$(curl -sSL --connect-timeout 5 "$GIST_MACHINES_URL" 2>/dev/null | \
             grep -A 3 '"username":\s*"dvfs1"' | grep '"ip":' | head -n 1 | sed -E 's/.*"ip":\s*"([^"]+)".*/\1/' || true)
+        if [ -n "$META_IP" ]; then
+            META_ADDRS="${META_IP}:50051"
+        fi
     fi
 
-    if [ -n "$META_IP" ]; then
-        echo "$META_IP" > "$CACHE_FILE" 2>/dev/null || true
-        META_ADDR="${META_IP}:50051"
-        echo "[STARTUP] Resolved Metaserver (dvfs1) from Gist: ${META_ADDR}"
+    if [ -n "$META_ADDRS" ]; then
+        PRIMARY_IP=$(echo "$META_ADDRS" | cut -d, -f1 | cut -d: -f1)
+        echo "$PRIMARY_IP" > "$CACHE_FILE" 2>/dev/null || true
+        META_ADDR="${META_ADDRS}"
+        echo "[STARTUP] Resolved Metaserver address(es) from Gist: ${META_ADDR}"
     elif [ -f "$CACHE_FILE" ] && [ -s "$CACHE_FILE" ]; then
         META_IP=$(cat "$CACHE_FILE" | tr -d ' \r\n')
         META_ADDR="${META_IP}:50051"
@@ -77,7 +91,7 @@ except Exception:
     fi
 fi
 
-META_HOST=$(echo "$META_ADDR" | cut -d: -f1)
+META_HOST=$(echo "$META_ADDR" | cut -d, -f1 | cut -d: -f1)
 
 # 3. Dynamically extract the local IP that routes to the metaserver.
 # Falls back to the first global IPv4 address from `ip addr show` or `hostname -I`.

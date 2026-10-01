@@ -16,6 +16,7 @@ GIST_ID = secrets["GIST_ID"]
 GITHUB_TOKEN = secrets["GITHUB_TOKEN"]
 
 TAG = "tag:dvfsmachines"
+CONTROL_NODES = {"dvfs1", "dvfs8", "dvfs9"}
 
 def get_tailscale_access_token():
     response = requests.post(
@@ -138,11 +139,13 @@ exit 1
         return None
 
     mac, ip = parts
+    services = ["metaserver", "admin", "fileserver"] if username in CONTROL_NODES else ["fileserver"]
     return {
         "username": username,
         "mac": mac,
         "ip": ip,
-        "last_seen": machine['last_seen']
+        "last_seen": machine['last_seen'],
+        "services": services
     }
 
 def get_gist():
@@ -183,7 +186,29 @@ def update_gist(data):
     response.raise_for_status()
 
 
+def is_local_metaserver_leader(port=8090, timeout=2):
+    """
+    Return True only if the locally running MetaServer reports itself as Leader.
+    If running on legacy standalone updater (e.g. RP-115) without local metaserver,
+    BYPASS_LEADER_CHECK=1 in /opt/dvfs/.env allows running without check.
+    """
+    if str(secrets.get("BYPASS_LEADER_CHECK", "0")).lower() in ("1", "true", "yes"):
+        return True
+    try:
+        resp = requests.get(f"http://127.0.0.1:{port}/leader", timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        return bool(data.get("is_leader", False))
+    except Exception as e:
+        print(f"[GIST UPDATER] Local MetaServer leader check failed: {e}")
+        return False
+
+
 def main():
+    if not is_local_metaserver_leader():
+        print("Not the authoritative Raft Leader - skipping Gist update.")
+        return
+
     machines = get_dvfs_machines()
     print(f"Found {len(machines)} DVFS machines")
     

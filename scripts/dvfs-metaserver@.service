@@ -12,8 +12,8 @@ Environment=STATE_FILE=%h/Distributed-Virtual-File-System/bin/metaserver_state.j
 
 ExecStart=/bin/bash %h/Distributed-Virtual-File-System/scripts/start-metaserver.sh
 
-Restart=on-failure
-RestartSec=3s
+Restart=always
+RestartSec=5s
 LimitNOFILE=65536
 StandardOutput=journal
 StandardError=journal
