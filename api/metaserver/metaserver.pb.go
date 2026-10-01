@@ -909,6 +909,523 @@ func (x *DeregisterFileServerResponse) GetError() string {
 	return ""
 }
 
+// Cluster management & consensus messages
+type JoinClusterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	RaftAddr      string                 `protobuf:"bytes,2,opt,name=raft_addr,json=raftAddr,proto3" json:"raft_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinClusterRequest) Reset() {
+	*x = JoinClusterRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinClusterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinClusterRequest) ProtoMessage() {}
+
+func (x *JoinClusterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinClusterRequest.ProtoReflect.Descriptor instead.
+func (*JoinClusterRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *JoinClusterRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *JoinClusterRequest) GetRaftAddr() string {
+	if x != nil {
+		return x.RaftAddr
+	}
+	return ""
+}
+
+type JoinClusterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinClusterResponse) Reset() {
+	*x = JoinClusterResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinClusterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinClusterResponse) ProtoMessage() {}
+
+func (x *JoinClusterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinClusterResponse.ProtoReflect.Descriptor instead.
+func (*JoinClusterResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *JoinClusterResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *JoinClusterResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type LeaderInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderInfoRequest) Reset() {
+	*x = LeaderInfoRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderInfoRequest) ProtoMessage() {}
+
+func (x *LeaderInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderInfoRequest.ProtoReflect.Descriptor instead.
+func (*LeaderInfoRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{18}
+}
+
+type LeaderInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IsLeader      bool                   `protobuf:"varint,1,opt,name=is_leader,json=isLeader,proto3" json:"is_leader,omitempty"`
+	LeaderId      string                 `protobuf:"bytes,2,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	LeaderAddr    string                 `protobuf:"bytes,3,opt,name=leader_addr,json=leaderAddr,proto3" json:"leader_addr,omitempty"`
+	RaftState     string                 `protobuf:"bytes,4,opt,name=raft_state,json=raftState,proto3" json:"raft_state,omitempty"`
+	Peers         []string               `protobuf:"bytes,5,rep,name=peers,proto3" json:"peers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderInfoResponse) Reset() {
+	*x = LeaderInfoResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderInfoResponse) ProtoMessage() {}
+
+func (x *LeaderInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderInfoResponse.ProtoReflect.Descriptor instead.
+func (*LeaderInfoResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *LeaderInfoResponse) GetIsLeader() bool {
+	if x != nil {
+		return x.IsLeader
+	}
+	return false
+}
+
+func (x *LeaderInfoResponse) GetLeaderId() string {
+	if x != nil {
+		return x.LeaderId
+	}
+	return ""
+}
+
+func (x *LeaderInfoResponse) GetLeaderAddr() string {
+	if x != nil {
+		return x.LeaderAddr
+	}
+	return ""
+}
+
+func (x *LeaderInfoResponse) GetRaftState() string {
+	if x != nil {
+		return x.RaftState
+	}
+	return ""
+}
+
+func (x *LeaderInfoResponse) GetPeers() []string {
+	if x != nil {
+		return x.Peers
+	}
+	return nil
+}
+
+type FileServerEntry struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	FsId              uint64                 `protobuf:"varint,1,opt,name=fs_id,json=fsId,proto3" json:"fs_id,omitempty"`
+	Address           string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	UserCount         int64                  `protobuf:"varint,3,opt,name=user_count,json=userCount,proto3" json:"user_count,omitempty"`
+	LastHeartbeatUnix int64                  `protobuf:"varint,4,opt,name=last_heartbeat_unix,json=lastHeartbeatUnix,proto3" json:"last_heartbeat_unix,omitempty"`
+	Status            string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *FileServerEntry) Reset() {
+	*x = FileServerEntry{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileServerEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileServerEntry) ProtoMessage() {}
+
+func (x *FileServerEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileServerEntry.ProtoReflect.Descriptor instead.
+func (*FileServerEntry) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *FileServerEntry) GetFsId() uint64 {
+	if x != nil {
+		return x.FsId
+	}
+	return 0
+}
+
+func (x *FileServerEntry) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *FileServerEntry) GetUserCount() int64 {
+	if x != nil {
+		return x.UserCount
+	}
+	return 0
+}
+
+func (x *FileServerEntry) GetLastHeartbeatUnix() int64 {
+	if x != nil {
+		return x.LastHeartbeatUnix
+	}
+	return 0
+}
+
+func (x *FileServerEntry) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type SharedDirEntryProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SharedDirEntryProto) Reset() {
+	*x = SharedDirEntryProto{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SharedDirEntryProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SharedDirEntryProto) ProtoMessage() {}
+
+func (x *SharedDirEntryProto) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SharedDirEntryProto.ProtoReflect.Descriptor instead.
+func (*SharedDirEntryProto) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SharedDirEntryProto) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *SharedDirEntryProto) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SharedDirEntryProto) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+type UserSharedRoots struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Roots         []*SharedDirEntryProto `protobuf:"bytes,1,rep,name=roots,proto3" json:"roots,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserSharedRoots) Reset() {
+	*x = UserSharedRoots{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserSharedRoots) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserSharedRoots) ProtoMessage() {}
+
+func (x *UserSharedRoots) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserSharedRoots.ProtoReflect.Descriptor instead.
+func (*UserSharedRoots) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *UserSharedRoots) GetRoots() []*SharedDirEntryProto {
+	if x != nil {
+		return x.Roots
+	}
+	return nil
+}
+
+type ClusterStateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClusterStateRequest) Reset() {
+	*x = ClusterStateRequest{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClusterStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterStateRequest) ProtoMessage() {}
+
+func (x *ClusterStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterStateRequest.ProtoReflect.Descriptor instead.
+func (*ClusterStateRequest) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{23}
+}
+
+type ClusterStateResponse struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Success       bool                        `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                      `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Fileservers   []*FileServerEntry          `protobuf:"bytes,3,rep,name=fileservers,proto3" json:"fileservers,omitempty"`
+	Users         map[string]uint64           `protobuf:"bytes,4,rep,name=users,proto3" json:"users,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Shared        map[string]*UserSharedRoots `protobuf:"bytes,5,rep,name=shared,proto3" json:"shared,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	NextFsId      uint64                      `protobuf:"varint,6,opt,name=next_fs_id,json=nextFsId,proto3" json:"next_fs_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClusterStateResponse) Reset() {
+	*x = ClusterStateResponse{}
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClusterStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterStateResponse) ProtoMessage() {}
+
+func (x *ClusterStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_metaserver_metaserver_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterStateResponse.ProtoReflect.Descriptor instead.
+func (*ClusterStateResponse) Descriptor() ([]byte, []int) {
+	return file_api_metaserver_metaserver_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ClusterStateResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ClusterStateResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *ClusterStateResponse) GetFileservers() []*FileServerEntry {
+	if x != nil {
+		return x.Fileservers
+	}
+	return nil
+}
+
+func (x *ClusterStateResponse) GetUsers() map[string]uint64 {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
+func (x *ClusterStateResponse) GetShared() map[string]*UserSharedRoots {
+	if x != nil {
+		return x.Shared
+	}
+	return nil
+}
+
+func (x *ClusterStateResponse) GetNextFsId() uint64 {
+	if x != nil {
+		return x.NextFsId
+	}
+	return 0
+}
+
 var File_api_metaserver_metaserver_proto protoreflect.FileDescriptor
 
 const file_api_metaserver_metaserver_proto_rawDesc = "" +
@@ -971,7 +1488,51 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\"N\n" +
 	"\x1cDeregisterFileServerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error2\xce\x04\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"J\n" +
+	"\x12JoinClusterRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1b\n" +
+	"\traft_addr\x18\x02 \x01(\tR\braftAddr\"E\n" +
+	"\x13JoinClusterResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x13\n" +
+	"\x11LeaderInfoRequest\"\xa4\x01\n" +
+	"\x12LeaderInfoResponse\x12\x1b\n" +
+	"\tis_leader\x18\x01 \x01(\bR\bisLeader\x12\x1b\n" +
+	"\tleader_id\x18\x02 \x01(\tR\bleaderId\x12\x1f\n" +
+	"\vleader_addr\x18\x03 \x01(\tR\n" +
+	"leaderAddr\x12\x1d\n" +
+	"\n" +
+	"raft_state\x18\x04 \x01(\tR\traftState\x12\x14\n" +
+	"\x05peers\x18\x05 \x03(\tR\x05peers\"\xa7\x01\n" +
+	"\x0fFileServerEntry\x12\x13\n" +
+	"\x05fs_id\x18\x01 \x01(\x04R\x04fsId\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\x12\x1d\n" +
+	"\n" +
+	"user_count\x18\x03 \x01(\x03R\tuserCount\x12.\n" +
+	"\x13last_heartbeat_unix\x18\x04 \x01(\x03R\x11lastHeartbeatUnix\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\"b\n" +
+	"\x13SharedDirEntryProto\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"H\n" +
+	"\x0fUserSharedRoots\x125\n" +
+	"\x05roots\x18\x01 \x03(\v2\x1f.metaserver.SharedDirEntryProtoR\x05roots\"\x15\n" +
+	"\x13ClusterStateRequest\"\xbe\x03\n" +
+	"\x14ClusterStateResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12=\n" +
+	"\vfileservers\x18\x03 \x03(\v2\x1b.metaserver.FileServerEntryR\vfileservers\x12A\n" +
+	"\x05users\x18\x04 \x03(\v2+.metaserver.ClusterStateResponse.UsersEntryR\x05users\x12D\n" +
+	"\x06shared\x18\x05 \x03(\v2,.metaserver.ClusterStateResponse.SharedEntryR\x06shared\x12\x1c\n" +
+	"\n" +
+	"next_fs_id\x18\x06 \x01(\x04R\bnextFsId\x1a8\n" +
+	"\n" +
+	"UsersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\x1aV\n" +
+	"\vSharedEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
+	"\x05value\x18\x02 \x01(\v2\x1b.metaserver.UserSharedRootsR\x05value:\x028\x012\xc1\x06\n" +
 	"\n" +
 	"MetaServer\x12c\n" +
 	"\x12RegisterFileServer\x12%.metaserver.RegisterFileServerRequest\x1a&.metaserver.RegisterFileServerResponse\x12E\n" +
@@ -980,7 +1541,11 @@ const file_api_metaserver_metaserver_proto_rawDesc = "" +
 	"\bGetRoots\x12\x1b.metaserver.GetRootsRequest\x1a\x1c.metaserver.GetRootsResponse\x12H\n" +
 	"\tRootShare\x12\x1c.metaserver.RootShareRequest\x1a\x1d.metaserver.RootShareResponse\x12N\n" +
 	"\vRootUnshare\x12\x1e.metaserver.RootUnshareRequest\x1a\x1f.metaserver.RootUnshareResponse\x12i\n" +
-	"\x14DeregisterFileServer\x12'.metaserver.DeregisterFileServerRequest\x1a(.metaserver.DeregisterFileServerResponseBPZNgithub.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserverb\x06proto3"
+	"\x14DeregisterFileServer\x12'.metaserver.DeregisterFileServerRequest\x1a(.metaserver.DeregisterFileServerResponse\x12N\n" +
+	"\vJoinCluster\x12\x1e.metaserver.JoinClusterRequest\x1a\x1f.metaserver.JoinClusterResponse\x12K\n" +
+	"\n" +
+	"LeaderInfo\x12\x1d.metaserver.LeaderInfoRequest\x1a\x1e.metaserver.LeaderInfoResponse\x12T\n" +
+	"\x0fGetClusterState\x12\x1f.metaserver.ClusterStateRequest\x1a .metaserver.ClusterStateResponseBPZNgithub.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserverb\x06proto3"
 
 var (
 	file_api_metaserver_metaserver_proto_rawDescOnce sync.Once
@@ -994,7 +1559,7 @@ func file_api_metaserver_metaserver_proto_rawDescGZIP() []byte {
 	return file_api_metaserver_metaserver_proto_rawDescData
 }
 
-var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_api_metaserver_metaserver_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*SharedDir)(nil),                    // 0: metaserver.SharedDir
 	(*SharedRoot)(nil),                   // 1: metaserver.SharedRoot
@@ -1012,29 +1577,51 @@ var file_api_metaserver_metaserver_proto_goTypes = []any{
 	(*HeartbeatResponse)(nil),            // 13: metaserver.HeartbeatResponse
 	(*DeregisterFileServerRequest)(nil),  // 14: metaserver.DeregisterFileServerRequest
 	(*DeregisterFileServerResponse)(nil), // 15: metaserver.DeregisterFileServerResponse
+	(*JoinClusterRequest)(nil),           // 16: metaserver.JoinClusterRequest
+	(*JoinClusterResponse)(nil),          // 17: metaserver.JoinClusterResponse
+	(*LeaderInfoRequest)(nil),            // 18: metaserver.LeaderInfoRequest
+	(*LeaderInfoResponse)(nil),           // 19: metaserver.LeaderInfoResponse
+	(*FileServerEntry)(nil),              // 20: metaserver.FileServerEntry
+	(*SharedDirEntryProto)(nil),          // 21: metaserver.SharedDirEntryProto
+	(*UserSharedRoots)(nil),              // 22: metaserver.UserSharedRoots
+	(*ClusterStateRequest)(nil),          // 23: metaserver.ClusterStateRequest
+	(*ClusterStateResponse)(nil),         // 24: metaserver.ClusterStateResponse
+	nil,                                  // 25: metaserver.ClusterStateResponse.UsersEntry
+	nil,                                  // 26: metaserver.ClusterStateResponse.SharedEntry
 }
 var file_api_metaserver_metaserver_proto_depIdxs = []int32{
 	0,  // 0: metaserver.RegisterFileServerRequest.shared:type_name -> metaserver.SharedDir
 	1,  // 1: metaserver.GetRootsResponse.roots:type_name -> metaserver.SharedRoot
-	2,  // 2: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
-	4,  // 3: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
-	12, // 4: metaserver.MetaServer.Heartbeat:input_type -> metaserver.HeartbeatRequest
-	6,  // 5: metaserver.MetaServer.GetRoots:input_type -> metaserver.GetRootsRequest
-	8,  // 6: metaserver.MetaServer.RootShare:input_type -> metaserver.RootShareRequest
-	10, // 7: metaserver.MetaServer.RootUnshare:input_type -> metaserver.RootUnshareRequest
-	14, // 8: metaserver.MetaServer.DeregisterFileServer:input_type -> metaserver.DeregisterFileServerRequest
-	3,  // 9: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
-	5,  // 10: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
-	13, // 11: metaserver.MetaServer.Heartbeat:output_type -> metaserver.HeartbeatResponse
-	7,  // 12: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
-	9,  // 13: metaserver.MetaServer.RootShare:output_type -> metaserver.RootShareResponse
-	11, // 14: metaserver.MetaServer.RootUnshare:output_type -> metaserver.RootUnshareResponse
-	15, // 15: metaserver.MetaServer.DeregisterFileServer:output_type -> metaserver.DeregisterFileServerResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	21, // 2: metaserver.UserSharedRoots.roots:type_name -> metaserver.SharedDirEntryProto
+	20, // 3: metaserver.ClusterStateResponse.fileservers:type_name -> metaserver.FileServerEntry
+	25, // 4: metaserver.ClusterStateResponse.users:type_name -> metaserver.ClusterStateResponse.UsersEntry
+	26, // 5: metaserver.ClusterStateResponse.shared:type_name -> metaserver.ClusterStateResponse.SharedEntry
+	22, // 6: metaserver.ClusterStateResponse.SharedEntry.value:type_name -> metaserver.UserSharedRoots
+	2,  // 7: metaserver.MetaServer.RegisterFileServer:input_type -> metaserver.RegisterFileServerRequest
+	4,  // 8: metaserver.MetaServer.Navigate:input_type -> metaserver.NavigateRequest
+	12, // 9: metaserver.MetaServer.Heartbeat:input_type -> metaserver.HeartbeatRequest
+	6,  // 10: metaserver.MetaServer.GetRoots:input_type -> metaserver.GetRootsRequest
+	8,  // 11: metaserver.MetaServer.RootShare:input_type -> metaserver.RootShareRequest
+	10, // 12: metaserver.MetaServer.RootUnshare:input_type -> metaserver.RootUnshareRequest
+	14, // 13: metaserver.MetaServer.DeregisterFileServer:input_type -> metaserver.DeregisterFileServerRequest
+	16, // 14: metaserver.MetaServer.JoinCluster:input_type -> metaserver.JoinClusterRequest
+	18, // 15: metaserver.MetaServer.LeaderInfo:input_type -> metaserver.LeaderInfoRequest
+	23, // 16: metaserver.MetaServer.GetClusterState:input_type -> metaserver.ClusterStateRequest
+	3,  // 17: metaserver.MetaServer.RegisterFileServer:output_type -> metaserver.RegisterFileServerResponse
+	5,  // 18: metaserver.MetaServer.Navigate:output_type -> metaserver.NavigateResponse
+	13, // 19: metaserver.MetaServer.Heartbeat:output_type -> metaserver.HeartbeatResponse
+	7,  // 20: metaserver.MetaServer.GetRoots:output_type -> metaserver.GetRootsResponse
+	9,  // 21: metaserver.MetaServer.RootShare:output_type -> metaserver.RootShareResponse
+	11, // 22: metaserver.MetaServer.RootUnshare:output_type -> metaserver.RootUnshareResponse
+	15, // 23: metaserver.MetaServer.DeregisterFileServer:output_type -> metaserver.DeregisterFileServerResponse
+	17, // 24: metaserver.MetaServer.JoinCluster:output_type -> metaserver.JoinClusterResponse
+	19, // 25: metaserver.MetaServer.LeaderInfo:output_type -> metaserver.LeaderInfoResponse
+	24, // 26: metaserver.MetaServer.GetClusterState:output_type -> metaserver.ClusterStateResponse
+	17, // [17:27] is the sub-list for method output_type
+	7,  // [7:17] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_api_metaserver_metaserver_proto_init() }
@@ -1048,7 +1635,7 @@ func file_api_metaserver_metaserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_metaserver_metaserver_proto_rawDesc), len(file_api_metaserver_metaserver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

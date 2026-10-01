@@ -26,6 +26,9 @@ const (
 	MetaServer_RootShare_FullMethodName            = "/metaserver.MetaServer/RootShare"
 	MetaServer_RootUnshare_FullMethodName          = "/metaserver.MetaServer/RootUnshare"
 	MetaServer_DeregisterFileServer_FullMethodName = "/metaserver.MetaServer/DeregisterFileServer"
+	MetaServer_JoinCluster_FullMethodName          = "/metaserver.MetaServer/JoinCluster"
+	MetaServer_LeaderInfo_FullMethodName           = "/metaserver.MetaServer/LeaderInfo"
+	MetaServer_GetClusterState_FullMethodName      = "/metaserver.MetaServer/GetClusterState"
 )
 
 // MetaServerClient is the client API for MetaServer service.
@@ -41,6 +44,9 @@ type MetaServerClient interface {
 	RootShare(ctx context.Context, in *RootShareRequest, opts ...grpc.CallOption) (*RootShareResponse, error)
 	RootUnshare(ctx context.Context, in *RootUnshareRequest, opts ...grpc.CallOption) (*RootUnshareResponse, error)
 	DeregisterFileServer(ctx context.Context, in *DeregisterFileServerRequest, opts ...grpc.CallOption) (*DeregisterFileServerResponse, error)
+	JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error)
+	LeaderInfo(ctx context.Context, in *LeaderInfoRequest, opts ...grpc.CallOption) (*LeaderInfoResponse, error)
+	GetClusterState(ctx context.Context, in *ClusterStateRequest, opts ...grpc.CallOption) (*ClusterStateResponse, error)
 }
 
 type metaServerClient struct {
@@ -121,6 +127,36 @@ func (c *metaServerClient) DeregisterFileServer(ctx context.Context, in *Deregis
 	return out, nil
 }
 
+func (c *metaServerClient) JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinClusterResponse)
+	err := c.cc.Invoke(ctx, MetaServer_JoinCluster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metaServerClient) LeaderInfo(ctx context.Context, in *LeaderInfoRequest, opts ...grpc.CallOption) (*LeaderInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaderInfoResponse)
+	err := c.cc.Invoke(ctx, MetaServer_LeaderInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metaServerClient) GetClusterState(ctx context.Context, in *ClusterStateRequest, opts ...grpc.CallOption) (*ClusterStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClusterStateResponse)
+	err := c.cc.Invoke(ctx, MetaServer_GetClusterState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MetaServerServer is the server API for MetaServer service.
 // All implementations must embed UnimplementedMetaServerServer
 // for forward compatibility.
@@ -134,6 +170,9 @@ type MetaServerServer interface {
 	RootShare(context.Context, *RootShareRequest) (*RootShareResponse, error)
 	RootUnshare(context.Context, *RootUnshareRequest) (*RootUnshareResponse, error)
 	DeregisterFileServer(context.Context, *DeregisterFileServerRequest) (*DeregisterFileServerResponse, error)
+	JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error)
+	LeaderInfo(context.Context, *LeaderInfoRequest) (*LeaderInfoResponse, error)
+	GetClusterState(context.Context, *ClusterStateRequest) (*ClusterStateResponse, error)
 	mustEmbedUnimplementedMetaServerServer()
 }
 
@@ -164,6 +203,15 @@ func (UnimplementedMetaServerServer) RootUnshare(context.Context, *RootUnshareRe
 }
 func (UnimplementedMetaServerServer) DeregisterFileServer(context.Context, *DeregisterFileServerRequest) (*DeregisterFileServerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeregisterFileServer not implemented")
+}
+func (UnimplementedMetaServerServer) JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinCluster not implemented")
+}
+func (UnimplementedMetaServerServer) LeaderInfo(context.Context, *LeaderInfoRequest) (*LeaderInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaderInfo not implemented")
+}
+func (UnimplementedMetaServerServer) GetClusterState(context.Context, *ClusterStateRequest) (*ClusterStateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetClusterState not implemented")
 }
 func (UnimplementedMetaServerServer) mustEmbedUnimplementedMetaServerServer() {}
 func (UnimplementedMetaServerServer) testEmbeddedByValue()                    {}
@@ -312,6 +360,60 @@ func _MetaServer_DeregisterFileServer_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MetaServer_JoinCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinClusterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetaServerServer).JoinCluster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetaServer_JoinCluster_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetaServerServer).JoinCluster(ctx, req.(*JoinClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetaServer_LeaderInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaderInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetaServerServer).LeaderInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetaServer_LeaderInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetaServerServer).LeaderInfo(ctx, req.(*LeaderInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetaServer_GetClusterState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClusterStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetaServerServer).GetClusterState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MetaServer_GetClusterState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetaServerServer).GetClusterState(ctx, req.(*ClusterStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MetaServer_ServiceDesc is the grpc.ServiceDesc for MetaServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -346,6 +448,18 @@ var MetaServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeregisterFileServer",
 			Handler:    _MetaServer_DeregisterFileServer_Handler,
+		},
+		{
+			MethodName: "JoinCluster",
+			Handler:    _MetaServer_JoinCluster_Handler,
+		},
+		{
+			MethodName: "LeaderInfo",
+			Handler:    _MetaServer_LeaderInfo_Handler,
+		},
+		{
+			MethodName: "GetClusterState",
+			Handler:    _MetaServer_GetClusterState_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

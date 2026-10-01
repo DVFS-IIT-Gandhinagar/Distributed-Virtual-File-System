@@ -91,6 +91,56 @@ message DeregisterFileServerResponse {
   string error = 2;
 }
 
+// Cluster management & consensus messages
+message JoinClusterRequest {
+  string node_id = 1;
+  string raft_addr = 2;
+}
+
+message JoinClusterResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message LeaderInfoRequest {}
+
+message LeaderInfoResponse {
+  bool is_leader = 1;
+  string leader_id = 2;
+  string leader_addr = 3;
+  string raft_state = 4;
+  repeated string peers = 5;
+}
+
+message FileServerEntry {
+  uint64 fs_id = 1;
+  string address = 2;
+  int64 user_count = 3;
+  int64 last_heartbeat_unix = 4;
+  string status = 5;
+}
+
+message SharedDirEntryProto {
+  string owner = 1;
+  string path = 2;
+  string display_name = 3;
+}
+
+message UserSharedRoots {
+  repeated SharedDirEntryProto roots = 1;
+}
+
+message ClusterStateRequest {}
+
+message ClusterStateResponse {
+  bool success = 1;
+  string error = 2;
+  repeated FileServerEntry fileservers = 3;
+  map<string, uint64> users = 4;
+  map<string, UserSharedRoots> shared = 5;
+  uint64 next_fs_id = 6;
+}
+
 // MetaServer service
 service MetaServer {
   rpc RegisterFileServer(RegisterFileServerRequest) returns (RegisterFileServerResponse);
@@ -100,4 +150,7 @@ service MetaServer {
   rpc RootShare(RootShareRequest) returns (RootShareResponse);
   rpc RootUnshare(RootUnshareRequest) returns (RootUnshareResponse);
   rpc DeregisterFileServer(DeregisterFileServerRequest) returns (DeregisterFileServerResponse);
+  rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse);
+  rpc LeaderInfo(LeaderInfoRequest) returns (LeaderInfoResponse);
+  rpc GetClusterState(ClusterStateRequest) returns (ClusterStateResponse);
 }
