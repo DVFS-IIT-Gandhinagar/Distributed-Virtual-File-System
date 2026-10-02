@@ -21,6 +21,10 @@ import (
 func newStoreBackedAdmin(store storage.MetaStore) *AdminServer {
 	srv := NewAdminServer(nil, "")
 	srv.store = store
+	// No discovery: with no metaserver address set, the handler would otherwise
+	// fall back to Gist discovery, resolve the real campus metaserver and try to
+	// dial it from the test for five seconds.
+	srv.resolver = nil
 	return srv
 }
 
@@ -63,6 +67,7 @@ func TestHandleRemoveNode_MethodsAndValidation(t *testing.T) {
 
 func TestHandleRemoveNode_AuthEnforcement(t *testing.T) {
 	srv := NewAdminServer(nil, "")
+	srv.resolver = nil                                                                          // see newStoreBackedAdmin
 	srv.authManager.SetHash("8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918") // "admin"
 
 	srv.nodes["3"] = &NodeState{
