@@ -127,8 +127,8 @@ stateDiagram-v2
 
     [*] --> Starting
     Starting --> LoadingState : "LoadSnapshot from MongoDB"
-    LoadingState --> Ready : "state valid (loadState)"
-    LoadingState --> Ready : "file missing (start fresh)"
+    LoadingState --> Ready : "snapshot hydrated (may be empty)"
+    LoadingState --> [*] : "store unreachable (fatal: exit)"
     Ready --> Serving : "Start gRPC server"
     Serving --> Crashed : "process killed"
     Crashed --> Recovering : "process restarted"

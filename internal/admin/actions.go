@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,20 @@ func resolveMongoURI() string {
 		return uri
 	}
 	return defaultMongoURI
+}
+
+// shellQuote wraps s in single quotes for safe interpolation into a remote
+// shell command. Anything can appear in a MongoDB URI, and "&" alone would
+// otherwise background the command and run the rest of the URI as another.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+var mongoCredentialRE = regexp.MustCompile(`(mongodb(?:\+srv)?://[^:/@\s']+):[^@\s']*@`)
+
+// redactMongoURI masks the password in any MongoDB URI inside s.
+func redactMongoURI(s string) string {
+	return mongoCredentialRE.ReplaceAllString(s, "${1}:***@")
 }
 
 // Supported orchestration action types.
@@ -94,6 +109,8 @@ type Orchestrator struct {
 	defaultSSHKey   string
 	defaultRepoPath string
 	defaultSSHPort  int
+	mongoURI        string   // effective URI the console itself uses; restarted binaries inherit it
+	mongoDB         string   // effective database name, so a -mongo_db override survives a restart
 	activeNodes     sync.Map // nodeID (string) -> actionID (string)
 }
 
@@ -112,6 +129,15 @@ func NewOrchestrator(server *AdminServer, ssh SSHExecutor, history *CommandHisto
 		defaultRepoPath: defaultRepoPath,
 		defaultSSHPort:  port,
 	}
+}
+
+// SetMongoTarget records the MongoDB URI and database the console is using,
+// so binary restarts pass the same ones. Without this the command fell back to
+// the MONGO_URI environment variable, which is empty when the console was
+// started with the -mongo_uri flag, and silently dropped any -mongo_db override.
+func (o *Orchestrator) SetMongoTarget(uri, db string) {
+	o.mongoURI = uri
+	o.mongoDB = db
 }
 
 // GetPresets generates pre-filled configuration parameters for all discovered nodes.
@@ -193,18 +219,25 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		}
 
 		if req.RestartMode == "binary" {
-			mongoURI := resolveMongoURI()
+			mongoURI := o.mongoURI
+			if mongoURI == "" {
+				mongoURI = resolveMongoURI()
+			}
+			mongoFlags := "-mongo_uri=" + shellQuote(mongoURI)
+			if o.mongoDB != "" {
+				mongoFlags += " -mongo_db=" + shellQuote(o.mongoDB)
+			}
 
 			switch targetService {
 			case "metaserver":
 				return fmt.Sprintf(
-					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -mongo_uri=%s > %s/metaserver.log 2>&1 < /dev/null &",
-					repoPath, mongoURI, repoPath,
+					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 %s > %s/metaserver.log 2>&1 < /dev/null &",
+					repoPath, mongoFlags, repoPath,
 				)
 			case "admin":
 				return fmt.Sprintf(
-					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 -mongo_uri=%s > %s/admin.log 2>&1 < /dev/null &",
-					repoPath, mongoURI, repoPath,
+					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 %s > %s/admin.log 2>&1 < /dev/null &",
+					repoPath, mongoFlags, repoPath,
 				)
 			case "all":
 				dataDir := params.DataDir
@@ -220,8 +253,8 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 					ownIP = params.Host
 				}
 				return fmt.Sprintf(
-					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -mongo_uri=%s > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 -mongo_uri=%s > %s/admin.log 2>&1 < /dev/null &",
-					params.Port, params.FsID, repoPath, mongoURI, repoPath, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, mongoURI, repoPath,
+					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 %s > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 %s > %s/admin.log 2>&1 < /dev/null &",
+					params.Port, params.FsID, repoPath, mongoFlags, repoPath, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, mongoFlags, repoPath,
 				)
 			default: // "fileserver"
 				dataDir := params.DataDir
@@ -415,6 +448,7 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 	if displayCmd == "" {
 		displayCmd = req.ActionType
 	}
+	displayCmd = redactMongoURI(displayCmd)
 
 	// Initial record in running state
 	record := CommandRecord{
@@ -476,7 +510,7 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 					ActionID: actionID,
 					NodeID:   nID,
 					Address:  nState.Address,
-					Command:  cmd,
+					Command:  redactMongoURI(cmd),
 				})
 			}
 

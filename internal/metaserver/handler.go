@@ -44,6 +44,28 @@ func resolveNodeID(fsID, address string) string {
 	return "addr:" + address
 }
 
+// registrationConflictLocked returns an error message for the first user this
+// node may not claim, or "" if none. A user already on another node is a
+// conflict, and so is a user orphaned on another node: their data is still
+// there, so only that node may reclaim them. Anything else has to deregister
+// the old node first.
+func (ms *MetaServer) registrationConflictLocked(nodeID string, fsID uint64, exists bool, users []string) string {
+	for _, username := range users {
+		if mappedID, ok := ms.users[username]; ok && (!exists || mappedID != fsID) {
+			addr := "unknown"
+			if info := ms.fileservers[mappedID]; info != nil {
+				addr = info.Address
+			}
+			return "User " + username + " already exists in file server: " + addr
+		}
+		if home, ok := ms.orphanedUsers[username]; ok && home != nodeID {
+			return "User " + username + " is assigned to file server " + home +
+				", which is currently unregistered; deregister that node before another claims the user"
+		}
+	}
+	return ""
+}
+
 // RegisterFileServer records a storage node, the users it hosts, and the
 // directories those users share.
 func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFileServerRequest) (*pb.RegisterFileServerResponse, error) {
@@ -60,6 +82,11 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 	ms := h.MetaServer
 	var writes deferredWrites
 
+	// Structural writes below must reach the store in memory order; see
+	// writeOrderMu.
+	ms.writeOrderMu.Lock()
+	defer ms.writeOrderMu.Unlock()
+
 	ms.mu.Lock()
 
 	fsID, exists := ms.findFileServerByNodeIDLocked(nodeID)
@@ -73,6 +100,19 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 				info.NodeID = nodeID
 			}
 		}
+	}
+
+	incomingUsers := make(map[string]struct{}, len(req.Users))
+	for _, username := range req.Users {
+		incomingUsers[username] = struct{}{}
+	}
+
+	// Validate before anything is allocated or mutated, so a rejected
+	// registration leaves neither memory nor the store changed.
+	if msg := ms.registrationConflictLocked(nodeID, fsID, exists, req.Users); msg != "" {
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] ERROR: %s", msg)
+		return &pb.RegisterFileServerResponse{Success: false, Error: msg}, nil
 	}
 
 	if !exists {
@@ -93,37 +133,28 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 		ms.mu.Lock()
 		fsID = numericID
+		created := false
 		if ms.fileservers[fsID] == nil {
 			ms.fileservers[fsID] = &domain.FileServerInfo{NodeID: nodeID}
+			created = true
 		}
-	}
 
-	incomingUsers := make(map[string]struct{}, len(req.Users))
-	for _, username := range req.Users {
-		incomingUsers[username] = struct{}{}
-	}
-
-	// Validate before mutating anything.
-	//
-	// This check used to run inside the assignment loop below, which meant a
-	// conflict on the fifth user returned an error *after* four users had
-	// already been reassigned in memory, the node record had been rewritten and
-	// absent users had been purged -- with no rollback and no store write.
-	// Memory and the store then disagreed until the next successful
-	// registration, and map iteration order decided which users were affected.
-	for username := range incomingUsers {
-		mappedID, alreadyMapped := ms.users[username]
-		if alreadyMapped && mappedID != fsID {
-			mappedAddr := "unknown"
-			if mappedFS := ms.fileservers[mappedID]; mappedFS != nil {
-				mappedAddr = mappedFS.Address
+		// The lock was released for the allocation, so another registration may
+		// have claimed one of these users meanwhile. The node document already
+		// exists, so undo it rather than leave a node that never finished
+		// registering and would look healthy to placement after a restart.
+		if msg := ms.registrationConflictLocked(nodeID, fsID, true, req.Users); msg != "" {
+			if created {
+				delete(ms.fileservers, fsID)
 			}
 			ms.mu.Unlock()
-			log.Printf("[METASERVER] ERROR: User %s already exists in FS %s", username, mappedAddr)
-			return &pb.RegisterFileServerResponse{
-				Success: false,
-				Error:   "User " + username + " already exists in file server: " + mappedAddr,
-			}, nil
+			cleanupCtx, cancelCleanup := context.WithTimeout(ctx, 10*time.Second)
+			if rmErr := ms.store.RemoveFileServer(cleanupCtx, nodeID); rmErr != nil {
+				log.Printf("[METASERVER] WARN: could not remove provisional node %s after rejected registration: %v", nodeID, rmErr)
+			}
+			cancelCleanup()
+			log.Printf("[METASERVER] ERROR: %s", msg)
+			return &pb.RegisterFileServerResponse{Success: false, Error: msg}, nil
 		}
 	}
 
@@ -268,6 +299,10 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 	writeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	// No rollback here, deliberately. The fileserver treats any failure as
+	// "not registered" and retries within seconds, and every write above is
+	// idempotent, so the retry re-applies exactly this state. Memory being
+	// briefly ahead of the store is harmless: memory is what serves requests.
 	if err := writes.run(writeCtx); err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after registration: %v", err)
 		return &pb.RegisterFileServerResponse{Success: false, Error: "failed to persist metaserver state"}, nil
@@ -523,6 +558,8 @@ func (h *GRPCHandler) RootShare(ctx context.Context, req *pb.RootShareRequest) (
 	log.Printf("[METASERVER] Root share request for dir: %s to share with: %s", req.RootPath, req.ShareWith)
 
 	ms := h.MetaServer
+	ms.writeOrderMu.Lock()
+	defer ms.writeOrderMu.Unlock()
 	path := storage.NormalizeSharePath(req.RootPath)
 
 	ms.mu.Lock()
@@ -577,6 +614,8 @@ func (h *GRPCHandler) RootUnshare(ctx context.Context, req *pb.RootUnshareReques
 	log.Printf("[METASERVER] Root unshare request for dir: %s to unshare with: %s", req.RootPath, req.UnshareWith)
 
 	ms := h.MetaServer
+	ms.writeOrderMu.Lock()
+	defer ms.writeOrderMu.Unlock()
 	path := storage.NormalizeSharePath(req.RootPath)
 
 	ms.mu.Lock()
@@ -633,6 +672,8 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 	}
 
 	ms := h.MetaServer
+	ms.writeOrderMu.Lock()
+	defer ms.writeOrderMu.Unlock()
 	ms.mu.Lock()
 
 	// Resolve by stable identity first; address is the fallback for callers

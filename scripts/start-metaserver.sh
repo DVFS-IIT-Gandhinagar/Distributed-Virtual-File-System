@@ -32,7 +32,7 @@ fi
 
 echo "[STARTUP] Starting DVFS Metaserver..."
 echo "[STARTUP] Port:               ${META_PORT}"
-echo "[STARTUP] Mongo URI:          ${MONGO_URI}"
+echo "[STARTUP] Mongo URI:          $(printf %s "${MONGO_URI}" | sed -E 's#(//[^/@:]+):[^@]*@#\1:***@#')"
 echo "[STARTUP] Mongo DB:           ${MONGO_DB}"
 echo "[STARTUP] Heartbeat Timeout:  ${HEARTBEAT_TIMEOUT}"
 echo "[STARTUP] Heartbeat Interval: ${HEARTBEAT_INTERVAL}"

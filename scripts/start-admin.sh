@@ -75,7 +75,7 @@ GIST_URL="https://gist.githubusercontent.com/dvfs-iitgn/6eb8da397735b83f76b54af4
 
 echo "[STARTUP] Starting DVFS Admin Console..."
 echo "[STARTUP] Port:       ${ADMIN_PORT}"
-echo "[STARTUP] Mongo URI: ${MONGO_URI}"
+echo "[STARTUP] Mongo URI: $(printf %s "${MONGO_URI}" | sed -E 's#(//[^/@:]+):[^@]*@#\1:***@#')"
 echo "[STARTUP] Mongo DB:  ${MONGO_DB}"
 echo "[STARTUP] MDS Addr:   ${DVFS_METASERVER_ADDR:-<gist discovery>}"
 echo "[STARTUP] Static Dir: ${STATIC_DIR}"

@@ -146,7 +146,10 @@ func TestMockSSHExecutor(t *testing.T) {
 }
 
 func TestFormatCommandBinaryRestartUsesMongoURI(t *testing.T) {
-	orchestrator := &Orchestrator{defaultRepoPath: "/home/ubuntu/repo"}
+	// A realistic replica-set URI: "&" would background the command and "?"
+	// is a glob character unless the whole value is quoted.
+	const uri = "mongodb://dvfs:s3cret@db1:27017,db2:27017/dvfs?replicaSet=rs0&authSource=admin"
+	orchestrator := &Orchestrator{defaultRepoPath: "/home/ubuntu/repo", mongoURI: uri, mongoDB: "dvfs"}
 	params := &NodeRestartParams{
 		FsID: "0", Address: "10.7.52.85:50052", Host: "10.7.52.85", Port: 50052,
 		MetaAddr: "10.7.52.85:50051", OwnIP: "10.7.52.85", DataDir: "./fileserver_data",
@@ -163,10 +166,62 @@ func TestFormatCommandBinaryRestartUsesMongoURI(t *testing.T) {
 			if strings.Contains(cmd, "-state_file") {
 				t.Errorf("%s restart still passes the removed -state_file flag: %s", service, cmd)
 			}
-			if !strings.Contains(cmd, "-mongo_uri=") {
-				t.Errorf("%s restart does not pass -mongo_uri, so the binary will refuse to start: %s", service, cmd)
+			if !strings.Contains(cmd, "-mongo_uri='"+uri+"'") {
+				t.Errorf("%s restart must pass the URI single-quoted: %s", service, cmd)
+			}
+			if !strings.Contains(cmd, "-mongo_db='dvfs'") {
+				t.Errorf("%s restart must carry the database override: %s", service, cmd)
+			}
+			if strings.Contains(cmd, "-mongo_uri="+uri) {
+				t.Errorf("%s restart has an unquoted URI, so the shell would split it at '&': %s", service, cmd)
 			}
 		})
+	}
+}
+
+// The console's own target wins over the environment; the environment is only
+// the fallback for a console that was never told what it connected to.
+func TestFormatCommandPrefersConfiguredMongoTarget(t *testing.T) {
+	t.Setenv("MONGO_URI", "mongodb://env-host:27017/other")
+	configured := &Orchestrator{mongoURI: "mongodb://real-host:27017/dvfs"}
+	fallback := &Orchestrator{}
+	req := &ActionRequest{ActionType: ActionRestart, RestartMode: "binary", TargetService: "metaserver"}
+
+	if cmd := configured.FormatCommand(req, "0", &NodeRestartParams{}); !strings.Contains(cmd, "real-host") || strings.Contains(cmd, "env-host") {
+		t.Errorf("configured target must win: %s", cmd)
+	}
+	if cmd := fallback.FormatCommand(req, "0", &NodeRestartParams{}); !strings.Contains(cmd, "env-host") {
+		t.Errorf("environment must be the fallback: %s", cmd)
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	cases := map[string]string{
+		"plain":                 "'plain'",
+		"a b":                   "'a b'",
+		"x?y&z":                 "'x?y&z'",
+		"it's":                  `'it'\''s'`,
+		"$(rm -rf /)":           "'$(rm -rf /)'",
+		"mongodb://u:p@h/d?a=1": "'mongodb://u:p@h/d?a=1'",
+	}
+	for in, want := range cases {
+		if got := shellQuote(in); got != want {
+			t.Errorf("shellQuote(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+func TestRedactMongoURI(t *testing.T) {
+	cases := map[string]string{
+		"nohup ./bin/metaserver -mongo_uri='mongodb://dvfs:s3cret@db1:27017/dvfs?replicaSet=rs0' > log": "nohup ./bin/metaserver -mongo_uri='mongodb://dvfs:***@db1:27017/dvfs?replicaSet=rs0' > log",
+		"-mongo_uri='mongodb+srv://admin:p%40ss@cluster0.example.net/dvfs'":                             "-mongo_uri='mongodb+srv://admin:***@cluster0.example.net/dvfs'",
+		"-mongo_uri='mongodb://127.0.0.1:27017/dvfs'":                                                   "-mongo_uri='mongodb://127.0.0.1:27017/dvfs'",
+		"git -C ~/repo pull origin main":                                                                "git -C ~/repo pull origin main",
+	}
+	for in, want := range cases {
+		if got := redactMongoURI(in); got != want {
+			t.Errorf("redactMongoURI(%q)\n got %q\nwant %q", in, got, want)
+		}
 	}
 }
 

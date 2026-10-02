@@ -471,3 +471,97 @@ func TestRobustness_Registration_ClearsOrphansWhenNodeReportsNoUsers(t *testing.
 	assert.Contains(t, ms2.orphanedUsers, "dave",
 		"an unrelated node must not make dave routable to the wrong host")
 }
+
+// An orphaned user is assigned, just unroutable. Only the node they are
+// assigned to may reclaim them; another node claiming the name must be refused,
+// or the durable placement would be overwritten while the data still sits on
+// the original node.
+func TestRobustness_Registration_RejectsClaimOnUserOrphanedElsewhere(t *testing.T) {
+	store := memory.New()
+	ctx := context.Background()
+	require.NoError(t, store.AssignUser(ctx, "dave", "fs-dead"))
+
+	ms, err := NewMetaServer(ctx, store)
+	require.NoError(t, err)
+	require.Contains(t, ms.orphanedUsers, "dave")
+	h := NewGRPCHandler(ms)
+
+	resp, err := h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs-other", Address: "10.0.0.2:50052", Users: []string{"dave"},
+	})
+	require.NoError(t, err)
+	assert.False(t, resp.Success, "a different node must not claim an orphaned user")
+	assert.Contains(t, resp.Error, "dave")
+
+	assert.Equal(t, "fs-dead", ms.orphanedUsers["dave"], "the orphan marker must be untouched")
+	_, routed := ms.users["dave"]
+	assert.False(t, routed)
+
+	snap, err := store.LoadSnapshot(ctx)
+	require.NoError(t, err)
+	for _, u := range snap.Users {
+		if u.Username == "dave" {
+			assert.Equal(t, "fs-dead", u.HomeNodeID, "durable placement must survive the rejected claim")
+		}
+	}
+	for _, n := range snap.FileServers {
+		assert.NotEqual(t, "fs-other", n.NodeID, "a rejected registration must leave no node behind")
+	}
+
+	// The rightful node may reclaim them.
+	resp, err = h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs-dead", Address: "10.0.0.9:50052", Users: []string{"dave"},
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success, resp.Error)
+	_, routed = ms.users["dave"]
+	assert.True(t, routed)
+}
+
+// A brand-new node whose registration is rejected must not be left in the
+// store: after a restart it would hydrate as a healthy node and attract users
+// even though it never finished registering.
+func TestRobustness_Registration_ConflictDoesNotLeaveNewNodeInStore(t *testing.T) {
+	ms := newTestMetaServer(t)
+	h := NewGRPCHandler(ms)
+	ctx := context.Background()
+
+	resp, err := h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs1", Address: "10.0.0.1:50052", Users: []string{"alice"},
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+
+	resp, err = h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs2", Address: "10.0.0.2:50052", Users: []string{"alice"},
+	})
+	require.NoError(t, err)
+	require.False(t, resp.Success)
+
+	assert.Len(t, ms.fileservers, 1, "the rejected node must not be in memory")
+	snap, err := ms.store.LoadSnapshot(ctx)
+	require.NoError(t, err)
+	require.Len(t, snap.FileServers, 1, "the rejected node must not be in the store")
+	assert.Equal(t, "fs1", snap.FileServers[0].NodeID)
+}
+
+// Placement must never depend on the persisted user_count, which is a
+// best-effort write and may lag. Load is derived from the assignments at boot.
+func TestRobustness_Hydrate_DerivesUserCountFromAssignments(t *testing.T) {
+	store := memory.New()
+	ctx := context.Background()
+	_, err := store.UpsertFileServer(ctx, storage.FileServerRecord{
+		NodeID: "fs1", Address: "10.0.0.1:50052", Status: domain.FileServerStatusHealthy,
+		LastHeartbeatUnix: time.Now().Unix(), UserCount: 99, // stale on purpose
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.AssignUser(ctx, "alice", "fs1"))
+	require.NoError(t, store.AssignUser(ctx, "bob", "fs1"))
+	require.NoError(t, store.AssignUser(ctx, "carol", "fs-gone")) // orphaned: counts nowhere
+
+	ms, err := NewMetaServer(ctx, store)
+	require.NoError(t, err)
+	fsID, ok := ms.findFileServerByNodeIDLocked("fs1")
+	require.True(t, ok)
+	assert.Equal(t, 2, ms.fileservers[fsID].UserCount, "load must come from assignments, not the stored counter")
+}

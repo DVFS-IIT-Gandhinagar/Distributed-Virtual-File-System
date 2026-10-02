@@ -75,7 +75,9 @@ func main() {
 	}
 	history := admin.NewCommandHistory(*historyLimit, *historyFile)
 	server.SetHistory(history)
-	server.SetOrchestrator(admin.NewOrchestrator(server, admin.NewRemoteSSHExecutor(), history, *sshUser, *sshKey, *repoPath, *sshPort))
+	orchestrator := admin.NewOrchestrator(server, admin.NewRemoteSSHExecutor(), history, *sshUser, *sshKey, *repoPath, *sshPort)
+	orchestrator.SetMongoTarget(uri, store.DatabaseName())
+	server.SetOrchestrator(orchestrator)
 
 	if *tlsCert != "" && *tlsKey != "" {
 		certPath := *tlsCert

@@ -30,6 +30,13 @@ type MetaServer struct {
 	// (username -> the node id they are assigned to).
 	orphanedUsers map[string]string
 
+	// writeOrderMu keeps store writes for nodes, users and shares in the same
+	// order as the in-memory changes: a share and its revocation must not swap,
+	// or the grant comes back on the next restart. Always lock it before mu.
+	// Readers take only mu, so a slow backend never blocks them. Heartbeats
+	// skip it.
+	writeOrderMu sync.Mutex
+
 	// allowUserPurge permits a registration to delete user mappings it did not
 	// report. Off by default: req.Users is built from a disk scan, so a data
 	// directory that was not mounted at boot arrives as an empty list and would
@@ -100,7 +107,6 @@ func (ms *MetaServer) hydrate(ctx context.Context) error {
 		info := &domain.FileServerInfo{
 			NodeID:            rec.NodeID,
 			Address:           rec.Address,
-			UserCount:         rec.UserCount,
 			LastHeartbeatUnix: rec.LastHeartbeatUnix,
 			Status:            rec.Status,
 		}
@@ -127,6 +133,13 @@ func (ms *MetaServer) hydrate(ctx context.Context) error {
 			continue
 		}
 		ms.users[u.Username] = numericID
+	}
+
+	// Load is derived from the assignments, not read from the persisted user_count.
+	for _, numericID := range ms.users {
+		if info := ms.fileservers[numericID]; info != nil {
+			info.UserCount++
+		}
 	}
 
 	ms.shared = make(map[string][]SharedDirEntry, len(snap.Shares))

@@ -90,7 +90,7 @@ make build
 
 ```bash
 # Terminal 1: Start MetaServer Coordinator
-./bin/metaserver -port=50051
+./bin/metaserver -port=50051 -mongo_uri=mongodb://127.0.0.1:27017/dvfs
 
 # Terminal 2: Start Storage FileServer
 ./bin/fileserver -id=fs1 -port=50052 -data=./fileserver_data -meta_addr=127.0.0.1:50051 -own_ip=127.0.0.1

@@ -375,7 +375,7 @@ The root `Makefile` automates building, testing, code generation, TLS certificat
 | `make certs-root-ca` | Mints air-gapped 10-year RSA 4096-bit Root CA (`certs/ca.crt`, `certs/ca.key`). | `go run scripts/gen-certs/cmd/gen_root_ca/main.go` |
 | `make certs-nodes` | Mints verified 2-year leaf certificates for `dvfs1`–`dvfs9`, `localhost`, `fs1`, `mds`. | `go run scripts/gen-certs/cmd/gen_node_certs/main.go` |
 | `make run-server` | Builds and runs local FileServer (`-id=fs1 -port=50051 -data=./fileserver_data`). | `./bin/fileserver ...` |
-| `make run-metaserver` | Builds and runs local MetaServer (`-port=50052`). | `./bin/metaserver -port=50052` |
+| `make run-metaserver` | Builds and runs local MetaServer (`-port=50052 -mongo_uri=...`; override with `MONGO_URI=...`). | `./bin/metaserver -port=50052 -mongo_uri=mongodb://127.0.0.1:27017/dvfs` |
 | `make run-admin` | Builds and runs Admin Console (`-port=8080 -mongo_uri=...`). | `./bin/admin -port=8080 ...` |
 | `make run-client` | Builds and runs interactive client (`USER=alice IP_ADDR=127.0.0.1`). | `./bin/client -username=$(USER) -ip_addr=$(IP_ADDR)` |
 | `make release` | Cross-compiles client and node packages for all platforms with SHA256 checksums. | `go run scripts/build-release/main.go` |
