@@ -88,9 +88,9 @@ func testNumericIDAllocation(t *testing.T, s storage.MetaStore) {
 	}
 }
 
-// testNodeIdentitySurvivesAddressChange is the regression test for the phantom
-// node bug: keying on address meant a DHCP lease change created a second,
-// permanently-healthy node with zero users that then captured every new user.
+// testNodeIdentitySurvivesAddressChange checks that a node is keyed on its
+// stable id, not its address: re-registering with a new address updates the
+// record in place and keeps its numeric id instead of creating a second node.
 func testNodeIdentitySurvivesAddressChange(t *testing.T, s storage.MetaStore) {
 	c := ctx(t)
 	original, err := s.UpsertFileServer(c, storage.FileServerRecord{
@@ -278,9 +278,9 @@ func testShareIdempotent(t *testing.T, s storage.MetaStore) {
 	}
 }
 
-// testMultipleSharesFromSameOwner is the regression test for the duplicate-key
-// bug: RootShare deduplicated on owner alone, so a second directory shared by
-// the same owner was silently dropped and the caller still saw success.
+// testMultipleSharesFromSameOwner checks that shares are keyed on
+// (grantee, owner, path), so one owner can share several directories with the
+// same grantee and each is stored as its own grant.
 func testMultipleSharesFromSameOwner(t *testing.T, s storage.MetaStore) {
 	c := ctx(t)
 	if err := s.AddShare(c, storage.ShareRecord{Grantee: "bob", Owner: "alice", Path: "alice/proj1", DisplayName: "proj1"}); err != nil {
@@ -295,10 +295,9 @@ func testMultipleSharesFromSameOwner(t *testing.T, s storage.MetaStore) {
 	}
 }
 
-// testShareRemovalIgnoresPathFormatting is the regression test for the
-// revocation failure: shares rebuilt by RegisterFileServer were stored
-// slash-prefixed, so RootUnshare's exact match never fired and the grantee
-// silently kept access.
+// testShareRemovalIgnoresPathFormatting checks that a share stored with one
+// path spelling ("/alice/proj") is revoked by a request using another
+// ("alice/proj"), because every path is normalised before it reaches the key.
 func testShareRemovalIgnoresPathFormatting(t *testing.T, s storage.MetaStore) {
 	c := ctx(t)
 	if err := s.AddShare(c, storage.ShareRecord{Grantee: "bob", Owner: "alice", Path: "/alice/proj", DisplayName: "proj"}); err != nil {

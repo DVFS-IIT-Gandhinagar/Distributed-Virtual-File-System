@@ -22,10 +22,6 @@ func TestRobustness_ContainsShare(t *testing.T) {
 	assert.True(t, containsShare(entries, "alice", "alice/a"))
 	assert.True(t, containsShare(entries, "bob", "bob/b"))
 	assert.False(t, containsShare(entries, "charlie", "charlie/c"))
-
-	// Matching must consider the path, not just the owner: treating an owner
-	// as already-shared regardless of directory is what silently dropped a
-	// second share from the same owner.
 	assert.False(t, containsShare(entries, "alice", "alice/other"))
 }
 
@@ -135,13 +131,10 @@ func TestRobustness_Hydrate_RetainsUsersWithUnregisteredHomeNode(t *testing.T) {
 	assert.True(t, aliceOK, "a user whose home node is registered keeps a live route")
 
 	// A user on an unregistered node must not get a bogus route into whichever
-	// node happens to occupy that numeric slot...
+	// node happens to occupy that numeric slot but must be retained as an orphaned
+	// user so that their original assignment is preserved.
 	_, ghostRouted := ms.users["ghost"]
 	assert.False(t, ghostRouted, "user on an unregistered node must not be given a live route")
-
-	// ...but must not be forgotten either. Forgetting the assignment is what
-	// lets GetRoots treat them as a brand-new user and hand them a different
-	// home node, stranding their data on the original one.
 	homeNode, orphaned := ms.orphanedUsers["ghost"]
 	assert.True(t, orphaned, "user on an unregistered node must be retained as orphaned")
 	assert.Equal(t, "fs-decommissioned", homeNode, "the original assignment must be preserved")
@@ -345,11 +338,10 @@ func TestRobustness_GetLeastLoadedHealthyFileServerLocked(t *testing.T) {
 	assert.Equal(t, uint64(2), id) // FS 2 has 2 users
 }
 
-// A DHCP lease change must not disturb the node's persisted user count. The
-// address-change path used to issue a whole-record upsert whose UserCount
-// defaulted to zero, which only became visible after a restart: hydration
-// reported the node as empty and the least-loaded picker sent every new user
-// to it.
+// A DHCP lease change must not disturb the node's persisted user count.
+// Otherwise, the address-change path could overwrite UserCount with zero.
+// After a restart, hydration would report the node as empty, causing the
+// least-loaded picker to send every new user to it.
 func TestRobustness_Heartbeat_AddressChangePreservesUserCount(t *testing.T) {
 	store := memory.New()
 	ctx := context.Background()
@@ -382,9 +374,7 @@ func TestRobustness_Heartbeat_AddressChangePreservesUserCount(t *testing.T) {
 	assert.Equal(t, countBefore, snap.FileServers[0].UserCount, "the user count must survive an address change")
 }
 
-// A registration that conflicts must leave no trace: the old code mutated the
-// node record and reassigned an arbitrary prefix of the user list before
-// discovering the conflict, then returned without rollback or a store write.
+// A registration that conflicts must leave no trace.
 func TestRobustness_Registration_ConflictLeavesNoPartialState(t *testing.T) {
 	store := memory.New()
 	ctx := context.Background()
@@ -440,11 +430,6 @@ func TestRobustness_Registration_ConflictLeavesNoPartialState(t *testing.T) {
 }
 
 // A returning node clears its orphaned accounts even when it reports no users.
-//
-// req.Users comes from a disk scan, so a node whose data directory was empty or
-// not yet mounted at boot registers with an empty user list. Clearing orphans
-// only for users named in that list would leave those accounts locked out
-// permanently, which is worse than the bug the orphan marker exists to prevent.
 func TestRobustness_Registration_ClearsOrphansWhenNodeReportsNoUsers(t *testing.T) {
 	store := memory.New()
 	ctx := context.Background()

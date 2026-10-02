@@ -547,10 +547,7 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[ADMIN] Node removed by admin: fsID=%s name=%s address=%s", fsID, displayName, fsAddr)
 
-	// The metaserver owns cluster membership; this console never edits the
-	// store directly. Without a metaserver address the node is only hidden from
-	// this console, and the response must say so rather than implying the
-	// cluster was changed.
+	// The metaserver owns cluster membership; this console never edits the store directly.
 	var msErr string
 	switch {
 	case msAddr == "":

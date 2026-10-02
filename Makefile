@@ -75,8 +75,7 @@ run-server: build
 	@echo "Starting file server..."
 	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
 
-# MongoDB connection for the metaserver and admin console. Both refuse to start
-# without one, since empty routing state would strand every user.
+# MongoDB connection for the metaserver and admin console.
 MONGO_URI ?= mongodb://127.0.0.1:27017/dvfs
 
 # Run meta server

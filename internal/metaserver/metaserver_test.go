@@ -52,8 +52,7 @@ func seedFileServer(t *testing.T, ms *MetaServer, nodeID, addr string, userCount
 	return numericID
 }
 
-// TestMetaServerStateSurvivesRestart is the successor to the old
-// SaveState/loadState round-trip: state written through the handlers must be
+// TestMetaServerStateSurvivesRestart: state written through the handlers must be
 // recovered verbatim by a fresh MetaServer sharing the same store.
 func TestMetaServerStateSurvivesRestart(t *testing.T) {
 	store := memory.New()

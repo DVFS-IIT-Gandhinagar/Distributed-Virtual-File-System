@@ -17,9 +17,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-// newStoreBackedAdmin returns an AdminServer that reads the given store but
-// writes no files. Constructing with a nil store disables the snapshot,
-// history, alert and tombstone paths; the store is attached afterwards.
+// newStoreBackedAdmin returns an AdminServer that reads the given store but writes no files.
 func newStoreBackedAdmin(store storage.MetaStore) *AdminServer {
 	srv := NewAdminServer(nil, "")
 	srv.store = store
@@ -220,8 +218,7 @@ func TestHandleRemoveNode_WithMetaServerDeregister(t *testing.T) {
 
 // With no metaserver address the console cannot change the cluster; the node
 // stays in the store. The tombstone must still keep it hidden from the console
-// across refreshes, until the node proves it was redeployed by heartbeating
-// again. The response must also admit that the cluster was not changed.
+// across refreshes, until the node proves it was redeployed by heartbeating again.
 func TestHandleRemoveNode_NoResurrectionOnRefresh(t *testing.T) {
 	ctx := context.Background()
 	store := memory.New()

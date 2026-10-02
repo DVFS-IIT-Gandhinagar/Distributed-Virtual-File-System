@@ -19,10 +19,6 @@ type SharedDirEntry struct {
 }
 
 // MetaServer coordinates user-to-fileserver routing and shared-root visibility.
-//
-// The in-memory maps are the read path: GetRoots and Navigate never touch the
-// store, so a backend outage is invisible to clients already in the index. The
-// MetaStore is the durable record, written after ms.mu is released.
 type MetaServer struct {
 	store storage.MetaStore
 
@@ -31,10 +27,7 @@ type MetaServer struct {
 	shared      map[string][]SharedDirEntry       // grantee -> visible roots
 
 	// orphanedUsers holds accounts whose home node is not currently registered
-	// (username -> the node id they are assigned to). They have no live route,
-	// but they must never be treated as unassigned: reassigning one would
-	// strand the data sitting on its original node. Entries are cleared when
-	// that node registers again.
+	// (username -> the node id they are assigned to).
 	orphanedUsers map[string]string
 
 	// allowUserPurge permits a registration to delete user mappings it did not
@@ -56,11 +49,6 @@ const (
 )
 
 // deferredWrites collects store mutations to be run once ms.mu is released.
-//
-// Store calls are network I/O. Issuing them under the global mutex would put a
-// round-trip — and, during a replica-set election, a multi-second stall — in
-// front of every student's GetRoots and Navigate. This mirrors the discipline
-// the fileserver already applies to its metaserver RPCs.
 type deferredWrites []func(context.Context) error
 
 func (d deferredWrites) run(ctx context.Context) error {
@@ -73,10 +61,6 @@ func (d deferredWrites) run(ctx context.Context) error {
 }
 
 // NewMetaServer builds a MetaServer and hydrates it from the store.
-//
-// A store that cannot be read is fatal: starting with empty routing state would
-// silently strand every user and, worse, let the next registration repopulate
-// it from a single node's view.
 func NewMetaServer(ctx context.Context, store storage.MetaStore) (*MetaServer, error) {
 	if store == nil {
 		return nil, fmt.Errorf("metaserver: a MetaStore is required")
@@ -138,15 +122,6 @@ func (ms *MetaServer) hydrate(ctx context.Context) error {
 			// The user's home node is not currently registered -- it may be
 			// down, renamed, or decommissioned. Record the account as orphaned
 			// rather than dropping it.
-			//
-			// Dropping it is not safe: an unknown user is an *unassigned* user,
-			// so the next GetRoots would hand them a brand-new home node and
-			// overwrite their stored assignment. Their data would stay on the
-			// original node, unreachable, with nothing left pointing at it.
-			//
-			// Orphaned users are not in ms.users, so they are never counted
-			// towards a node's load, but GetRoots refuses to reassign them and
-			// Navigate reports the node as unavailable until it comes back.
 			log.Printf("[METASERVER] User %s references unregistered node %q; retaining assignment without a live route", u.Username, u.HomeNodeID)
 			ms.orphanedUsers[u.Username] = u.HomeNodeID
 			continue

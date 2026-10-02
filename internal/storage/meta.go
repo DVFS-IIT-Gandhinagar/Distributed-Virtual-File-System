@@ -1,14 +1,12 @@
-// Package storage defines the persistence seam for DVFS cluster metadata.
+// Package storage is the persistence seam for DVFS cluster metadata. The
+// metaserver keeps its routing tables in memory and uses a MetaStore only as
+// their durable record. Two rules bind every implementation:
 //
-// The metaserver keeps its routing tables in memory and treats a MetaStore as
-// the durable record of them. Two rules govern every implementation:
-//
-//  1. Reads are served from the caller's in-memory cache, hydrated once at boot
-//     via LoadSnapshot. Store reads are not on the request path.
-//  2. Every write is a targeted, idempotent mutation of a single record. No
-//     implementation may require the caller to hand over whole-state snapshots,
-//     because callers invoke these methods *after* releasing their mutex and
-//     concurrent writes may therefore arrive out of order.
+//  1. LoadSnapshot is the only read, once at boot. Requests are then served
+//     from memory, so a slow or unreachable backend never stalls a client.
+//  2. Every write is a targeted, idempotent change to one record. Callers
+//     write after releasing their mutex, so concurrent writes can arrive in
+//     any order. A whole-state save would let a stale one overwrite a newer.
 package storage
 
 import (
@@ -70,18 +68,11 @@ type MetaStore interface {
 	LoadSnapshot(ctx context.Context) (*MetaSnapshot, error)
 
 	// UpsertFileServer records a node, allocating a NumericID on first sight and
-	// returning the stable one thereafter. Fields other than NodeID are updated
-	// in place, so a node that changes address keeps its identity.
+	// returning the stable one thereafter.
 	UpsertFileServer(ctx context.Context, rec FileServerRecord) (uint64, error)
 
 	// RemoveFileServer deletes a node's record. Removing an absent node is not
 	// an error, so an admin can retry a decommission safely.
-	//
-	// It touches only the node document. The caller removes the node first and
-	// its users and shares after, so that an interrupted sequence leaves users
-	// pointing at an absent node, which hydration treats as orphaned and
-	// refuses to reassign. The reverse order could delete users while their
-	// node still exists, and they would then be silently placed elsewhere.
 	RemoveFileServer(ctx context.Context, nodeID string) error
 
 	// RecordHeartbeat refreshes liveness for one node. Best-effort: the caller
@@ -92,11 +83,7 @@ type MetaStore interface {
 	SetFileServerStatus(ctx context.Context, nodeID, status string) error
 
 	// SetAddress records a node's new address, leaving every other field alone.
-	//
-	// This is deliberately targeted rather than a full UpsertFileServer: a
-	// whole-record write would carry a UserCount the caller did not intend to
-	// change, and a DHCP lease change would silently reset the node's persisted
-	// user count to zero.
+	// in case of a DHCP lease change.
 	SetAddress(ctx context.Context, nodeID, address string) error
 
 	// SetUserCount records how many users a node currently hosts.
@@ -135,12 +122,6 @@ type MetaStore interface {
 
 // NormalizeSharePath canonicalises a share path to the single on-the-wire form:
 // forward slashes, no leading or trailing slash, no "." segments.
-//
-// This exists because the three historical share call sites disagreed:
-// RegisterFileServer stored "/alice/proj" while RootShare and RootUnshare used
-// "alice/proj", so an unshare silently matched nothing for any share that had
-// survived a fileserver restart. Every path crossing this package goes through
-// here.
 func NormalizeSharePath(p string) string {
 	p = strings.ReplaceAll(p, "\\", "/")
 	segments := strings.Split(p, "/")

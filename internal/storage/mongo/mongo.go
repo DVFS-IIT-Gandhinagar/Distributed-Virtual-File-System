@@ -1,9 +1,4 @@
 // Package mongo implements storage.MetaStore on MongoDB.
-//
-// Every write is a targeted single-document operation ($set on one field,
-// $setOnInsert for allocation, a keyed delete). Nothing here re-serialises
-// whole-cluster state, which is the property that removes the write
-// amplification of the previous JSON snapshot file.
 package mongo
 
 import (
@@ -37,15 +32,10 @@ const (
 
 // Config configures the Mongo-backed MetaStore.
 type Config struct {
-	// URI is the standard MongoDB connection string. For the campus replica set:
-	// mongodb://user:pass@dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0
-	URI string
-	// Database overrides the database name. When empty, the database is taken
-	// from the URI path (the conventional place to put it), and only then does
-	// it fall back to DefaultDatabase.
-	Database string
-	// AppName appears in Mongo server logs and profiler output.
-	AppName string
+	URI      string // standard MongoDB connection string, including credentials and replica set
+	Database string // database name
+	AppName  string // app name appearing in server logs and profiler output
+
 	// ServerSelectionTimeout bounds how long a call waits for a reachable
 	// primary. Kept short so a replica-set election surfaces as a fast error
 	// rather than a stalled RPC.
@@ -74,13 +64,10 @@ type Store struct {
 	opTimeout time.Duration
 
 	fileServers *mongo.Collection
-	// heartbeats writes to the same collection with w:1. Losing a heartbeat
-	// write is harmless (in-memory state already has it, and liveness is
-	// re-established within one interval), so it is not worth a majority ack.
-	heartbeats *mongo.Collection
-	users      *mongo.Collection
-	shares     *mongo.Collection
-	counters   *mongo.Collection
+	heartbeats  *mongo.Collection
+	users       *mongo.Collection
+	shares      *mongo.Collection
+	counters    *mongo.Collection
 }
 
 // Open connects to MongoDB and verifies reachability.
@@ -132,11 +119,6 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 }
 
 // resolveDatabase decides which database to use.
-//
-// Precedence is explicit config, then the database in the URI path, then the
-// default. Honouring the URI matters because putting the database there is the
-// MongoDB convention, and silently ignoring it would send writes to the wrong
-// place with no error.
 func resolveDatabase(cfg Config) (string, error) {
 	if cfg.Database != "" {
 		return cfg.Database, nil
@@ -181,20 +163,13 @@ type userDoc struct {
 	UpdatedAt  time.Time `bson:"updated_at"`
 }
 
-// shareKeyDoc is the compound _id of a share. Making the natural key the _id
-// gives uniqueness for free and turns revocation into a keyed delete, which is
-// what makes duplicate grants and missed unshares structurally impossible.
+// shareKeyDoc is a share's compound _id. Using the natural key as _id gives
+// uniqueness for free and makes revocation a keyed delete.
 //
-// WARNING: MongoDB compares subdocument _id values by exact binary equality,
-// which includes key order. {grantee,owner,path} and {owner,grantee,path} are
-// two different keys: a lookup with the fields reordered matches nothing, and
-// an insert with them reordered creates a *duplicate* grant rather than being
-// rejected. Verified against MongoDB 7.
-//
-// Every read and write therefore marshals this struct, never a bson.M (whose
-// key order is unspecified) and never an inline bson.D. Do not reorder these
-// fields, and do not construct a share _id any other way — silently broken
-// revocation is the failure mode.
+// MongoDB compares subdocument _ids byte-for-byte, so field order is part of
+// the key: a reordered lookup matches nothing and a reordered insert creates a
+// duplicate grant. Always build share _ids from this struct, never from a
+// bson.M or an inline bson.D, and do not reorder these fields.
 type shareKeyDoc struct {
 	Grantee string `bson:"grantee"`
 	Owner   string `bson:"owner"`
@@ -523,10 +498,7 @@ func (s *Store) EnsureIndexes(ctx context.Context) error {
 	if _, err := s.fileServers.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{
 			// Sparse, because a unique index treats a *missing* field as null
-			// and would then reject the second document that lacks it. Every
-			// document this package writes sets numeric_id, but a hand-edited
-			// or externally-imported record that omits it would otherwise make
-			// the next node registration fail with a duplicate-key error.
+			// and would then reject the second document that lacks it.
 			Keys:    bson.D{{Key: "numeric_id", Value: 1}},
 			Options: options.Index().SetName("numeric_id_unique").SetUnique(true).SetSparse(true),
 		},

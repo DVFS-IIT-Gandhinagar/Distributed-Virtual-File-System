@@ -145,12 +145,6 @@ func TestMockSSHExecutor(t *testing.T) {
 	}
 }
 
-// Binary restarts must pass the flags the current binaries actually accept.
-// The metaserver and admin console take -mongo_uri and reject the -state_file
-// flag they used to take, so a stale flag here does not degrade the restart --
-// Go's flag package exits non-zero and the service never comes back. Nothing
-// else in the suite exercises these command strings, which is how the stale
-// flag survived the migration.
 func TestFormatCommandBinaryRestartUsesMongoURI(t *testing.T) {
 	orchestrator := &Orchestrator{defaultRepoPath: "/home/ubuntu/repo"}
 	params := &NodeRestartParams{

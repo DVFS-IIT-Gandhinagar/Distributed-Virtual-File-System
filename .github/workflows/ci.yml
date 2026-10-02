@@ -11,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      # Exercises the Mongo storage backend against a real server. Without this
-      # the backend conformance suite skips and only the in-memory double runs.
       mongo:
         image: mongo:7
         ports:

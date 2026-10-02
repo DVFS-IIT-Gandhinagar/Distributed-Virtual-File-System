@@ -80,7 +80,7 @@ message RootUnshareResponse {
 
 message HeartbeatRequest {
   string address = 1;
-  string fs_id = 2; // stable node identity; see RegisterFileServerRequest
+  string fs_id = 2;
 }
 
 message HeartbeatResponse {
@@ -90,9 +90,6 @@ message HeartbeatResponse {
 
 message DeregisterFileServerRequest {
   string address = 1;
-  // Stable node identity (see RegisterFileServerRequest). Preferred over
-  // address, which can change with a DHCP lease; address remains as a
-  // fallback for older callers.
   string fs_id = 2;
 }
 

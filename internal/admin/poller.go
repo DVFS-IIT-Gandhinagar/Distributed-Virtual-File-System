@@ -30,9 +30,6 @@ func deriveMetricsURL(address string) string {
 
 // refreshNodes reads cluster membership from the shared metadata store and
 // registers any newly-discovered fileservers into the active node pool.
-//
-// Reading from the store rather than the metaserver's local state file is what
-// lets the admin console run on a different machine from the metaserver.
 func (a *AdminServer) refreshNodes() {
 	if a.store == nil {
 		return
@@ -61,11 +58,7 @@ func (a *AdminServer) refreshNodes() {
 	for _, u := range snap.Users {
 		numeric, ok := numericByNodeID[u.HomeNodeID]
 		if !ok {
-			// The account is real and still assigned; its node is just not in
-			// the cluster table right now. Say so rather than dropping the user
-			// from the console silently, which would make a decommissioned node
-			// look like the accounts on it had never existed. The metaserver
-			// logs and retains the same case.
+			// The account is real and still assigned; its node is just not in the cluster table right now.
 			log.Printf("[ADMIN] User %s references unregistered node %q; omitting from the node view", u.Username, u.HomeNodeID)
 			continue
 		}

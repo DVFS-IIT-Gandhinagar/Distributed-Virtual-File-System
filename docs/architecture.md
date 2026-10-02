@@ -441,6 +441,7 @@ DVFS defines three Protocol Buffer service interfaces in `api/`: `FileServer` (`
 | `GetRoots` | Unary | `GetRootsRequest` | `GetRootsResponse` | Returns list of accessible personal and shared roots for interactive client menu. Protected by Google user token. |
 | `RootShare` | Unary | `RootShareRequest` | `RootShareResponse` | Indexes a shared directory mapping in the MongoDB `shares` collection, keyed on (grantee, owner, path). Protected by mTLS cert verification. |
 | `RootUnshare` | Unary | `RootUnshareRequest` | `RootUnshareResponse` | Removes an indexed shared directory mapping. Protected by mTLS cert verification. |
+| `DeregisterFileServer` | Unary | `DeregisterFileServerRequest` | `DeregisterFileServerResponse` | Admin-initiated decommission: removes the node and releases every user assigned to it, including users orphaned on it, so they are placed afresh on next login. Identifies the node by `fs_id`, falling back to `address`. Store writes go node, then users, then shares, with in-memory rollback on failure. Accepts admin credentials or an mTLS cluster cert. |
 
 #### ClientCallback Service (`api/callback/callback.proto`)
 

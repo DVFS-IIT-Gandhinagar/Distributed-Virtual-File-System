@@ -732,7 +732,7 @@ func (x *RootUnshareResponse) GetError() string {
 type HeartbeatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	FsId          string                 `protobuf:"bytes,2,opt,name=fs_id,json=fsId,proto3" json:"fs_id,omitempty"` // stable node identity; see RegisterFileServerRequest
+	FsId          string                 `protobuf:"bytes,2,opt,name=fs_id,json=fsId,proto3" json:"fs_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -834,12 +834,9 @@ func (x *HeartbeatResponse) GetError() string {
 }
 
 type DeregisterFileServerRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Address string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	// Stable node identity (see RegisterFileServerRequest). Preferred over
-	// address, which can change with a DHCP lease; address remains as a
-	// fallback for older callers.
-	FsId          string `protobuf:"bytes,2,opt,name=fs_id,json=fsId,proto3" json:"fs_id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	FsId          string                 `protobuf:"bytes,2,opt,name=fs_id,json=fsId,proto3" json:"fs_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

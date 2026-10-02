@@ -179,15 +179,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		})
 	}
 
-	// Clear orphan markers pointing at this node, whether or not it reported the
-	// users by name.
-	//
-	// Keying this off req.Users alone is not enough: req.Users comes from a disk
-	// scan, so a node whose data directory was empty or not yet mounted at boot
-	// registers with zero users. Its orphaned accounts would then stay orphaned
-	// forever, locked out with no way back short of a metaserver restart. The
-	// node being present is what makes them routable again; the account keeps
-	// its stored placement either way.
+	// Clear orphan markers pointing at this node, whether or not it reported the users by name.
 	for username, homeNode := range ms.orphanedUsers {
 		if homeNode == nodeID {
 			delete(ms.orphanedUsers, username)
@@ -342,17 +334,11 @@ func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (
 
 	// Liveness is best-effort by design: the in-memory table already reflects
 	// it, and a missed write is corrected by the next heartbeat one interval
-	// later. Failing the RPC here would take routing down for a transient
-	// backend blip.
+	// later.
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if addressChanged {
-		// Targeted update, not a whole-record upsert. An upsert here would also
-		// write UserCount, which this handler never computed, so it defaulted to
-		// zero and every DHCP lease change silently reset the node's persisted
-		// user count. That stayed invisible until the next metaserver restart,
-		// when hydration reported the node as empty and the least-loaded picker
-		// sent every new user to it.
+		// Targeted update, not a whole-record upsert.
 		if err := ms.store.SetAddress(writeCtx, storedNodeID, req.Address); err != nil {
 			log.Printf("[METASERVER] WARN: could not persist address change for %s: %v", storedNodeID, err)
 		}
@@ -376,8 +362,7 @@ func (h *GRPCHandler) Navigate(ctx context.Context, req *pb.NavigateRequest) (*p
 
 	ms := h.MetaServer
 	// Read-only: isHealthyLocked evaluates the heartbeat deadline directly, so
-	// routing is correct without mutating Status here. The monitor goroutine
-	// owns the stale transition and its persistence.
+	// routing is correct without mutating Status here.
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
@@ -642,14 +627,6 @@ func removeShareEntry(entries []SharedDirEntry, owner, path string) []SharedDirE
 
 // DeregisterFileServer removes a node and releases every user assigned to it,
 // so they are placed afresh on their next login.
-//
-// This is an admin-initiated decommission and is deliberately destructive:
-// whatever data is still on the node becomes unreachable through DVFS. It is
-// the complement of the orphan marker. That marker protects users whose node
-// is *transiently* absent by refusing to reassign them; deregistering is the
-// operator saying the absence is permanent, which releases them. Orphaned
-// users pointing at the node are released too, so a node that was already
-// gone when the metaserver last started can still be cleaned up.
 func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.DeregisterFileServerRequest) (*pb.DeregisterFileServerResponse, error) {
 	if req.FsId == "" && req.Address == "" {
 		return &pb.DeregisterFileServerResponse{Success: false, Error: "fs_id or address is required"}, nil
@@ -699,10 +676,8 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 		return &pb.DeregisterFileServerResponse{Success: true}, nil
 	}
 
-	// Snapshot enough to undo the in-memory change if the store rejects it.
-	// A failed decommission must leave the cluster exactly as it was, so the
-	// operator can simply retry rather than being left with memory and store
-	// disagreeing.
+	// Snapshot enough to undo the in-memory change if the store rejects it
+	// to maintain consistency between memory and the store.
 	var prevNode *domain.FileServerInfo
 	if exists {
 		prevNode = ms.fileservers[fsID]
@@ -730,11 +705,7 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 	}
 	ms.mu.Unlock()
 
-	// Node first, then users, then shares. If this sequence is interrupted the
-	// users are left pointing at an absent node, which hydration treats as
-	// orphaned and refuses to reassign. The reverse order could leave users
-	// deleted while their node still exists, and they would then be silently
-	// placed elsewhere on their next login.
+	// Node first, then users, then shares.
 	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	err := func() error {

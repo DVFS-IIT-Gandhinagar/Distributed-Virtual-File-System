@@ -24,9 +24,7 @@ const (
 
 // NodeState represents the tracked state and latest telemetry of a single fileserver.
 type NodeState struct {
-	FsID string `json:"fsID"`
-	// NodeID is the fileserver's stable -id identity ("fs1"), distinct from the
-	// dense numeric FsID the UI displays.
+	FsID               string             `json:"fsID"`
 	NodeID             string             `json:"nodeID"`
 	DisplayID          int                `json:"displayID"`
 	DisplayName        string             `json:"displayName"`
@@ -70,9 +68,6 @@ type AdminServer struct {
 }
 
 // NewAdminServer creates a new AdminServer instance.
-//
-// A nil store yields an offline server that neither discovers nodes nor writes
-// telemetry to disk; tests rely on that to stay hermetic.
 func NewAdminServer(store storage.MetaStore, staticDir string) *AdminServer {
 	snapshotPath := "./bin/admin_metrics_snapshot.json"
 	historyPath := "./bin/command_history.json"

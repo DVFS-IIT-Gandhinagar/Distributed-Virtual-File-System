@@ -11,6 +11,10 @@ cd "$REPO_DIR"
 ADMIN_PORT="${ADMIN_PORT:-8080}"
 MONGO_URI="${MONGO_URI:-mongodb://127.0.0.1:27017/dvfs}"
 MONGO_DB="${MONGO_DB:-dvfs}"
+# gRPC address of the metaserver, used when an admin removes a node from the
+# cluster. The binary reads this variable itself; leave it unset to resolve
+# the metaserver from the discovery Gist instead.
+DVFS_METASERVER_ADDR="${DVFS_METASERVER_ADDR:-}"
 STATIC_DIR="${STATIC_DIR:-./cmd/admin/static}"
 SSH_USER="${SSH_USER:-$(id -un 2>/dev/null || whoami)}"
 REPO_PATH="${REPO_PATH:-$HOME/Distributed-Virtual-File-System}"
@@ -73,6 +77,7 @@ echo "[STARTUP] Starting DVFS Admin Console..."
 echo "[STARTUP] Port:       ${ADMIN_PORT}"
 echo "[STARTUP] Mongo URI: ${MONGO_URI}"
 echo "[STARTUP] Mongo DB:  ${MONGO_DB}"
+echo "[STARTUP] MDS Addr:   ${DVFS_METASERVER_ADDR:-<gist discovery>}"
 echo "[STARTUP] Static Dir: ${STATIC_DIR}"
 echo "[STARTUP] SSH User:   ${SSH_USER}"
 echo "[STARTUP] SSH Key:    ${SSH_KEY}"

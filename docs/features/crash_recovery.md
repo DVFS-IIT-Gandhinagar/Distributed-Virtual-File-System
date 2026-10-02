@@ -102,8 +102,6 @@ The MetaServer coordinator used to persist its complete operational state in `me
 }
 ```
 
-The bullets below describe the *former* JSON behaviour, alongside what replaced it:
-
 - **Startup Reconstitution**: `NewMetaServer(*stateFile)` used to parse the JSON snapshot at
   launch. It now takes a `MetaStore` and issues a single `LoadSnapshot` read, restoring known
   fileservers, user-to-fileserver assignments, and shared directory registries into the
@@ -120,7 +118,10 @@ The bullets below describe the *former* JSON behaviour, alongside what replaced 
   as *orphaned* rather than dropped. They get no live route, and `GetRoots` refuses to assign
   them a new home node, because reassignment would overwrite their stored placement and strand
   whatever data is still on the original node. The account becomes routable again as soon as
-  that node registers. The boot log reports the count as `orphaned_users`.
+  that node registers. The boot log reports the count as `orphaned_users`. An operator who
+  knows the node is gone for good releases its users with the admin console's remove-node
+  action, which calls `DeregisterFileServer`: released users are placed afresh on their next
+  login, and whatever data remained on the old node is no longer reachable through DVFS.
 
 ### 2.3 Heartbeat & Stale Transitions
 - **FileServer Heartbeat Loop**: A background goroutine in `internal/fileserver/msclient.go` executes `Heartbeat(address)` to the MetaServer every 5 seconds (configurable via `-meta_heartbeat_interval`).

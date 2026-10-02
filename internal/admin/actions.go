@@ -14,14 +14,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// defaultMongoURI is the single-node development default, matching the one the
-// startup scripts and systemd units use.
 const defaultMongoURI = "mongodb://127.0.0.1:27017/dvfs"
 
 // resolveMongoURI picks the URI to hand a binary restarted over SSH.
-//
-// The admin console is itself started with a URI, so MONGO_URI is normally set
-// in its environment and the restarted process should inherit the same cluster.
 // Falling back to the local default keeps single-host deployments working.
 func resolveMongoURI() string {
 	if uri := strings.TrimSpace(os.Getenv("MONGO_URI")); uri != "" {
@@ -198,10 +193,6 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		}
 
 		if req.RestartMode == "binary" {
-			// Cluster metadata lives in MongoDB, so both binaries need a URI and
-			// refuse to start without one. They also reject the -state_file flag
-			// they used to take, so a stale flag here does not degrade the
-			// restart -- it makes the service fail to come back at all.
 			mongoURI := resolveMongoURI()
 
 			switch targetService {
