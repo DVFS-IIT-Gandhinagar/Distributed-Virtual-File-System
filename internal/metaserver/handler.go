@@ -2,8 +2,10 @@ package metaserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
@@ -35,13 +37,33 @@ func (h *GRPCHandler) removeSharesByOwnerLocked(rootUser string) {
 	}
 }
 
-// resolveNodeIDLocked determines the stable node identity for a request,
-// falling back to the address for fileservers predating the fs_id field.
+// legacyNodeIDPrefix marks a node that registered before fs_id existed and is
+// therefore keyed on its address. Such an entry is the only kind a later
+// registration carrying a real fs_id may adopt.
+const legacyNodeIDPrefix = "addr:"
+
+// resolveNodeID determines the stable node identity for a request, falling
+// back to the address for fileservers predating the fs_id field.
 func resolveNodeID(fsID, address string) string {
 	if fsID != "" {
 		return fsID
 	}
-	return "addr:" + address
+	return legacyNodeIDPrefix + address
+}
+
+// adoptableLegacyNodeLocked finds an address-keyed entry that a registration
+// reporting a real fs_id from that same address may take over. A real id at an
+// address some other id used to have is a different machine, never adopted.
+func (ms *MetaServer) adoptableLegacyNodeLocked(address string) (uint64, string, bool) {
+	legacyID, found := ms.findFileServerByAddressLocked(address)
+	if !found {
+		return 0, "", false
+	}
+	info := ms.fileservers[legacyID]
+	if info == nil || !strings.HasPrefix(info.NodeID, legacyNodeIDPrefix) {
+		return 0, "", false
+	}
+	return legacyID, info.NodeID, true
 }
 
 // registrationConflictLocked returns an error message for the first user this
@@ -89,16 +111,34 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 	ms.mu.Lock()
 
+	nowUnix := time.Now().Unix()
 	fsID, exists := ms.findFileServerByNodeIDLocked(nodeID)
-	if !exists {
-		// Legacy fallback: adopt an existing address-keyed entry so upgrading a
-		// fileserver does not orphan its users.
-		if legacyID, legacyFound := ms.findFileServerByAddressLocked(req.Address); legacyFound {
-			fsID = legacyID
-			exists = true
-			if info := ms.fileservers[fsID]; info != nil {
-				info.NodeID = nodeID
-			}
+
+	// A fileserver upgraded from a build without fs_id is still keyed on its
+	// address. Its first registration with a real id adopts that entry, so its
+	// users and numeric id carry over. The rename is applied only after
+	// validation, below.
+	adoptFrom := ""
+	if !exists && req.FsId != "" {
+		if legacyID, legacyNodeID, ok := ms.adoptableLegacyNodeLocked(req.Address); ok {
+			fsID, exists, adoptFrom = legacyID, true, legacyNodeID
+		}
+	}
+
+	// Two processes claiming one -id (the flag defaults to "fs1") would share
+	// a record whose address flips on every heartbeat, routing users to a disk
+	// that does not hold their data. Refuse the newcomer while the holder is
+	// alive. A node that merely restarted on a new address is accepted once
+	// its old registration has gone stale, which the fileserver's retry loop
+	// reaches on its own.
+	if exists && adoptFrom == "" {
+		if info := ms.fileservers[fsID]; info != nil && info.Address != req.Address && ms.isHealthyLocked(info, nowUnix) {
+			ms.mu.Unlock()
+			msg := fmt.Sprintf("fs_id %q is already registered from %s and still sending heartbeats; "+
+				"every fileserver needs a unique -id (a node that moved to a new address is accepted once the old registration expires)",
+				nodeID, info.Address)
+			log.Printf("[METASERVER] ERROR: %s (rejected %s)", msg, req.Address)
+			return &pb.RegisterFileServerResponse{Success: false, Error: msg}, nil
 		}
 	}
 
@@ -113,6 +153,11 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		ms.mu.Unlock()
 		log.Printf("[METASERVER] ERROR: %s", msg)
 		return &pb.RegisterFileServerResponse{Success: false, Error: msg}, nil
+	}
+
+	if adoptFrom != "" {
+		ms.fileservers[fsID].NodeID = nodeID
+		log.Printf("[METASERVER] Node %s re-keyed from legacy identity %q", nodeID, adoptFrom)
 	}
 
 	if !exists {
@@ -133,26 +178,29 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 
 		ms.mu.Lock()
 		fsID = numericID
-		created := false
-		if ms.fileservers[fsID] == nil {
-			ms.fileservers[fsID] = &domain.FileServerInfo{NodeID: nodeID}
-			created = true
+
+		// The store is the only allocator and memory was hydrated from it, so a
+		// numeric id that memory already holds means the store's counter has
+		// fallen behind its records. Silently reusing the slot would overwrite
+		// another node's identity; refuse and make it visible instead.
+		if other := ms.fileservers[fsID]; other != nil {
+			ms.mu.Unlock()
+			msg := fmt.Sprintf("store allocated numeric id %d for %s, but node %s already holds it; the metaserver's counters collection is out of step with its fileservers",
+				fsID, nodeID, other.NodeID)
+			h.removeProvisionalNode(ctx, nodeID)
+			log.Printf("[METASERVER] ERROR: %s", msg)
+			return &pb.RegisterFileServerResponse{Success: false, Error: "failed to persist metaserver state"}, nil
 		}
+		ms.fileservers[fsID] = &domain.FileServerInfo{NodeID: nodeID}
 
 		// The lock was released for the allocation, so another registration may
 		// have claimed one of these users meanwhile. The node document already
 		// exists, so undo it rather than leave a node that never finished
 		// registering and would look healthy to placement after a restart.
 		if msg := ms.registrationConflictLocked(nodeID, fsID, true, req.Users); msg != "" {
-			if created {
-				delete(ms.fileservers, fsID)
-			}
+			delete(ms.fileservers, fsID)
 			ms.mu.Unlock()
-			cleanupCtx, cancelCleanup := context.WithTimeout(ctx, 10*time.Second)
-			if rmErr := ms.store.RemoveFileServer(cleanupCtx, nodeID); rmErr != nil {
-				log.Printf("[METASERVER] WARN: could not remove provisional node %s after rejected registration: %v", nodeID, rmErr)
-			}
-			cancelCleanup()
+			h.removeProvisionalNode(ctx, nodeID)
 			log.Printf("[METASERVER] ERROR: %s", msg)
 			return &pb.RegisterFileServerResponse{Success: false, Error: msg}, nil
 		}
@@ -282,8 +330,17 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 	ms.mu.Unlock()
 
 	// The node record itself is written first so later share and user writes
-	// never reference a node the store has not seen.
+	// never reference a node the store has not seen. A legacy adoption is
+	// re-keyed before that, so the record keeps its numeric id.
 	writes = append(deferredWrites{func(c context.Context) error {
+		if adoptFrom != "" {
+			err := ms.store.RenameFileServer(c, adoptFrom, nodeID)
+			// Absent means a previous attempt already moved it (or it was never
+			// written); either way there is nothing left to re-key.
+			if err != nil && !errors.Is(err, storage.ErrNotFound) {
+				return err
+			}
+		}
 		_, err := ms.store.UpsertFileServer(c, storage.FileServerRecord{
 			NodeID:            nodeID,
 			Address:           address,
@@ -308,6 +365,16 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 	return &pb.RegisterFileServerResponse{Success: true}, nil
 }
 
+// removeProvisionalNode deletes a node document that was allocated for a
+// registration which then had to be refused.
+func (h *GRPCHandler) removeProvisionalNode(ctx context.Context, nodeID string) {
+	cleanupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := h.MetaServer.store.RemoveFileServer(cleanupCtx, nodeID); err != nil {
+		log.Printf("[METASERVER] WARN: could not remove provisional node %s after rejected registration: %v", nodeID, err)
+	}
+}
+
 func containsShare(entries []SharedDirEntry, owner, path string) bool {
 	for _, e := range entries {
 		if e.Owner == owner && e.Path == path {
@@ -328,10 +395,10 @@ func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (
 	ms := h.MetaServer
 	ms.mu.Lock()
 
+	// Identity only. Matching on address here would let an unknown id refresh
+	// (or re-address) whichever node happens to hold that address. A legacy
+	// fileserver with no fs_id resolves to its addr: key and is found as such.
 	fsID, exists := ms.findFileServerByNodeIDLocked(nodeID)
-	if !exists {
-		fsID, exists = ms.findFileServerByAddressLocked(req.Address)
-	}
 	if !exists {
 		ms.mu.Unlock()
 		log.Printf("[METASERVER] WARN: heartbeat from unknown file server node=%s address=%s", nodeID, req.Address)
@@ -345,17 +412,23 @@ func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (
 		return &pb.HeartbeatResponse{Success: false, Error: "file server entry missing"}, nil
 	}
 
+	// A fileserver's advertised address is fixed for the life of the process,
+	// so a heartbeat from elsewhere is either a second process using the same
+	// -id or a restarted node that has not re-registered yet. Both have to go
+	// through RegisterFileServer, which decides whether the claim is allowed.
+	if fsInfo.Address != req.Address {
+		registeredAddr := fsInfo.Address
+		ms.mu.Unlock()
+		log.Printf("[METASERVER] WARN: heartbeat for %s from %s, but it is registered from %s; sender must re-register", nodeID, req.Address, registeredAddr)
+		return &pb.HeartbeatResponse{Success: false, Error: fmt.Sprintf(
+			"fs_id %q is registered from %s, not %s; re-register (another fileserver may be running with the same -id)",
+			nodeID, registeredAddr, req.Address)}, nil
+	}
+
 	prevStatus := fsInfo.Status
 	now := time.Now()
 	fsInfo.LastHeartbeatUnix = now.Unix()
 	fsInfo.Status = domain.FileServerStatusHealthy
-	// An address change on an existing identity is a new DHCP lease, not a new
-	// machine; update in place.
-	addressChanged := fsInfo.Address != req.Address
-	if addressChanged {
-		log.Printf("[METASERVER] Node %s changed address: %s -> %s", nodeID, fsInfo.Address, req.Address)
-		fsInfo.Address = req.Address
-	}
 	storedNodeID := fsInfo.NodeID
 	ms.mu.Unlock()
 
@@ -368,12 +441,6 @@ func (h *GRPCHandler) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (
 	// later.
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if addressChanged {
-		// Targeted update, not a whole-record upsert.
-		if err := ms.store.SetAddress(writeCtx, storedNodeID, req.Address); err != nil {
-			log.Printf("[METASERVER] WARN: could not persist address change for %s: %v", storedNodeID, err)
-		}
-	}
 	if err := ms.store.RecordHeartbeat(writeCtx, storedNodeID, now, domain.FileServerStatusHealthy); err != nil {
 		log.Printf("[METASERVER] WARN: could not persist heartbeat for %s: %v", storedNodeID, err)
 	}
@@ -669,8 +736,9 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 	defer ms.writeOrderMu.Unlock()
 	ms.mu.Lock()
 
-	// Resolve by stable identity first; address is the fallback for callers
-	// that predate fs_id.
+	// Resolve by stable identity when one is given. The address is only for
+	// callers that predate fs_id: an unknown id must not fall through to
+	// whichever live node now holds that address.
 	nodeID := req.FsId
 	var (
 		fsID   uint64
@@ -678,8 +746,7 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 	)
 	if nodeID != "" {
 		fsID, exists = ms.findFileServerByNodeIDLocked(nodeID)
-	}
-	if !exists && req.Address != "" {
+	} else if req.Address != "" {
 		if fsID, exists = ms.findFileServerByAddressLocked(req.Address); exists {
 			if info := ms.fileservers[fsID]; info != nil {
 				nodeID = info.NodeID

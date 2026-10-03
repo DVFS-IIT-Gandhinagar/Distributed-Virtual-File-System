@@ -411,10 +411,6 @@ func (s *Store) SetFileServerStatus(ctx context.Context, nodeID, status string) 
 	return s.setFileServerField(ctx, nodeID, "status", status)
 }
 
-func (s *Store) SetAddress(ctx context.Context, nodeID, address string) error {
-	return s.setFileServerField(ctx, nodeID, "address", address)
-}
-
 func (s *Store) setFileServerField(ctx context.Context, nodeID, field string, value any) error {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()

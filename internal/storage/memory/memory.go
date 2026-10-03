@@ -167,22 +167,6 @@ func (s *Store) RenameFileServer(ctx context.Context, oldNodeID, newNodeID strin
 	return nil
 }
 
-func (s *Store) SetAddress(ctx context.Context, nodeID, address string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	rec, ok := s.fileServers[nodeID]
-	if !ok {
-		return storage.ErrNotFound
-	}
-	rec.Address = address
-	s.fileServers[nodeID] = rec
-	return nil
-}
-
 func (s *Store) AssignUser(ctx context.Context, username, nodeID string) error {
 	if err := ctx.Err(); err != nil {
 		return err

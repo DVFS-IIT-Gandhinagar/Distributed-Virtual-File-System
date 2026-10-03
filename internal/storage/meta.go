@@ -88,10 +88,6 @@ type MetaStore interface {
 	// SetFileServerStatus marks a node healthy or stale.
 	SetFileServerStatus(ctx context.Context, nodeID, status string) error
 
-	// SetAddress records a node's new address, leaving every other field alone.
-	// in case of a DHCP lease change.
-	SetAddress(ctx context.Context, nodeID, address string) error
-
 	// AssignUser binds a user to their home node.
 	AssignUser(ctx context.Context, username, nodeID string) error
 

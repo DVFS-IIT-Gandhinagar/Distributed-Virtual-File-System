@@ -248,7 +248,10 @@ func TestRegisterFileServerAddressChangeKeepsIdentity(t *testing.T) {
 		t.Fatalf("initial registration failed: err=%v resp=%+v", err, resp)
 	}
 
-	// Same node, new lease.
+	// Same node, new lease. The process that held the old address is gone, so
+	// its registration has expired by the time the restarted one arrives; a
+	// live holder at another address would be a second machine with this id.
+	forceStale(ms, "fs1")
 	if resp, err := h.RegisterFileServer(context.Background(), &pb.RegisterFileServerRequest{
 		FsId: "fs1", Address: "10.0.171.38:50052", Users: []string{"alice", "bob"},
 	}); err != nil || !resp.Success {

@@ -342,7 +342,10 @@ func TestRobustness_GetLeastLoadedHealthyFileServerLocked(t *testing.T) {
 // Otherwise, the address-change path could overwrite UserCount with zero.
 // After a restart, hydration would report the node as empty, causing the
 // least-loaded picker to send every new user to it.
-func TestRobustness_Heartbeat_AddressChangePreservesUserCount(t *testing.T) {
+// A node's advertised address is fixed per process, so a new DHCP lease always
+// arrives as a fresh registration from the restarted process. Re-registering
+// under the same id must update the one record in place and keep its users.
+func TestRobustness_Registration_AddressChangePreservesUsers(t *testing.T) {
 	store := memory.New()
 	ctx := context.Background()
 
@@ -360,16 +363,21 @@ func TestRobustness_Heartbeat_AddressChangePreservesUserCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, snap.FileServers, 1)
 	require.Len(t, snap.Users, 2)
+	numericBefore := snap.FileServers[0].NumericID
 
-	// Same node, new DHCP lease.
-	hbResp, err := h.Heartbeat(ctx, &pb.HeartbeatRequest{FsId: "fs1", Address: "10.0.0.7:50052"})
+	// The old process is gone, so its registration expires before the new one lands.
+	forceStale(ms, "fs1")
+	resp, err = h.RegisterFileServer(ctx, &pb.RegisterFileServerRequest{
+		FsId: "fs1", Address: "10.0.0.7:50052", Users: []string{"alice", "bob"},
+	})
 	require.NoError(t, err)
-	require.True(t, hbResp.Success)
+	require.True(t, resp.Success)
 
 	snap, err = store.LoadSnapshot(ctx)
 	require.NoError(t, err)
 	require.Len(t, snap.FileServers, 1, "an address change must not create a second node")
 	assert.Equal(t, "10.0.0.7:50052", snap.FileServers[0].Address, "the new address is persisted")
+	assert.Equal(t, numericBefore, snap.FileServers[0].NumericID, "the numeric id survives")
 	assert.Len(t, snap.Users, 2, "the users must survive an address change")
 }
 
