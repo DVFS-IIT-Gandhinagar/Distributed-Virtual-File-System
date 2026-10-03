@@ -140,19 +140,30 @@ func (s *Store) SetFileServerStatus(ctx context.Context, nodeID, status string) 
 	return nil
 }
 
-func (s *Store) SetUserCount(ctx context.Context, nodeID string, count int) error {
+func (s *Store) RenameFileServer(ctx context.Context, oldNodeID, newNodeID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if oldNodeID == newNodeID {
+		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rec, ok := s.fileServers[nodeID]
+	rec, ok := s.fileServers[oldNodeID]
 	if !ok {
 		return storage.ErrNotFound
 	}
-	rec.UserCount = count
-	s.fileServers[nodeID] = rec
+	for username, home := range s.users {
+		if home == oldNodeID {
+			s.users[username] = newNodeID
+		}
+	}
+	delete(s.fileServers, oldNodeID)
+	if _, exists := s.fileServers[newNodeID]; !exists {
+		rec.NodeID = newNodeID
+		s.fileServers[newNodeID] = rec
+	}
 	return nil
 }
 
@@ -182,6 +193,18 @@ func (s *Store) AssignUser(ctx context.Context, username, nodeID string) error {
 	return nil
 }
 
+func (s *Store) AssignUsers(ctx context.Context, users []storage.UserRecord) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range users {
+		s.users[u.Username] = u.HomeNodeID
+	}
+	return nil
+}
+
 func (s *Store) RemoveUsers(ctx context.Context, usernames []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -206,6 +229,19 @@ func (s *Store) AddShare(ctx context.Context, sh storage.ShareRecord) error {
 	return nil
 }
 
+func (s *Store) AddShares(ctx context.Context, shares []storage.ShareRecord) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sh := range shares {
+		sh.Path = storage.NormalizeSharePath(sh.Path)
+		s.shares[shareKey{grantee: sh.Grantee, owner: sh.Owner, path: sh.Path}] = sh
+	}
+	return nil
+}
+
 func (s *Store) RemoveShare(ctx context.Context, grantee, owner, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -216,28 +252,44 @@ func (s *Store) RemoveShare(ctx context.Context, grantee, owner, path string) er
 	return nil
 }
 
-func (s *Store) RemoveSharesInvolving(ctx context.Context, username string) error {
+func (s *Store) RemoveSharesInvolving(ctx context.Context, usernames ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if len(usernames) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(usernames))
+	for _, u := range usernames {
+		set[u] = struct{}{}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for k := range s.shares {
-		if k.grantee == username || k.owner == username {
+		_, g := set[k.grantee]
+		_, o := set[k.owner]
+		if g || o {
 			delete(s.shares, k)
 		}
 	}
 	return nil
 }
 
-func (s *Store) RemoveSharesByOwner(ctx context.Context, owner string) error {
+func (s *Store) RemoveSharesByOwner(ctx context.Context, owners ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if len(owners) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(owners))
+	for _, o := range owners {
+		set[o] = struct{}{}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for k := range s.shares {
-		if k.owner == owner {
+		if _, ok := set[k.owner]; ok {
 			delete(s.shares, k)
 		}
 	}

@@ -201,12 +201,7 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 			if err := ms.store.RemoveUsers(c, purged); err != nil {
 				return err
 			}
-			for _, u := range purged {
-				if err := ms.store.RemoveSharesInvolving(c, u); err != nil {
-					return err
-				}
-			}
-			return nil
+			return ms.store.RemoveSharesInvolving(c, purged...)
 		})
 	}
 
@@ -221,30 +216,32 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		}
 	}
 
+	// A node can host hundreds of users, so its users and shares go to the
+	// store as a few bulk writes rather than one round trip per record.
+	assigned := make([]storage.UserRecord, 0, len(incomingUsers))
+	owners := make([]string, 0, len(incomingUsers))
 	for username := range incomingUsers {
 		ms.users[username] = fsID
 		if ms.shared[username] == nil {
 			ms.shared[username] = []SharedDirEntry{}
 		}
+		assigned = append(assigned, storage.UserRecord{Username: username, HomeNodeID: nodeID})
 
-		u := username
-		writes = append(writes, func(c context.Context) error {
-			return ms.store.AssignUser(c, u, nodeID)
-		})
-	}
-
-	// This node is authoritative for the shares its users publish, so clear and
-	// rebuild exactly those. Grants those users merely receive belong to other
-	// nodes and are left alone.
-	for username := range incomingUsers {
+		// This node is authoritative for the shares its users publish, so clear
+		// and rebuild exactly those. Grants those users merely receive belong
+		// to other nodes and are left alone.
 		h.removeSharesByOwnerLocked(username)
-		owner := username
-		writes = append(writes, func(c context.Context) error {
-			return ms.store.RemoveSharesByOwner(c, owner)
-		})
+		owners = append(owners, username)
 	}
+	writes = append(writes, func(c context.Context) error {
+		if err := ms.store.AssignUsers(c, assigned); err != nil {
+			return err
+		}
+		return ms.store.RemoveSharesByOwner(c, owners...)
+	})
 
 	log.Printf("[METASERVER] Processing %d shared directory entries from registration", len(req.Shared))
+	var granted []storage.ShareRecord
 	for _, sharedDir := range req.Shared {
 		owner := sharedDir.Owner
 		dirPath := storage.NormalizeSharePath(sharedDir.Path)
@@ -270,12 +267,12 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 				})
 			}
 
-			rec := storage.ShareRecord{Grantee: sharedWith, Owner: owner, Path: dirPath, DisplayName: dirName}
-			writes = append(writes, func(c context.Context) error {
-				return ms.store.AddShare(c, rec)
-			})
+			granted = append(granted, storage.ShareRecord{Grantee: sharedWith, Owner: owner, Path: dirPath, DisplayName: dirName})
 		}
 	}
+	writes = append(writes, func(c context.Context) error {
+		return ms.store.AddShares(c, granted)
+	})
 
 	fsInfo.UserCount = ms.countUsersForFileServerLocked(fsID)
 	userCount := fsInfo.UserCount
@@ -290,7 +287,6 @@ func (h *GRPCHandler) RegisterFileServer(ctx context.Context, req *pb.RegisterFi
 		_, err := ms.store.UpsertFileServer(c, storage.FileServerRecord{
 			NodeID:            nodeID,
 			Address:           address,
-			UserCount:         userCount,
 			LastHeartbeatUnix: heartbeat,
 			Status:            domain.FileServerStatusHealthy,
 		})
@@ -520,9 +516,6 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 		}
 		ms.mu.Unlock()
 		return &pb.GetRootsResponse{Success: false, Error: "failed to persist metaserver state"}, nil
-	}
-	if err := ms.store.SetUserCount(writeCtx, nodeID, userCount); err != nil {
-		log.Printf("[METASERVER] WARN: could not persist user count for %s: %v", nodeID, err)
 	}
 
 	log.Printf("[METASERVER] Assigned user %s to FS %s (users: %d)", user, address, userCount)
@@ -761,12 +754,7 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 		if err := ms.store.RemoveUsers(writeCtx, removed); err != nil {
 			return err
 		}
-		for _, u := range removed {
-			if err := ms.store.RemoveSharesInvolving(writeCtx, u); err != nil {
-				return err
-			}
-		}
-		return nil
+		return ms.store.RemoveSharesInvolving(writeCtx, removed...)
 	}()
 	if err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after deregister of %s: %v", nodeID, err)

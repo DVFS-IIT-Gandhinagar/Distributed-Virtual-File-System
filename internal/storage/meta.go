@@ -32,7 +32,6 @@ type FileServerRecord struct {
 	NodeID            string
 	NumericID         uint64
 	Address           string
-	UserCount         int
 	LastHeartbeatUnix int64
 	Status            string
 }
@@ -75,6 +74,13 @@ type MetaStore interface {
 	// an error, so an admin can retry a decommission safely.
 	RemoveFileServer(ctx context.Context, nodeID string) error
 
+	// RenameFileServer re-keys a node from oldNodeID to newNodeID, keeping its
+	// NumericID, and moves every user homed on it. Used once, when a fileserver
+	// that registered before fs_id existed (keyed "addr:<address>") first
+	// reports its real id. If newNodeID already exists its record is kept and
+	// only the users move. Renaming an absent node returns ErrNotFound.
+	RenameFileServer(ctx context.Context, oldNodeID, newNodeID string) error
+
 	// RecordHeartbeat refreshes liveness for one node. Best-effort: the caller
 	// treats failure as non-fatal because in-memory state already has the update.
 	RecordHeartbeat(ctx context.Context, nodeID string, at time.Time, status string) error
@@ -86,11 +92,11 @@ type MetaStore interface {
 	// in case of a DHCP lease change.
 	SetAddress(ctx context.Context, nodeID, address string) error
 
-	// SetUserCount records how many users a node currently hosts.
-	SetUserCount(ctx context.Context, nodeID string, count int) error
-
 	// AssignUser binds a user to their home node.
 	AssignUser(ctx context.Context, username, nodeID string) error
+
+	// AssignUsers is AssignUser for a whole registration in one round trip.
+	AssignUsers(ctx context.Context, users []UserRecord) error
 
 	// RemoveUsers deletes user records. It does not touch their shares.
 	RemoveUsers(ctx context.Context, usernames []string) error
@@ -98,17 +104,21 @@ type MetaStore interface {
 	// AddShare grants access. Idempotent on (Grantee, Owner, Path).
 	AddShare(ctx context.Context, s ShareRecord) error
 
+	// AddShares is AddShare for a whole registration in one round trip.
+	AddShares(ctx context.Context, shares []ShareRecord) error
+
 	// RemoveShare revokes one grant. Absent grants are not an error.
 	RemoveShare(ctx context.Context, grantee, owner, path string) error
 
-	// RemoveSharesInvolving drops every grant where the user is either side.
-	// Used when a user is deleted outright.
-	RemoveSharesInvolving(ctx context.Context, username string) error
+	// RemoveSharesInvolving drops every grant where any of the users is either
+	// side. Used when users are deleted outright. No users is a no-op.
+	RemoveSharesInvolving(ctx context.Context, usernames ...string) error
 
-	// RemoveSharesByOwner drops every grant published by one owner, leaving
+	// RemoveSharesByOwner drops every grant published by the owners, leaving
 	// grants they merely receive intact. Used when a fileserver re-registers
 	// and republishes the authoritative share set for the users it hosts.
-	RemoveSharesByOwner(ctx context.Context, owner string) error
+	// No owners is a no-op.
+	RemoveSharesByOwner(ctx context.Context, owners ...string) error
 
 	// EnsureIndexes creates whatever indexes the backend needs. Idempotent.
 	EnsureIndexes(ctx context.Context) error

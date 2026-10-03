@@ -359,8 +359,7 @@ func TestRobustness_Heartbeat_AddressChangePreservesUserCount(t *testing.T) {
 	snap, err := store.LoadSnapshot(ctx)
 	require.NoError(t, err)
 	require.Len(t, snap.FileServers, 1)
-	countBefore := snap.FileServers[0].UserCount
-	require.Equal(t, 2, countBefore)
+	require.Len(t, snap.Users, 2)
 
 	// Same node, new DHCP lease.
 	hbResp, err := h.Heartbeat(ctx, &pb.HeartbeatRequest{FsId: "fs1", Address: "10.0.0.7:50052"})
@@ -371,7 +370,7 @@ func TestRobustness_Heartbeat_AddressChangePreservesUserCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, snap.FileServers, 1, "an address change must not create a second node")
 	assert.Equal(t, "10.0.0.7:50052", snap.FileServers[0].Address, "the new address is persisted")
-	assert.Equal(t, countBefore, snap.FileServers[0].UserCount, "the user count must survive an address change")
+	assert.Len(t, snap.Users, 2, "the users must survive an address change")
 }
 
 // A registration that conflicts must leave no trace.
@@ -545,14 +544,14 @@ func TestRobustness_Registration_ConflictDoesNotLeaveNewNodeInStore(t *testing.T
 	assert.Equal(t, "fs1", snap.FileServers[0].NodeID)
 }
 
-// Placement must never depend on the persisted user_count, which is a
-// best-effort write and may lag. Load is derived from the assignments at boot.
+// The store holds no per-node user counter; load is derived from the
+// assignments at boot, so placement can never act on a lagging count.
 func TestRobustness_Hydrate_DerivesUserCountFromAssignments(t *testing.T) {
 	store := memory.New()
 	ctx := context.Background()
 	_, err := store.UpsertFileServer(ctx, storage.FileServerRecord{
 		NodeID: "fs1", Address: "10.0.0.1:50052", Status: domain.FileServerStatusHealthy,
-		LastHeartbeatUnix: time.Now().Unix(), UserCount: 99, // stale on purpose
+		LastHeartbeatUnix: time.Now().Unix(),
 	})
 	require.NoError(t, err)
 	require.NoError(t, store.AssignUser(ctx, "alice", "fs1"))

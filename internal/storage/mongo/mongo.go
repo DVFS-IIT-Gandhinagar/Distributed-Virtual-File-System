@@ -151,7 +151,6 @@ type fileServerDoc struct {
 	NodeID            string    `bson:"_id"`
 	NumericID         uint64    `bson:"numeric_id"`
 	Address           string    `bson:"address"`
-	UserCount         int       `bson:"user_count"`
 	LastHeartbeatUnix int64     `bson:"last_heartbeat_unix"`
 	Status            string    `bson:"status"`
 	UpdatedAt         time.Time `bson:"updated_at"`
@@ -208,7 +207,6 @@ func (s *Store) LoadSnapshot(ctx context.Context) (*storage.MetaSnapshot, error)
 			NodeID:            d.NodeID,
 			NumericID:         d.NumericID,
 			Address:           d.Address,
-			UserCount:         d.UserCount,
 			LastHeartbeatUnix: d.LastHeartbeatUnix,
 			Status:            d.Status,
 		})
@@ -258,7 +256,6 @@ func (s *Store) UpsertFileServer(ctx context.Context, rec storage.FileServerReco
 
 	mutable := bson.D{
 		{Key: "address", Value: rec.Address},
-		{Key: "user_count", Value: rec.UserCount},
 		{Key: "last_heartbeat_unix", Value: rec.LastHeartbeatUnix},
 		{Key: "status", Value: rec.Status},
 		{Key: "updated_at", Value: time.Now().UTC()},
@@ -332,6 +329,59 @@ func (s *Store) RemoveFileServer(ctx context.Context, nodeID string) error {
 	return nil
 }
 
+// RenameFileServer re-keys a node document. The three writes are ordered so
+// that a crash between any two of them leaves a state the next registration
+// recovers from: users move first (a restart then sees them orphaned on the
+// new id, which that id may reclaim), the old document goes second, and the
+// new one is written last with the numeric id carried over.
+func (s *Store) RenameFileServer(ctx context.Context, oldNodeID, newNodeID string) error {
+	if oldNodeID == newNodeID {
+		return nil
+	}
+	if newNodeID == "" {
+		return errors.New("mongo: RenameFileServer requires a new NodeID")
+	}
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
+	var old fileServerDoc
+	err := s.fileServers.FindOne(ctx, bson.D{{Key: "_id", Value: oldNodeID}}).Decode(&old)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return storage.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("mongo: lookup fileserver %s: %w", oldNodeID, err)
+	}
+
+	now := time.Now().UTC()
+	if _, err := s.users.UpdateMany(ctx,
+		bson.D{{Key: "home_node_id", Value: oldNodeID}},
+		bson.D{{Key: "$set", Value: bson.D{
+			{Key: "home_node_id", Value: newNodeID},
+			{Key: "updated_at", Value: now},
+		}}},
+	); err != nil {
+		return fmt.Errorf("mongo: move users %s -> %s: %w", oldNodeID, newNodeID, err)
+	}
+	if _, err := s.fileServers.DeleteOne(ctx, bson.D{{Key: "_id", Value: oldNodeID}}); err != nil {
+		return fmt.Errorf("mongo: remove fileserver %s: %w", oldNodeID, err)
+	}
+	// $setOnInsert everywhere: if the target already exists, its own record wins.
+	update := bson.D{
+		{Key: "$setOnInsert", Value: bson.D{
+			{Key: "numeric_id", Value: old.NumericID},
+			{Key: "address", Value: old.Address},
+			{Key: "last_heartbeat_unix", Value: old.LastHeartbeatUnix},
+			{Key: "status", Value: old.Status},
+		}},
+		{Key: "$set", Value: bson.D{{Key: "updated_at", Value: now}}},
+	}
+	if _, err := s.fileServers.UpdateOne(ctx, bson.D{{Key: "_id", Value: newNodeID}}, update, options.UpdateOne().SetUpsert(true)); err != nil {
+		return fmt.Errorf("mongo: insert fileserver %s: %w", newNodeID, err)
+	}
+	return nil
+}
+
 func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, at time.Time, status string) error {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
@@ -359,10 +409,6 @@ func (s *Store) RecordHeartbeat(ctx context.Context, nodeID string, at time.Time
 
 func (s *Store) SetFileServerStatus(ctx context.Context, nodeID, status string) error {
 	return s.setFileServerField(ctx, nodeID, "status", status)
-}
-
-func (s *Store) SetUserCount(ctx context.Context, nodeID string, count int) error {
-	return s.setFileServerField(ctx, nodeID, "user_count", count)
 }
 
 func (s *Store) SetAddress(ctx context.Context, nodeID, address string) error {
@@ -410,6 +456,33 @@ func (s *Store) AssignUser(ctx context.Context, username, nodeID string) error {
 	return nil
 }
 
+func (s *Store) AssignUsers(ctx context.Context, users []storage.UserRecord) error {
+	if len(users) == 0 {
+		return nil
+	}
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
+	now := time.Now().UTC()
+	models := make([]mongo.WriteModel, 0, len(users))
+	for _, u := range users {
+		if u.Username == "" {
+			return errors.New("mongo: AssignUsers requires a username")
+		}
+		models = append(models, mongo.NewUpdateOneModel().
+			SetFilter(bson.D{{Key: "_id", Value: u.Username}}).
+			SetUpdate(bson.D{{Key: "$set", Value: bson.D{
+				{Key: "home_node_id", Value: u.HomeNodeID},
+				{Key: "updated_at", Value: now},
+			}}}).
+			SetUpsert(true))
+	}
+	if _, err := s.users.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false)); err != nil {
+		return fmt.Errorf("mongo: assign %d users: %w", len(users), err)
+	}
+	return nil
+}
+
 func (s *Store) RemoveUsers(ctx context.Context, usernames []string) error {
 	if len(usernames) == 0 {
 		return nil
@@ -450,6 +523,42 @@ func (s *Store) AddShare(ctx context.Context, sh storage.ShareRecord) error {
 	return nil
 }
 
+func (s *Store) AddShares(ctx context.Context, shares []storage.ShareRecord) error {
+	if len(shares) == 0 {
+		return nil
+	}
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
+	now := time.Now().UTC()
+	// Duplicates within one batch are collapsed here rather than left to the
+	// server: two upserts on the same absent _id can race inside an unordered
+	// bulk write and the loser surfaces as a duplicate-key error.
+	seen := make(map[shareKeyDoc]struct{}, len(shares))
+	models := make([]mongo.WriteModel, 0, len(shares))
+	for _, sh := range shares {
+		if sh.Grantee == "" || sh.Owner == "" {
+			return errors.New("mongo: AddShares requires a grantee and an owner")
+		}
+		key := shareKeyDoc{Grantee: sh.Grantee, Owner: sh.Owner, Path: storage.NormalizeSharePath(sh.Path)}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		models = append(models, mongo.NewUpdateOneModel().
+			SetFilter(bson.D{{Key: "_id", Value: key}}).
+			SetUpdate(bson.D{
+				{Key: "$set", Value: bson.D{{Key: "display_name", Value: sh.DisplayName}}},
+				{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}}},
+			}).
+			SetUpsert(true))
+	}
+	if _, err := s.shares.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false)); err != nil {
+		return fmt.Errorf("mongo: add %d shares: %w", len(models), err)
+	}
+	return nil
+}
+
 func (s *Store) RemoveShare(ctx context.Context, grantee, owner, path string) error {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
@@ -461,32 +570,34 @@ func (s *Store) RemoveShare(ctx context.Context, grantee, owner, path string) er
 	return nil
 }
 
-func (s *Store) RemoveSharesInvolving(ctx context.Context, username string) error {
-	if username == "" {
+func (s *Store) RemoveSharesInvolving(ctx context.Context, usernames ...string) error {
+	if len(usernames) == 0 {
 		return nil
 	}
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
+	in := bson.D{{Key: "$in", Value: usernames}}
 	filter := bson.D{{Key: "$or", Value: bson.A{
-		bson.D{{Key: "_id.grantee", Value: username}},
-		bson.D{{Key: "_id.owner", Value: username}},
+		bson.D{{Key: "_id.grantee", Value: in}},
+		bson.D{{Key: "_id.owner", Value: in}},
 	}}}
 	if _, err := s.shares.DeleteMany(ctx, filter); err != nil {
-		return fmt.Errorf("mongo: remove shares involving %s: %w", username, err)
+		return fmt.Errorf("mongo: remove shares involving %d users: %w", len(usernames), err)
 	}
 	return nil
 }
 
-func (s *Store) RemoveSharesByOwner(ctx context.Context, owner string) error {
-	if owner == "" {
+func (s *Store) RemoveSharesByOwner(ctx context.Context, owners ...string) error {
+	if len(owners) == 0 {
 		return nil
 	}
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
-	if _, err := s.shares.DeleteMany(ctx, bson.D{{Key: "_id.owner", Value: owner}}); err != nil {
-		return fmt.Errorf("mongo: remove shares owned by %s: %w", owner, err)
+	filter := bson.D{{Key: "_id.owner", Value: bson.D{{Key: "$in", Value: owners}}}}
+	if _, err := s.shares.DeleteMany(ctx, filter); err != nil {
+		return fmt.Errorf("mongo: remove shares owned by %d users: %w", len(owners), err)
 	}
 	return nil
 }

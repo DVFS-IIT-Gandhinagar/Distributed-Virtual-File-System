@@ -32,7 +32,6 @@ func seedFileServer(t *testing.T, ms *MetaServer, nodeID, addr string, userCount
 	numericID, err := ms.store.UpsertFileServer(context.Background(), storage.FileServerRecord{
 		NodeID:            nodeID,
 		Address:           addr,
-		UserCount:         userCount,
 		LastHeartbeatUnix: lastHeartbeat,
 		Status:            status,
 	})
