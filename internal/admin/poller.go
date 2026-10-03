@@ -1,9 +1,11 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -26,43 +28,77 @@ func deriveMetricsURL(address string) string {
 	return fmt.Sprintf("http://%s:%d/metrics", host, metricsPort)
 }
 
-// refreshNodes reads the metaserver state file, updates the user map,
-// and registers any new fileservers into the active node pool.
+// refreshNodes reads cluster membership from the shared metadata store and
+// registers any newly-discovered fileservers into the active node pool.
 func (a *AdminServer) refreshNodes() {
-	state, err := LoadMetaState(a.stateFile)
+	if a.store == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	snap, err := a.store.LoadSnapshot(ctx)
 	if err != nil {
-		log.Printf("[ADMIN] Warning: failed to load metaserver state from %s: %v", a.stateFile, err)
+		log.Printf("[ADMIN] Warning: failed to load cluster state from metadata store: %v", err)
 		return
 	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Update user mapping
-	a.users = make(map[string]string, len(state.Users))
-	for user, fsID := range state.Users {
-		a.users[user] = strconv.FormatUint(fsID, 10)
+	// nodeID -> dense numeric key, so user records (which reference the stable
+	// node identity) can be mapped onto the numeric keys the UI uses.
+	numericByNodeID := make(map[string]string, len(snap.FileServers))
+	for _, rec := range snap.FileServers {
+		numericByNodeID[rec.NodeID] = strconv.FormatUint(rec.NumericID, 10)
 	}
 
-	// Update or add fileservers
-	for fsID, fsInfo := range state.FileServers {
-		// Do not resurrect nodes that were explicitly removed by admin
-		if a.isNodeRemovedLocked(fsID, fsInfo.LastHeartbeatUnix) {
+	a.users = make(map[string]string, len(snap.Users))
+	if a.loggedOrphans == nil {
+		a.loggedOrphans = make(map[string]string)
+	}
+	orphans := make(map[string]string)
+	for _, u := range snap.Users {
+		numeric, ok := numericByNodeID[u.HomeNodeID]
+		if !ok {
+			// The account is real and still assigned; its node is just not in
+			// the cluster table right now. Logged once per (user, node), not on
+			// every poll.
+			orphans[u.Username] = u.HomeNodeID
+			if a.loggedOrphans[u.Username] != u.HomeNodeID {
+				log.Printf("[ADMIN] User %s references unregistered node %q; omitting from the node view (release with DELETE /api/nodes/%s)", u.Username, u.HomeNodeID, u.HomeNodeID)
+			}
 			continue
 		}
+		a.users[u.Username] = numeric
+	}
+	a.loggedOrphans = orphans
 
-		metricsURL := deriveMetricsURL(fsInfo.Address)
+	presentIDs := make(map[string]struct{}, len(snap.FileServers))
+	for _, rec := range snap.FileServers {
+		fsID := strconv.FormatUint(rec.NumericID, 10)
+		presentIDs[fsID] = struct{}{}
+		// Do not resurrect a node the admin explicitly removed, unless it has
+		// heartbeated since: that means it was redeployed.
+		if a.isNodeRemovedLocked(fsID, rec.LastHeartbeatUnix) {
+			continue
+		}
+		metricsURL := deriveMetricsURL(rec.Address)
+		// Clamp rather than narrowing blindly: int is 32-bit on some builds, and
+		// a display id of 0 or a negative number would render as "FS-0" and a
+		// machine name matching no real host.
 		displayID := 1
-		if num, parseErr := strconv.Atoi(fsID); parseErr == nil {
-			displayID = num + 1
+		if rec.NumericID < math.MaxInt32 {
+			displayID = int(rec.NumericID) + 1
 		}
 		displayName := fmt.Sprintf("FS-%d", displayID)
 		machineName := fmt.Sprintf("dvfs%d", displayID)
 
 		// Check if cluster discovery resolves host IP to an explicit machine name (e.g. dvfs3)
-		host, _, splitErr := net.SplitHostPort(fsInfo.Address)
+		host, _, splitErr := net.SplitHostPort(rec.Address)
 		if splitErr != nil {
-			host = fsInfo.Address
+			host = rec.Address
 		}
 		if a.resolver != nil && host != "" {
 			if resolved := a.resolver.ResolveServerName(host); resolved != "" && resolved != host && resolved != "localhost" {
@@ -76,7 +112,8 @@ func (a *AdminServer) refreshNodes() {
 		}
 
 		if node, exists := a.nodes[fsID]; exists {
-			node.Address = fsInfo.Address
+			node.NodeID = rec.NodeID
+			node.Address = rec.Address
 			node.MetricsURL = metricsURL
 			node.DisplayID = displayID
 			node.DisplayName = displayName
@@ -84,27 +121,29 @@ func (a *AdminServer) refreshNodes() {
 		} else {
 			a.nodes[fsID] = &NodeState{
 				FsID:        fsID,
+				NodeID:      rec.NodeID,
 				DisplayID:   displayID,
 				DisplayName: displayName,
 				MachineName: machineName,
-				Address:     fsInfo.Address,
+				Address:     rec.Address,
 				MetricsURL:  metricsURL,
 				Status:      StatusOffline,
 				LastSeen:    0,
 				Metrics:     nil,
 				History:     NewRingBuffer(720),
 			}
-			log.Printf("[ADMIN] Discovered fileserver %s (%s / %s) at %s (metrics: %s)", fsID, displayName, machineName, fsInfo.Address, metricsURL)
+			log.Printf("[ADMIN] Discovered fileserver %s (node=%s, %s / %s) at %s (metrics: %s)",
+				fsID, rec.NodeID, displayName, machineName, rec.Address, metricsURL)
 		}
 	}
 
-	// Prune nodes that are marked removed or no longer exist in metaserver state
+	// Prune nodes the admin removed, or that are no longer in the store.
 	for fsID := range a.nodes {
 		if a.isNodeRemovedLocked(fsID, 0) {
 			delete(a.nodes, fsID)
 			continue
 		}
-		if _, exists := state.FileServers[fsID]; !exists {
+		if _, exists := presentIDs[fsID]; !exists {
 			delete(a.nodes, fsID)
 		}
 	}

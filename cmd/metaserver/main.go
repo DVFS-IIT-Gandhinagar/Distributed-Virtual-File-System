@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
@@ -12,6 +13,7 @@ import (
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
+	mongostore "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/mongo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -19,7 +21,11 @@ import (
 func main() {
 	// Server configuration
 	port := flag.Int("port", 50051, "Port to listen on")
-	stateFile := flag.String("state_file", "./metaserver_state.json", "Path to metaserver state snapshot file")
+	mongoURI := flag.String("mongo_uri", "", "MongoDB connection URI (overrides MONGO_URI env)")
+	mongoDB := flag.String("mongo_db", "", "MongoDB database name; overrides the database in -mongo_uri (default: the URI's database, else \"dvfs\")")
+	allowUserPurge := flag.Bool("allow_user_purge", false,
+		"Permit a fileserver registration to delete user mappings it did not report. "+
+			"Off by default: an unmounted data directory registers as having no users.")
 	heartbeatTimeout := flag.Duration("heartbeat_timeout", 30*time.Second, "Timeout after which fileserver is marked stale")
 	heartbeatCheckInterval := flag.Duration("heartbeat_check_interval", 5*time.Second, "Interval to evaluate fileserver liveness")
 	tlsCertPath := flag.String("tls_cert", "certs/server.crt", "Path to TLS certificate")
@@ -29,12 +35,43 @@ func main() {
 
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", *port)
 
+	uri := *mongoURI
+	if uri == "" {
+		uri = os.Getenv("MONGO_URI")
+	}
+	if uri == "" {
+		log.Fatalf("MongoDB is required: pass -mongo_uri or set MONGO_URI " +
+			"(e.g. mongodb://dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	store, err := mongostore.Open(ctx, mongostore.Config{
+		URI:      uri,
+		Database: *mongoDB,
+		AppName:  "dvfs-metaserver",
+	})
+	if err != nil {
+		cancel()
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
+	if err := store.EnsureIndexes(ctx); err != nil {
+		cancel()
+		log.Fatalf("Failed to create MongoDB indexes: %v", err)
+	}
+
 	// Create meta server
-	server, err := metaserver.NewMetaServer(*stateFile)
+	server, err := metaserver.NewMetaServer(ctx, store)
+	cancel()
 	if err != nil {
 		log.Fatalf("Failed to create meta server: %v", err)
 	}
+	defer func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer closeCancel()
+		_ = store.Close(closeCtx)
+	}()
 	server.SetHeartbeatConfig(*heartbeatTimeout, *heartbeatCheckInterval)
+	server.SetAllowUserPurge(*allowUserPurge)
 	stopMonitor := server.StartHeartbeatMonitor()
 	defer stopMonitor()
 

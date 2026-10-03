@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"net"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,14 +11,14 @@ import (
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/memory"
 	"google.golang.org/grpc"
 )
 
 func startMetaServer(t *testing.T) (addr string, ms *metaserver.MetaServer, cleanup func()) {
 	t.Helper()
 
-	statePath := filepath.Join(t.TempDir(), "mds", "state.json")
-	ms, err := metaserver.NewMetaServer(statePath)
+	ms, err := metaserver.NewMetaServer(context.Background(), memory.New())
 	if err != nil {
 		t.Fatalf("NewMetaServer failed: %v", err)
 	}

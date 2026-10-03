@@ -18,15 +18,11 @@ func TestHeartbeatRecoveryFromStale(t *testing.T) {
 
 	// 1. Setup a stale fileserver
 	addr := "127.0.0.1:50052"
-	ms.fileservers[0] = &domain.FileServerInfo{
-		Address:           addr,
-		UserCount:         0,
-		LastHeartbeatUnix: now - 100, // 100s ago
-		Status:            domain.FileServerStatusStale,
-	}
+	fsID := seedFileServer(t, ms, "fs1", addr, 0, now-100, domain.FileServerStatusStale)
 
 	// 2. Fileserver sends Heartbeat
 	hbResp, err := h.Heartbeat(context.Background(), &pb.HeartbeatRequest{
+		FsId:    "fs1",
 		Address: addr,
 	})
 	if err != nil {
@@ -38,7 +34,7 @@ func TestHeartbeatRecoveryFromStale(t *testing.T) {
 
 	// 3. Verify fileserver recovered to Healthy
 	ms.mu.RLock()
-	fsInfo := ms.fileservers[0]
+	fsInfo := ms.fileservers[fsID]
 	status := fsInfo.Status
 	lastHB := fsInfo.LastHeartbeatUnix
 	ms.mu.RUnlock()
@@ -59,21 +55,10 @@ func TestMetaserverLeastLoadedAssignment(t *testing.T) {
 	now := time.Now().Unix()
 
 	// FS 0: heavily loaded (5 users)
-	ms.fileservers[0] = &domain.FileServerInfo{
-		Address:           "127.0.0.1:50052",
-		UserCount:         5,
-		LastHeartbeatUnix: now,
-		Status:            domain.FileServerStatusHealthy,
-	}
+	seedFileServer(t, ms, "fs0", "127.0.0.1:50052", 5, now, domain.FileServerStatusHealthy)
 
 	// FS 1: lightly loaded (1 user)
-	ms.fileservers[1] = &domain.FileServerInfo{
-		Address:           "127.0.0.1:50053",
-		UserCount:         1,
-		LastHeartbeatUnix: now,
-		Status:            domain.FileServerStatusHealthy,
-	}
-	ms.nextFsID = 2
+	lightlyLoaded := seedFileServer(t, ms, "fs1", "127.0.0.1:50053", 1, now, domain.FileServerStatusHealthy)
 
 	// New user "charlie" requests roots -> should be assigned to FS 1
 	resp, err := h.GetRoots(context.Background(), &pb.GetRootsRequest{
@@ -89,14 +74,14 @@ func TestMetaserverLeastLoadedAssignment(t *testing.T) {
 	// Verify assigned to FS 1 in ms.users
 	ms.mu.RLock()
 	assignedFS, exists := ms.users["charlie"]
-	fs1Count := ms.fileservers[1].UserCount
+	fs1Count := ms.fileservers[lightlyLoaded].UserCount
 	ms.mu.RUnlock()
 
 	if !exists {
 		t.Fatalf("expected user charlie to be registered in ms.users")
 	}
-	if assignedFS != 1 {
-		t.Errorf("expected new user to be assigned to least-loaded FS 1, got FS %d", assignedFS)
+	if assignedFS != lightlyLoaded {
+		t.Errorf("expected new user to be assigned to least-loaded FS %d, got FS %d", lightlyLoaded, assignedFS)
 	}
 	if fs1Count != 2 {
 		t.Errorf("expected FS 1 UserCount to increment to 2, got %d", fs1Count)

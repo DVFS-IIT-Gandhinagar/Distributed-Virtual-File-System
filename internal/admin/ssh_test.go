@@ -144,3 +144,33 @@ func TestMockSSHExecutor(t *testing.T) {
 		t.Errorf("expected stderr, got %s", stderr.String())
 	}
 }
+
+func TestShellQuote(t *testing.T) {
+	cases := map[string]string{
+		"plain":                 "'plain'",
+		"a b":                   "'a b'",
+		"x?y&z":                 "'x?y&z'",
+		"it's":                  `'it'\''s'`,
+		"$(rm -rf /)":           "'$(rm -rf /)'",
+		"mongodb://u:p@h/d?a=1": "'mongodb://u:p@h/d?a=1'",
+	}
+	for in, want := range cases {
+		if got := shellQuote(in); got != want {
+			t.Errorf("shellQuote(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+func TestRedactMongoURI(t *testing.T) {
+	cases := map[string]string{
+		"nohup ./bin/metaserver -mongo_uri='mongodb://dvfs:s3cret@db1:27017/dvfs?replicaSet=rs0' > log": "nohup ./bin/metaserver -mongo_uri='mongodb://dvfs:***@db1:27017/dvfs?replicaSet=rs0' > log",
+		"-mongo_uri='mongodb+srv://admin:p%40ss@cluster0.example.net/dvfs'":                             "-mongo_uri='mongodb+srv://admin:***@cluster0.example.net/dvfs'",
+		"-mongo_uri='mongodb://127.0.0.1:27017/dvfs'":                                                   "-mongo_uri='mongodb://127.0.0.1:27017/dvfs'",
+		"git -C ~/repo pull origin main":                                                                "git -C ~/repo pull origin main",
+	}
+	for in, want := range cases {
+		if got := redactMongoURI(in); got != want {
+			t.Errorf("redactMongoURI(%q)\n got %q\nwant %q", in, got, want)
+		}
+	}
+}

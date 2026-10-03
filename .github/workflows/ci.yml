@@ -9,6 +9,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -16,7 +28,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24.0'
+        go-version: '1.26.8'
 
     - name: Install Protoc
       run: sudo apt-get install -y protobuf-compiler
@@ -37,9 +49,19 @@ jobs:
       run: |
         make fmt
         make vet
-        
+        go vet -tags use_google_auth ./...
+
     - name: Run Tests
       run: make test
+      env:
+        DVFS_MONGO_TEST_URI: mongodb://localhost:27017
+
+    # Release binaries are built with use_google_auth, which swaps in the
+    # production auth code; it has to be tested in that configuration too.
+    - name: Run Tests (use_google_auth)
+      run: make test-google-auth
+      env:
+        DVFS_MONGO_TEST_URI: mongodb://localhost:27017
       
     - name: Build Binaries
       run: make build

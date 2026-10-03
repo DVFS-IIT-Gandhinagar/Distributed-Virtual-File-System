@@ -37,7 +37,7 @@ Every FileServer process automatically launches an HTTP sidecar:
 - **Port Derivation**: The metrics port is computed as:
   `metricsPort = gRPC_port - 41000`
   *(Example: gRPC port `50052` launches metrics HTTP on `9052`)*.
-- The Admin Server discovers the FileServer's gRPC address from `metaserver_state.json` and automatically derives the metrics URL.
+- The Admin Server discovers the FileServer's gRPC address from the shared MongoDB metadata store (re-read every 10s) and automatically derives the metrics URL. Reading from the store rather than the MetaServer's local disk is what lets the Admin Server run on a different machine from the MetaServer.
 - **Endpoints**:
   - `GET /metrics`: Returns a JSON document containing the complete metrics catalog. The payload strictly maps to the `FileserverMetrics` struct:
     - **Disk**: `disk_total_bytes`, `disk_used_bytes`, `disk_free_bytes`, `disk_usage_percent`

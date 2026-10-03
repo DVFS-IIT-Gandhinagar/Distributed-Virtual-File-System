@@ -25,7 +25,7 @@ graph TB
         MS["MetaServer Core\ninternal/metaserver/metaserver.go"]
         MSH["gRPC Handler\ninternal/metaserver/handler.go"]
         HMON["Heartbeat Monitor\n(5s ticker / 30s timeout)"]
-        MSS[("metaserver_state.json\n(Atomic Persistence)")]
+        MSS[("MongoDB\n(fileservers / users / shares)")]
         MS --- MSH
         MS --- HMON
         MS --- MSS
@@ -219,7 +219,8 @@ graph TD
 
 - **Authoritative Enforcement**: When a client requests any file operation, the FileServer validates the requesting user against the target inode's ACL before executing physical disk I/O. The MetaServer never participates in access control.
 - **Lock Discipline**: All FileServer operations lock `fs.mu` (`sync.RWMutex`). Any outgoing network RPCs (such as `RootShare` or `RootUnshare` to the MetaServer) are executed **strictly after unlocking** `fs.mu` to eliminate distributed deadlocks.
-- **Atomic Persistence**: All disk state modifications (`metaserver_state.json`, `.acl`, `quota_config.json`, `fileserver_shares.json`, `command_history.json`, `admin_alerts.json`) write data to a temporary file (`.tmp`) followed by an atomic `os.Rename`. This prevents corruption in the event of an ungraceful shutdown.
+- **Durable Cluster Metadata**: MetaServer routing state (fileservers, users, shares) lives in MongoDB. The in-memory maps remain the read path; every mutation is a targeted single-document write issued *after* `ms.mu` is released.
+- **Atomic Persistence**: Remaining on-disk state (`.acl`, `quota_config.json`, `fileserver_shares.json`, `.dvfs_inodes_index.json`, `command_history.json`, `admin_alerts.json`) writes to a temporary file (`.tmp`) followed by an atomic `os.Rename`. This prevents corruption in the event of an ungraceful shutdown.
 
 ### 1.6 Core Operation Workflows
 
@@ -324,7 +325,7 @@ sequenceDiagram
     FS->>FS: Atomically persist updated .acl files
     FS->>FS: fs.mu.Unlock()
     FS->>MS: RootShare{owner: "alice", shareWith: "bob", rootPath, name}
-    MS->>MS: Register shared entry in metaserver_state.json
+    MS->>MS: Upsert shares document in MongoDB
     MS-->>FS: RootShareResponse{success: true}
     FS-->>CL: ShareResponse{success: true}
     CL-->>User: "Root directory shared successfully with 'bob'"
@@ -438,8 +439,9 @@ DVFS defines three Protocol Buffer service interfaces in `api/`: `FileServer` (`
 | `Navigate` | Unary | `NavigateRequest` | `NavigateResponse` | Resolves which FileServer node hosts a given root user. Protected by Google user token. |
 | `Heartbeat` | Unary | `HeartbeatRequest` | `HeartbeatResponse` | Periodic ping from storage node to refresh liveness timestamp. Protected by mTLS cert verification. |
 | `GetRoots` | Unary | `GetRootsRequest` | `GetRootsResponse` | Returns list of accessible personal and shared roots for interactive client menu. Protected by Google user token. |
-| `RootShare` | Unary | `RootShareRequest` | `RootShareResponse` | Indexes a shared directory mapping in `metaserver_state.json`. Protected by mTLS cert verification. |
+| `RootShare` | Unary | `RootShareRequest` | `RootShareResponse` | Indexes a shared directory mapping in the MongoDB `shares` collection, keyed on (grantee, owner, path). Protected by mTLS cert verification. |
 | `RootUnshare` | Unary | `RootUnshareRequest` | `RootUnshareResponse` | Removes an indexed shared directory mapping. Protected by mTLS cert verification. |
+| `DeregisterFileServer` | Unary | `DeregisterFileServerRequest` | `DeregisterFileServerResponse` | Admin-initiated decommission: removes the node and releases every user assigned to it, including users orphaned on it, so they are placed afresh on next login. Identifies the node by `fs_id`, falling back to `address`. Store writes go users, then shares, then the node document last, with in-memory rollback on failure, so a partial write never leaves users homed on a node the store no longer has. Accepts admin credentials or an mTLS cluster cert. |
 
 #### ClientCallback Service (`api/callback/callback.proto`)
 

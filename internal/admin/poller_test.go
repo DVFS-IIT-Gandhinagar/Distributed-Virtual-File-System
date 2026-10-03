@@ -1,15 +1,16 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/memory"
 )
 
 func TestDeriveMetricsURL(t *testing.T) {
@@ -105,7 +106,7 @@ func TestPollNode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	node := &NodeState{
 		FsID:       "0",
 		Address:    "127.0.0.1:50052",
@@ -128,36 +129,27 @@ func TestPollNode(t *testing.T) {
 }
 
 func TestPoller_MachineDiscoveryResolutionAndShiftFix(t *testing.T) {
-	// Create mock metaserver state file where dvfs2 was skipped:
-	// Node 0 -> 10.0.171.38:50052
-	// Node 1 -> 10.0.171.40:50052
-	stateDir := t.TempDir()
-	statePath := filepath.Join(stateDir, "metaserver_state.json")
-
-	mockState := struct {
-		FileServers map[string]struct {
-			Address string `json:"address"`
-		} `json:"fileservers"`
-		Users map[string]uint64 `json:"users"`
-	}{
-		FileServers: map[string]struct {
-			Address string `json:"address"`
-		}{
-			"0": {Address: "10.0.171.38:50052"},
-			"1": {Address: "10.0.171.40:50052"},
-		},
-		Users: map[string]uint64{"alice": 0, "bob": 1},
+	// Two registered nodes where dvfs2 was skipped:
+	//   numeric 0 -> 10.0.171.38:50052 (dvfs1)
+	//   numeric 1 -> 10.0.171.40:50052 (dvfs3)
+	store := memory.New()
+	ctx := context.Background()
+	for _, rec := range []storage.FileServerRecord{
+		{NodeID: "fs1", Address: "10.0.171.38:50052", Status: "healthy"},
+		{NodeID: "fs3", Address: "10.0.171.40:50052", Status: "healthy"},
+	} {
+		if _, err := store.UpsertFileServer(ctx, rec); err != nil {
+			t.Fatalf("seed fileserver %s: %v", rec.NodeID, err)
+		}
+	}
+	if err := store.AssignUser(ctx, "alice", "fs1"); err != nil {
+		t.Fatalf("seed alice: %v", err)
+	}
+	if err := store.AssignUser(ctx, "bob", "fs3"); err != nil {
+		t.Fatalf("seed bob: %v", err)
 	}
 
-	data, err := json.Marshal(mockState)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
-	if err := os.WriteFile(statePath, data, 0644); err != nil {
-		t.Fatalf("write file error: %v", err)
-	}
-
-	admin := NewAdminServer(statePath, "")
+	admin := NewAdminServer(store, "")
 
 	// Set discovery resolver with pre-seeded nodes
 	resolver := client.NewDiscoveryResolver()

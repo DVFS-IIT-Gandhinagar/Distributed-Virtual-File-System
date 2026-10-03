@@ -21,7 +21,7 @@ An Andrew File System (AFS)-inspired, high-performance distributed virtual file 
                   |      MetaServer (Coordinator)     |
                   |  - Dynamic Root Discovery (MDS)   |
                   |  - Heartbeat & Liveness Tracker   |
-                  |  - State: metaserver_state.json   |
+                  |  - State: MongoDB (dvfs database) |
                   +-----------------+-----------------+
                                     ^
                    Registration &   |   Advisory
@@ -72,6 +72,7 @@ An Andrew File System (AFS)-inspired, high-performance distributed virtual file 
 ### Prerequisites
 - **Go**: 1.26+ installed
 - **Make** & **OpenSSL**
+- **MongoDB**: 7+ reachable by the MetaServer and Admin Console (locally: `docker run -d -p 27017:27017 mongo:7`; see `docs/setup.md` §3 for a production setup with auth)
 
 ### 1. Build and Initialize
 ```bash
@@ -90,13 +91,13 @@ make build
 
 ```bash
 # Terminal 1: Start MetaServer Coordinator
-./bin/metaserver -port=50051
+./bin/metaserver -port=50051 -mongo_uri=mongodb://127.0.0.1:27017/dvfs
 
 # Terminal 2: Start Storage FileServer
 ./bin/fileserver -id=fs1 -port=50052 -data=./fileserver_data -meta_addr=127.0.0.1:50051 -own_ip=127.0.0.1
 
 # Terminal 3: Start Admin Web Console (Optional)
-./bin/admin -port=8080 -state_file=./metaserver_state.json -static=./cmd/admin/static
+./bin/admin -port=8080 -mongo_uri=mongodb://127.0.0.1:27017/dvfs -static=./cmd/admin/static
 
 # Terminal 4: Launch Interactive Client Shell
 ./bin/client -username=alice -ip_addr=127.0.0.1 -port=50051 -meta=true

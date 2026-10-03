@@ -9,7 +9,7 @@ import (
 )
 
 func TestOrchestratorExecuteConcurrent(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{
 		FsID:    "0",
 		Address: "10.0.0.1:50052",
@@ -103,7 +103,7 @@ func TestOrchestratorExecuteConcurrent(t *testing.T) {
 }
 
 func TestOrchestratorValidation(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	history := NewCommandHistory(10, "")
 	orchestrator := NewOrchestrator(srv, NewMockSSHExecutor(), history, "", "", "")
 
@@ -124,7 +124,7 @@ func TestOrchestratorValidation(t *testing.T) {
 }
 
 func TestOrchestratorPresets(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "192.168.1.100:50052"}
 	srv.nodes["1"] = &NodeState{FsID: "1", Address: "192.168.1.101:50053"}
 
@@ -143,7 +143,7 @@ func TestOrchestratorPresets(t *testing.T) {
 }
 
 func TestOrchestratorConcurrencyLock(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()
@@ -182,7 +182,7 @@ func TestOrchestratorConcurrencyLock(t *testing.T) {
 }
 
 func TestOrchestratorTimeout(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()
@@ -209,7 +209,7 @@ func TestOrchestratorTimeout(t *testing.T) {
 }
 
 func TestOrchestratorCommandStringPopulation(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()
@@ -240,7 +240,7 @@ func TestOrchestratorCommandStringPopulation(t *testing.T) {
 }
 
 func TestOrchestratorCustomSSHPort(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()
@@ -263,7 +263,7 @@ func TestOrchestratorCustomSSHPort(t *testing.T) {
 }
 
 func TestOrchestrator_MachineNameShiftResolution(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	// Node 0 is dvfs1
 	srv.nodes["0"] = &NodeState{
 		FsID:        "0",
@@ -312,4 +312,3 @@ func TestOrchestrator_MachineNameShiftResolution(t *testing.T) {
 		t.Errorf("expected SSH call host to be '10.0.171.40', got %s", mockSSH.Calls[0].Host)
 	}
 }
-

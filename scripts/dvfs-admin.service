@@ -1,14 +1,22 @@
 [Unit]
 Description=Distributed Virtual File System (DVFS) Admin Console
-After=network-online.target dvfs-metaserver.service
-Wants=network-online.target
+After=network-online.target mongod.service dvfs-metaserver.service
+Wants=network-online.target mongod.service
 
 [Service]
 Type=simple
 # Dynamic user resolution: automatically detects the primary non-root user (UID 1000: e.g. ubuntu, rpi, jsm)
 # or respects DVFS_USER / DVFS_REPO environment overrides if set.
+# Environment= lines only reach the script because it is run with runuser -u,
+# not a login shell (-l / su -), which would discard them and silently fall
+# back to loopback.
 Environment=ADMIN_PORT=8080
-Environment=STATE_FILE=./bin/metaserver_state.json
+# Keep credentials out of this file; use
+#   EnvironmentFile=/etc/dvfs/mongo.env   (mode 0600, MONGO_URI=... inside)
+Environment=MONGO_URI=mongodb://127.0.0.1:27017/dvfs
+# gRPC address of the metaserver, used when an admin removes a node from the
+# cluster. Leave unset to resolve it from the discovery Gist.
+#Environment=DVFS_METASERVER_ADDR=127.0.0.1:50051
 
 ExecStart=/bin/bash -c '\
   USER_NAME=$${DVFS_USER:-$$(id -un 1000 2>/dev/null || whoami)}; \
@@ -16,9 +24,9 @@ ExecStart=/bin/bash -c '\
   REPO_DIR="$${DVFS_REPO:-$$USER_HOME/Distributed-Virtual-File-System}"; \
   cd "$$REPO_DIR" || { echo "[DVFS ERROR] Repository directory $$REPO_DIR not found" >&2; exit 1; }; \
   if command -v runuser >/dev/null 2>&1; then \
-    exec runuser -l "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash -l '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
+    exec runuser -u "$$USER_NAME" -- /bin/bash "$$REPO_DIR/scripts/start-admin.sh"; \
   else \
-    exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash -l '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
+    exec su "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-admin.sh'\''"; \
   fi'
 
 Restart=on-failure

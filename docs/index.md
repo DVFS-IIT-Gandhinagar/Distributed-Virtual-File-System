@@ -48,7 +48,7 @@ DVFS is designed for multi-user collaboration in cluster and campus environments
                   |  - User -> FileServer Routing     |
                   |  - Heartbeat & Liveness Tracker   |
                   |  - Shared Directory Index         |
-                  |  - State: metaserver_state.json   |
+                  |  - State: MongoDB (dvfs database) |
                   +-----------------+-----------------+
                                     ^
                    Registration &   |   Advisory

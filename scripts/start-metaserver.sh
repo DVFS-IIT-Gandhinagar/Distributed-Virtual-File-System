@@ -9,18 +9,15 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
 META_PORT="${META_PORT:-50051}"
-STATE_FILE="${STATE_FILE:-./bin/metaserver_state.json}"
+MONGO_URI="${MONGO_URI:-mongodb://127.0.0.1:27017/dvfs}"
+# Optional. Unset, the database named in MONGO_URI is used (else "dvfs");
+# forcing a default here would silently override the one in the URI.
+MONGO_DB="${MONGO_DB:-}"
 HEARTBEAT_TIMEOUT="${HEARTBEAT_TIMEOUT:-30s}"
 HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5s}"
 TLS_CERT="${TLS_CERT:-certs/server.crt}"
 TLS_KEY="${TLS_KEY:-certs/server.key}"
 TLS_CA="${TLS_CA:-certs/ca.crt}"
-
-# Ensure state directory exists
-STATE_DIR="$(dirname "$STATE_FILE")"
-if [ -n "$STATE_DIR" ] && [ "$STATE_DIR" != "." ]; then
-    mkdir -p "$STATE_DIR"
-fi
 
 # Ensure binary is built
 if [ ! -f "./bin/metaserver" ]; then
@@ -37,7 +34,8 @@ fi
 
 echo "[STARTUP] Starting DVFS Metaserver..."
 echo "[STARTUP] Port:               ${META_PORT}"
-echo "[STARTUP] State File:         ${STATE_FILE}"
+echo "[STARTUP] Mongo URI:          $(printf %s "${MONGO_URI}" | sed -E 's#(//[^/@:]+):[^@]*@#\1:***@#')"
+echo "[STARTUP] Mongo DB:           ${MONGO_DB:-<from URI, else dvfs>}"
 echo "[STARTUP] Heartbeat Timeout:  ${HEARTBEAT_TIMEOUT}"
 echo "[STARTUP] Heartbeat Interval: ${HEARTBEAT_INTERVAL}"
 echo "[STARTUP] TLS Cert:           ${TLS_CERT}"
@@ -46,7 +44,8 @@ echo "[STARTUP] TLS CA:             ${TLS_CA}"
 
 exec ./bin/metaserver \
   -port="${META_PORT}" \
-  -state_file="${STATE_FILE}" \
+  -mongo_uri="${MONGO_URI}" \
+  ${MONGO_DB:+-mongo_db="${MONGO_DB}"} \
   -heartbeat_timeout="${HEARTBEAT_TIMEOUT}" \
   -heartbeat_check_interval="${HEARTBEAT_INTERVAL}" \
   -tls_cert="${TLS_CERT}" \

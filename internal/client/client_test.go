@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/memory"
 	"google.golang.org/grpc"
 )
 
@@ -46,8 +48,7 @@ func startTestFileServerGRPC(t *testing.T, msAddr string) (addr string, fs *file
 func startTestMetaServerGRPC(t *testing.T) (addr string, ms *metaserver.MetaServer, cleanup func()) {
 	t.Helper()
 
-	msState := filepath.Join(t.TempDir(), "mds", "state.json")
-	ms, err := metaserver.NewMetaServer(msState)
+	ms, err := metaserver.NewMetaServer(context.Background(), memory.New())
 	if err != nil {
 		t.Fatalf("NewMetaServer failed: %v", err)
 	}
