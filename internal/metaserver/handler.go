@@ -525,6 +525,13 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 	}
 	ms.mu.RUnlock()
 
+	// A first login is a structural write: it must not overtake a
+	// deregistration that releases the very node it is about to pick, or the
+	// store ends up homing the user on a node it no longer has. Only the slow
+	// path pays for this; once assigned, logins never take writeOrderMu again.
+	ms.writeOrderMu.Lock()
+	defer ms.writeOrderMu.Unlock()
+
 	ms.mu.Lock()
 	// Re-check: another request may have assigned this user while we upgraded.
 	if _, exists := ms.users[user]; exists {
@@ -546,13 +553,12 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 		}, nil
 	}
 
-	nowUnix := time.Now().Unix()
-	transitioned := ms.markStaleFileServersLocked(nowUnix)
-
-	minFS, ok := ms.getLeastLoadedHealthyFileServerLocked(nowUnix)
+	// Placement judges liveness by heartbeat age, so nodes need not be flipped
+	// to stale here; the heartbeat monitor does that, and its store writes stay
+	// out of the login path.
+	minFS, ok := ms.getLeastLoadedHealthyFileServerLocked(time.Now().Unix())
 	if !ok {
 		ms.mu.Unlock()
-		h.persistStaleTransitions(ctx, transitioned)
 		return &pb.GetRootsResponse{Success: false, Error: "no healthy file server registered"}, nil
 	}
 
@@ -565,8 +571,6 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 	address := ms.fileservers[minFS].Address
 	roots := buildRootsLocked(ms, user)
 	ms.mu.Unlock()
-
-	h.persistStaleTransitions(ctx, transitioned)
 
 	// Assignment is durable state: if it is lost, the user is re-assigned on
 	// their next login and may land on a different node from their data.
@@ -587,16 +591,6 @@ func (h *GRPCHandler) GetRoots(ctx context.Context, req *pb.GetRootsRequest) (*p
 
 	log.Printf("[METASERVER] Assigned user %s to FS %s (users: %d)", user, address, userCount)
 	return &pb.GetRootsResponse{Success: true, Roots: roots}, nil
-}
-
-func (h *GRPCHandler) persistStaleTransitions(ctx context.Context, nodeIDs []string) {
-	for _, nodeID := range nodeIDs {
-		c, cancel := context.WithTimeout(ctx, 5*time.Second)
-		if err := h.MetaServer.store.SetFileServerStatus(c, nodeID, domain.FileServerStatusStale); err != nil {
-			log.Printf("[METASERVER] WARN: could not persist stale status for %s: %v", nodeID, err)
-		}
-		cancel()
-	}
 }
 
 func buildRootsLocked(ms *MetaServer, user string) []*pb.SharedRoot {
@@ -806,22 +800,26 @@ func (h *GRPCHandler) DeregisterFileServer(ctx context.Context, req *pb.Deregist
 	}
 	ms.mu.Unlock()
 
-	// Node first, then users, then shares.
+	// Users, then shares, then the node document last. If a later write fails,
+	// what remains in the store is a node with fewer users, which a restart
+	// reads cleanly and a retry finishes. Removing the node first would leave
+	// users homed on a node the store no longer has: orphaned after a restart,
+	// on a node that is never coming back.
 	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	err := func() error {
-		if exists {
-			if err := ms.store.RemoveFileServer(writeCtx, nodeID); err != nil {
+		if len(removed) > 0 {
+			if err := ms.store.RemoveUsers(writeCtx, removed); err != nil {
+				return err
+			}
+			if err := ms.store.RemoveSharesInvolving(writeCtx, removed...); err != nil {
 				return err
 			}
 		}
-		if len(removed) == 0 {
-			return nil
+		if exists {
+			return ms.store.RemoveFileServer(writeCtx, nodeID)
 		}
-		if err := ms.store.RemoveUsers(writeCtx, removed); err != nil {
-			return err
-		}
-		return ms.store.RemoveSharesInvolving(writeCtx, removed...)
+		return nil
 	}()
 	if err != nil {
 		log.Printf("[METASERVER] ERROR: failed to persist state after deregister of %s: %v", nodeID, err)
