@@ -1,6 +1,6 @@
 # Distributed Virtual File System (DVFS)
 
-[![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![gRPC](https://img.shields.io/badge/gRPC-v1.78.0-244c5a?style=flat&logo=grpc)](https://grpc.io)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-GitHub_Pages-blue?style=flat&logo=materialformkdocs)](https://dvfs-iit-gandhinagar.github.io/Distributed-Virtual-File-System/)
@@ -70,7 +70,7 @@ An Andrew File System (AFS)-inspired, high-performance distributed virtual file 
 ## 3. Quick Start (Single Machine)
 
 ### Prerequisites
-- **Go**: 1.27+ installed
+- **Go**: 1.26+ installed
 - **Make** & **OpenSSL**
 - **MongoDB**: 7+ reachable by the MetaServer and Admin Console (locally: `docker run -d -p 27017:27017 mongo:7`; see `docs/setup.md` §3 for a production setup with auth)
 
