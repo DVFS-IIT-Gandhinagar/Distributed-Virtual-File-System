@@ -2,6 +2,7 @@ package mongo_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -54,25 +55,16 @@ func TestMongoStoreConformance(t *testing.T) {
 	})
 }
 
+// testRunID makes database names unique per process, so two test runs
+// sharing one server (a CI matrix, or a developer and a CI job on the same
+// machine) never drop each other's data.
+var testRunID = fmt.Sprintf("%d_%d", os.Getpid(), time.Now().UnixNano()%1_000_000)
+
 func dbNameFor(t *testing.T, n int) string {
 	t.Helper()
 	// Mongo database names are limited in length and character set; a counter
 	// keeps them short and legal regardless of the subtest name.
-	return "dvfs_test_" + itoa(n)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return fmt.Sprintf("dvfs_test_%s_%d", testRunID, n)
 }
 
 // TestDatabaseResolution pins the precedence between -mongo_db and the database
@@ -109,10 +101,12 @@ func TestDatabaseResolution(t *testing.T) {
 			if err != nil {
 				t.Fatalf("open: %v", err)
 			}
+			// Nothing is written here, so nothing is dropped: one of these cases
+			// resolves to the default "dvfs" database, which on a developer's
+			// machine is the real one.
 			t.Cleanup(func() {
 				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cleanupCancel()
-				_ = s.Drop(cleanupCtx)
 				_ = s.Close(cleanupCtx)
 			})
 

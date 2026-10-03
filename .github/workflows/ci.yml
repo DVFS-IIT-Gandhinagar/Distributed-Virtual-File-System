@@ -49,9 +49,17 @@ jobs:
       run: |
         make fmt
         make vet
-        
+        go vet -tags use_google_auth ./...
+
     - name: Run Tests
       run: make test
+      env:
+        DVFS_MONGO_TEST_URI: mongodb://localhost:27017
+
+    # Release binaries are built with use_google_auth, which swaps in the
+    # production auth code; it has to be tested in that configuration too.
+    - name: Run Tests (use_google_auth)
+      run: make test-google-auth
       env:
         DVFS_MONGO_TEST_URI: mongodb://localhost:27017
       

@@ -10,7 +10,9 @@ cd "$REPO_DIR"
 
 ADMIN_PORT="${ADMIN_PORT:-8080}"
 MONGO_URI="${MONGO_URI:-mongodb://127.0.0.1:27017/dvfs}"
-MONGO_DB="${MONGO_DB:-dvfs}"
+# Optional. Unset, the database named in MONGO_URI is used (else "dvfs");
+# forcing a default here would silently override the one in the URI.
+MONGO_DB="${MONGO_DB:-}"
 # gRPC address of the metaserver, used when an admin removes a node from the
 # cluster. The binary reads this variable itself; leave it unset to resolve
 # the metaserver from the discovery Gist instead.
@@ -76,7 +78,7 @@ GIST_URL="https://gist.githubusercontent.com/dvfs-iitgn/6eb8da397735b83f76b54af4
 echo "[STARTUP] Starting DVFS Admin Console..."
 echo "[STARTUP] Port:       ${ADMIN_PORT}"
 echo "[STARTUP] Mongo URI: $(printf %s "${MONGO_URI}" | sed -E 's#(//[^/@:]+):[^@]*@#\1:***@#')"
-echo "[STARTUP] Mongo DB:  ${MONGO_DB}"
+echo "[STARTUP] Mongo DB:  ${MONGO_DB:-<from URI, else dvfs>}"
 echo "[STARTUP] MDS Addr:   ${DVFS_METASERVER_ADDR:-<gist discovery>}"
 echo "[STARTUP] Static Dir: ${STATIC_DIR}"
 echo "[STARTUP] SSH User:   ${SSH_USER}"
@@ -97,7 +99,7 @@ fi
 exec ./bin/admin \
   -port="${ADMIN_PORT}" \
   -mongo_uri="${MONGO_URI}" \
-  -mongo_db="${MONGO_DB}" \
+  ${MONGO_DB:+-mongo_db="${MONGO_DB}"} \
   -static="${STATIC_DIR}" \
   -ssh_user="${SSH_USER}" \
   -ssh_key="${SSH_KEY}" \

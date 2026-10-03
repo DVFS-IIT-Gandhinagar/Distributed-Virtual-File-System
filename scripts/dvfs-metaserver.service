@@ -1,7 +1,7 @@
 [Unit]
 Description=Distributed Virtual File System (DVFS) Metaserver
-After=network-online.target
-Wants=network-online.target
+After=network-online.target mongod.service
+Wants=network-online.target mongod.service
 
 [Service]
 Type=simple
@@ -10,6 +10,8 @@ Type=simple
 Environment=META_PORT=50051
 # Cluster metadata lives in MongoDB. Point this at the replica set:
 #   Environment=MONGO_URI=mongodb://dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0
+# Keep credentials out of this file; use
+#   EnvironmentFile=/etc/dvfs/mongo.env   (mode 0600, MONGO_URI=... inside)
 Environment=MONGO_URI=mongodb://127.0.0.1:27017/dvfs
 
 ExecStart=/bin/bash -c '\
@@ -20,7 +22,7 @@ ExecStart=/bin/bash -c '\
   if command -v runuser >/dev/null 2>&1; then \
     exec runuser -u "$$USER_NAME" -- /bin/bash "$$REPO_DIR/scripts/start-metaserver.sh"; \
   else \
-    exec su - "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-metaserver.sh'\''"; \
+    exec su "$$USER_NAME" -c "cd '\''$$REPO_DIR'\'' && exec /bin/bash '\''$$REPO_DIR/scripts/start-metaserver.sh'\''"; \
   fi'
 
 Restart=on-failure

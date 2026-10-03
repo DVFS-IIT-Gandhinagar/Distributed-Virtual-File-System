@@ -81,12 +81,12 @@ MONGO_URI ?= mongodb://127.0.0.1:27017/dvfs
 # Run meta server
 run-metaserver: build
 	@echo "Starting meta server..."
-	@./$(METASERVER_BINARY) -port=50052 -mongo_uri=$(MONGO_URI)
+	@./$(METASERVER_BINARY) -port=50052 -mongo_uri='$(MONGO_URI)'
 
 # Run admin console
 run-admin: build
 	@echo "Starting admin console..."
-	@./$(ADMIN_BINARY) -port=8080 -mongo_uri=$(MONGO_URI)
+	@./$(ADMIN_BINARY) -port=8080 -mongo_uri='$(MONGO_URI)'
 
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice

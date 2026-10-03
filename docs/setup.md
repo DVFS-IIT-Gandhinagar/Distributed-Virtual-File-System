@@ -82,6 +82,47 @@ openssl verify -CAfile deploy_certs/ca.crt deploy_certs/dvfs1/server.crt
 
 ## 3. MetaServer Setup (dvfs1 / Coordinator Node)
 
+### MongoDB (required before the MetaServer starts)
+
+The MetaServer and the Admin Console keep the cluster's routing state (nodes, user placement, shares) in MongoDB 7+. Both exit at startup if they cannot reach it, and the systemd units are ordered `After=mongod.service`.
+
+```bash
+# Install MongoDB 7 Community (Ubuntu). See https://www.mongodb.com/docs/manual/administration/install-on-linux/
+curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+echo "deb [signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+sudo apt update && sudo apt install -y mongodb-org
+sudo systemctl enable --now mongod
+```
+
+A single `mongod` on the MetaServer host, bound to loopback (the package default), needs nothing more: the shipped `MONGO_URI=mongodb://127.0.0.1:27017/dvfs` works as is.
+
+If the Admin Console runs on another host, or you run a replica set across `dvfs1`–`dvfs3`, `mongod` has to listen on the network. Share grants and user placement are authorization data, so never expose an unauthenticated `mongod`:
+
+```bash
+# 1. Create the application user (once, on the primary)
+mongosh --eval 'db.getSiblingDB("admin").createUser({user:"dvfsadmin",pwd:passwordPrompt(),roles:["userAdminAnyDatabase"]})'
+mongosh -u dvfsadmin -p --authenticationDatabase admin \
+  --eval 'db.getSiblingDB("dvfs").createUser({user:"dvfs",pwd:passwordPrompt(),roles:[{role:"readWrite",db:"dvfs"}]})'
+
+# 2. /etc/mongod.conf: require auth, bind only the cluster interface, TLS when the network is shared
+#    security:
+#      authorization: enabled
+#    net:
+#      bindIp: 127.0.0.1,<this node's cluster IP>
+#      tls:
+#        mode: requireTLS
+#        certificateKeyFile: /etc/ssl/mongod.pem
+sudo systemctl restart mongod
+
+# 3. Hand the URI to the services through a root-only file, not the unit file or a command line
+sudo install -d -m 0750 /etc/dvfs
+sudo sh -c 'umask 077; echo "MONGO_URI=mongodb://dvfs:<password>@dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0&authSource=dvfs&tls=true" > /etc/dvfs/mongo.env'
+# In dvfs-metaserver.service and dvfs-admin.service, replace the Environment=MONGO_URI line with:
+#   EnvironmentFile=/etc/dvfs/mongo.env
+```
+
+### MetaServer service
+
 On the machine designated as the **MetaServer**:
 
 ```bash
@@ -200,6 +241,11 @@ EOF'
 sudo chmod 0440 /etc/sudoers.d/dvfs
 
 # Step 2: Install and start the FileServer service
+# FS_ID is the node's identity in the cluster and must be unique: the MetaServer
+# refuses a second live fileserver that claims an id already registered from
+# another address. start-fileserver.sh derives it from a dvfsN user or host
+# name; on any other machine set it explicitly (Environment=FS_ID=fsN in the
+# unit, or FS_ID=fsN in the environment) instead of accepting the fs1 fallback.
 sudo cp scripts/dvfs-fileserver.service /etc/systemd/system/
 chmod +x scripts/start-fileserver.sh
 sudo systemctl daemon-reload
@@ -265,8 +311,9 @@ To test the complete DVFS ecosystem locally on a single machine without systemd 
 # 1. Generate dev certificates (if not already created)
 make certs
 
-# 2. Terminal 1: Start MetaServer (with mock auth enabled)
-DVFS_AUTH_MOCK=true go run ./cmd/metaserver/main.go -port=50051 -tls_cert=certs/server.crt -tls_key=certs/server.key
+# 2. Terminal 1: Start MetaServer (with mock auth enabled). Needs a local mongod,
+#    or: docker run -d -p 27017:27017 mongo:7
+DVFS_AUTH_MOCK=true go run ./cmd/metaserver/main.go -port=50051 -mongo_uri=mongodb://127.0.0.1:27017/dvfs -tls_cert=certs/server.crt -tls_key=certs/server.key
 
 # 3. Terminal 2: Start FileServer (with mock auth enabled)
 DVFS_AUTH_MOCK=true go run ./cmd/fileserver/main.go \
@@ -407,7 +454,7 @@ For multi-user environments or systems where explicit user parameterization is r
 Each template unit sets `User=%i`, `WorkingDirectory=%h/Distributed-Virtual-File-System`, and resolves state and binary directories relative to the user's home directory (`%h`).
 
 ### State File Path Conventions
-- Cluster metadata lives in MongoDB, not on local disk. Both the MetaServer and the Admin Console take `-mongo_uri` (or the `MONGO_URI` environment variable) and `-mongo_db` (default `dvfs`).
-- Under systemd execution via `scripts/start-metaserver.sh` and `scripts/start-admin.sh`, `MONGO_URI` defaults to `mongodb://127.0.0.1:27017/dvfs`. Point it at the replica set in production, e.g. `mongodb://dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0`.
+- Cluster metadata lives in MongoDB, not on local disk. Both the MetaServer and the Admin Console take `-mongo_uri` (or the `MONGO_URI` environment variable) and an optional `-mongo_db`, which overrides the database named in the URI (the URI's database is used otherwise, and `dvfs` if it names none).
+- Under systemd execution via `scripts/start-metaserver.sh` and `scripts/start-admin.sh`, `MONGO_URI` defaults to `mongodb://127.0.0.1:27017/dvfs`. Point it at the replica set in production, e.g. `mongodb://dvfs1:27017,dvfs2:27017,dvfs3:27017/dvfs?replicaSet=rs0`. A URI with credentials belongs in an `EnvironmentFile` (see §3), not in the unit file or on a command line, where `systemctl show` and `ps` expose it.
 - Because membership is read from the shared database rather than a local file, the Admin Console no longer has to run on the MetaServer host.
 - There is no import path from the old `metaserver_state.json`. A cluster starts with an empty database and repopulates itself: fileservers re-register on startup (republishing their users and shares from their own on-disk ACLs), and users are re-assigned a home node on their next login.

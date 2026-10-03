@@ -10,7 +10,9 @@ cd "$REPO_DIR"
 
 META_PORT="${META_PORT:-50051}"
 MONGO_URI="${MONGO_URI:-mongodb://127.0.0.1:27017/dvfs}"
-MONGO_DB="${MONGO_DB:-dvfs}"
+# Optional. Unset, the database named in MONGO_URI is used (else "dvfs");
+# forcing a default here would silently override the one in the URI.
+MONGO_DB="${MONGO_DB:-}"
 HEARTBEAT_TIMEOUT="${HEARTBEAT_TIMEOUT:-30s}"
 HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-5s}"
 TLS_CERT="${TLS_CERT:-certs/server.crt}"
@@ -33,7 +35,7 @@ fi
 echo "[STARTUP] Starting DVFS Metaserver..."
 echo "[STARTUP] Port:               ${META_PORT}"
 echo "[STARTUP] Mongo URI:          $(printf %s "${MONGO_URI}" | sed -E 's#(//[^/@:]+):[^@]*@#\1:***@#')"
-echo "[STARTUP] Mongo DB:           ${MONGO_DB}"
+echo "[STARTUP] Mongo DB:           ${MONGO_DB:-<from URI, else dvfs>}"
 echo "[STARTUP] Heartbeat Timeout:  ${HEARTBEAT_TIMEOUT}"
 echo "[STARTUP] Heartbeat Interval: ${HEARTBEAT_INTERVAL}"
 echo "[STARTUP] TLS Cert:           ${TLS_CERT}"
@@ -43,7 +45,7 @@ echo "[STARTUP] TLS CA:             ${TLS_CA}"
 exec ./bin/metaserver \
   -port="${META_PORT}" \
   -mongo_uri="${MONGO_URI}" \
-  -mongo_db="${MONGO_DB}" \
+  ${MONGO_DB:+-mongo_db="${MONGO_DB}"} \
   -heartbeat_timeout="${HEARTBEAT_TIMEOUT}" \
   -heartbeat_check_interval="${HEARTBEAT_INTERVAL}" \
   -tls_cert="${TLS_CERT}" \

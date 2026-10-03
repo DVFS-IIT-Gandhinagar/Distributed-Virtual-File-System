@@ -72,6 +72,7 @@ An Andrew File System (AFS)-inspired, high-performance distributed virtual file 
 ### Prerequisites
 - **Go**: 1.27+ installed
 - **Make** & **OpenSSL**
+- **MongoDB**: 7+ reachable by the MetaServer and Admin Console (locally: `docker run -d -p 27017:27017 mongo:7`; see `docs/setup.md` §3 for a production setup with auth)
 
 ### 1. Build and Initialize
 ```bash
