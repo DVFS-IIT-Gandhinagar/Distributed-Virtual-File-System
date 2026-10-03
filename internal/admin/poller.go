@@ -55,15 +55,25 @@ func (a *AdminServer) refreshNodes() {
 	}
 
 	a.users = make(map[string]string, len(snap.Users))
+	if a.loggedOrphans == nil {
+		a.loggedOrphans = make(map[string]string)
+	}
+	orphans := make(map[string]string)
 	for _, u := range snap.Users {
 		numeric, ok := numericByNodeID[u.HomeNodeID]
 		if !ok {
-			// The account is real and still assigned; its node is just not in the cluster table right now.
-			log.Printf("[ADMIN] User %s references unregistered node %q; omitting from the node view", u.Username, u.HomeNodeID)
+			// The account is real and still assigned; its node is just not in
+			// the cluster table right now. Logged once per (user, node), not on
+			// every poll.
+			orphans[u.Username] = u.HomeNodeID
+			if a.loggedOrphans[u.Username] != u.HomeNodeID {
+				log.Printf("[ADMIN] User %s references unregistered node %q; omitting from the node view (release with DELETE /api/nodes/%s)", u.Username, u.HomeNodeID, u.HomeNodeID)
+			}
 			continue
 		}
 		a.users[u.Username] = numeric
 	}
+	a.loggedOrphans = orphans
 
 	presentIDs := make(map[string]struct{}, len(snap.FileServers))
 	for _, rec := range snap.FileServers {

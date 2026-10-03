@@ -65,6 +65,7 @@ type AdminServer struct {
 	resolver         *client.DiscoveryResolver
 	removedNodes     map[string]int64 // fsID -> removal timestamp (tombstone)
 	removedNodesFile string
+	loggedOrphans    map[string]string // username -> unregistered home node already reported in the log
 }
 
 // NewAdminServer creates a new AdminServer instance.

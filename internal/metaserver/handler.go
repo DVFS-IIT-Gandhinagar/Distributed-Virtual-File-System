@@ -37,18 +37,15 @@ func (h *GRPCHandler) removeSharesByOwnerLocked(rootUser string) {
 	}
 }
 
-// legacyNodeIDPrefix marks a node that registered before fs_id existed and is
-// therefore keyed on its address. Such an entry is the only kind a later
-// registration carrying a real fs_id may adopt.
-const legacyNodeIDPrefix = "addr:"
-
 // resolveNodeID determines the stable node identity for a request, falling
-// back to the address for fileservers predating the fs_id field.
+// back to the address for fileservers predating the fs_id field. An
+// address-keyed entry is the only kind a later registration carrying a real
+// fs_id may adopt.
 func resolveNodeID(fsID, address string) string {
 	if fsID != "" {
 		return fsID
 	}
-	return legacyNodeIDPrefix + address
+	return storage.LegacyNodeIDPrefix + address
 }
 
 // adoptableLegacyNodeLocked finds an address-keyed entry that a registration
@@ -60,7 +57,7 @@ func (ms *MetaServer) adoptableLegacyNodeLocked(address string) (uint64, string,
 		return 0, "", false
 	}
 	info := ms.fileservers[legacyID]
-	if info == nil || !strings.HasPrefix(info.NodeID, legacyNodeIDPrefix) {
+	if info == nil || !strings.HasPrefix(info.NodeID, storage.LegacyNodeIDPrefix) {
 		return 0, "", false
 	}
 	return legacyID, info.NodeID, true

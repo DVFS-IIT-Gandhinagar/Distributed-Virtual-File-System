@@ -119,9 +119,12 @@ The MetaServer coordinator used to persist its complete operational state in `me
   them a new home node, because reassignment would overwrite their stored placement and strand
   whatever data is still on the original node. The account becomes routable again as soon as
   that node registers. The boot log reports the count as `orphaned_users`. An operator who
-  knows the node is gone for good releases its users with the admin console's remove-node
-  action, which calls `DeregisterFileServer`: released users are placed afresh on their next
-  login, and whatever data remained on the old node is no longer reachable through DVFS.
+  knows the node is gone for good releases its users through the admin console's remove-node
+  API, which calls `DeregisterFileServer`. Because an orphan's home node has no record, it
+  does not appear in the console's node list; release it by its stable id instead
+  (`DELETE /api/nodes/<fs_id>`, e.g. `/api/nodes/fs3`). Released users are placed afresh on
+  their next login, and whatever data remained on the old node is no longer reachable through
+  DVFS.
 
 ### 2.3 Heartbeat & Stale Transitions
 - **FileServer Heartbeat Loop**: A background goroutine in `internal/fileserver/msclient.go` executes `Heartbeat(address)` to the MetaServer every 5 seconds (configurable via `-meta_heartbeat_interval`).

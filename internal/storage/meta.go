@@ -19,6 +19,11 @@ import (
 // ErrNotFound is returned when a targeted update names a record that is absent.
 var ErrNotFound = errors.New("storage: record not found")
 
+// LegacyNodeIDPrefix marks a node that registered before fs_id existed and is
+// therefore keyed on its address ("addr:10.0.0.1:50052"). Such an entry carries
+// no operator-assigned identity that a restart command could relaunch under.
+const LegacyNodeIDPrefix = "addr:"
+
 // FileServerRecord is the durable identity and liveness state of one storage node.
 //
 // NodeID is the operator-assigned identity from the fileserver's -id flag
