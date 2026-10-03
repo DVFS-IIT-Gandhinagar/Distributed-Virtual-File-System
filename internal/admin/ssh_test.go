@@ -174,4 +174,3 @@ func TestRedactMongoURI(t *testing.T) {
 		}
 	}
 }
-
