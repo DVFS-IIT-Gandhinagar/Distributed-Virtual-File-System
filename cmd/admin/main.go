@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
+	"time"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/admin"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
+	mongostore "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/mongo"
 )
 
 func main() {
-	stateFile := flag.String("state_file", "./bin/metaserver_state.json", "Path to metaserver state JSON")
+	mongoURI := flag.String("mongo_uri", "", "MongoDB connection URI (overrides MONGO_URI env)")
+	mongoDB := flag.String("mongo_db", "", "MongoDB database name; overrides the database in -mongo_uri (default: the URI's database, else \"dvfs\")")
 	port := flag.Int("port", 8080, "Admin server port")
 	staticDir := flag.String("static", "./cmd/admin/static", "Path to static frontend files")
 	sshUser := flag.String("ssh_user", "", "Default SSH username for cluster nodes (optional)")
@@ -27,11 +31,37 @@ func main() {
 	flag.Parse()
 
 	log.Printf("[ADMIN] Starting Admin Console on port %d...", *port)
-	log.Printf("[ADMIN] State file: %s", *stateFile)
 	log.Printf("[ADMIN] Static directory: %s", *staticDir)
 	log.Printf("[ADMIN] SSH User: '%s', SSH Key: '%s', Port: %d, Repo Path: '%s'", *sshUser, *sshKey, *sshPort, *repoPath)
 
-	server := admin.NewAdminServer(*stateFile, *staticDir)
+	uri := *mongoURI
+	if uri == "" {
+		uri = os.Getenv("MONGO_URI")
+	}
+	if uri == "" {
+		log.Fatalf("MongoDB is required: pass -mongo_uri or set MONGO_URI. " +
+			"The admin console reads cluster membership from the shared metadata store, " +
+			"so it no longer needs to run on the metaserver host.")
+	}
+
+	connectCtx, connectCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	store, err := mongostore.Open(connectCtx, mongostore.Config{
+		URI:      uri,
+		Database: *mongoDB,
+		AppName:  "dvfs-admin",
+	})
+	connectCancel()
+	if err != nil {
+		log.Fatalf("[ADMIN] Failed to connect to MongoDB: %v", err)
+	}
+	defer func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer closeCancel()
+		_ = store.Close(closeCtx)
+	}()
+	log.Printf("[ADMIN] Connected to MongoDB database %q", store.DatabaseName())
+
+	server := admin.NewAdminServer(store, *staticDir)
 	msAddr := *metaserverAddr
 	if msAddr == "" {
 		msAddr = os.Getenv("DVFS_METASERVER_ADDR")
@@ -45,7 +75,8 @@ func main() {
 	}
 	history := admin.NewCommandHistory(*historyLimit, *historyFile)
 	server.SetHistory(history)
-	server.SetOrchestrator(admin.NewOrchestrator(server, admin.NewRemoteSSHExecutor(), history, *sshUser, *sshKey, *repoPath, *sshPort))
+	orchestrator := admin.NewOrchestrator(server, admin.NewRemoteSSHExecutor(), history, *sshUser, *sshKey, *repoPath, *sshPort)
+	server.SetOrchestrator(orchestrator)
 
 	if *tlsCert != "" && *tlsKey != "" {
 		certPath := *tlsCert

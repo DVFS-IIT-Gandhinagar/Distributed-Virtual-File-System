@@ -13,7 +13,7 @@ import (
 func TestAdminGoogleLoginCallback(t *testing.T) {
 	t.Setenv("DVFS_AUTH_MOCK", "true")
 
-	server := NewAdminServer("", "")
+	server := NewAdminServer(nil, "")
 
 	// 1. Successful callback with mock code
 	req := httptest.NewRequest(http.MethodGet, "/logincallback?code=mock-code:adminuser@gmail.com", nil)

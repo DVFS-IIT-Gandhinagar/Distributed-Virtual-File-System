@@ -98,8 +98,10 @@ func (a *AdminServer) CallSetQuota(address string, username string, quotaBytes u
 
 // CallDeregisterFileServer invokes the DeregisterFileServer gRPC RPC on the metaserver.
 // msAddr is the metaserver's gRPC address (e.g. "10.0.171.40:50051").
-// fsAddress is the fileserver's gRPC address (e.g. "10.0.171.41:50052").
-func (a *AdminServer) CallDeregisterFileServer(msAddr string, fsAddress string) error {
+// fsID is the node's stable identity (its -id flag, e.g. "fs1"), which the
+// metaserver prefers. fsAddress (e.g. "10.0.171.41:50052") is sent as well,
+// as the fallback for a metaserver that predates fs_id.
+func (a *AdminServer) CallDeregisterFileServer(msAddr, fsID, fsAddress string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -135,6 +137,7 @@ func (a *AdminServer) CallDeregisterFileServer(msAddr string, fsAddress string) 
 			defer conn.Close()
 			c := mspb.NewMetaServerClient(conn)
 			resp, callErr := c.DeregisterFileServer(ctx, &mspb.DeregisterFileServerRequest{
+				FsId:    fsID,
 				Address: fsAddress,
 			})
 			if callErr == nil {
@@ -159,6 +162,7 @@ func (a *AdminServer) CallDeregisterFileServer(msAddr string, fsAddress string) 
 
 	c := mspb.NewMetaServerClient(insecureConn)
 	resp, err := c.DeregisterFileServer(ctx, &mspb.DeregisterFileServerRequest{
+		FsId:    fsID,
 		Address: fsAddress,
 	})
 	if err != nil {
@@ -173,4 +177,3 @@ func (a *AdminServer) CallDeregisterFileServer(msAddr string, fsAddress string) 
 
 	return nil
 }
-

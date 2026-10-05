@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/client"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage"
 )
 
 type NodeStatus string
@@ -23,12 +24,13 @@ const (
 
 // NodeState represents the tracked state and latest telemetry of a single fileserver.
 type NodeState struct {
-	FsID        string             `json:"fsID"`
-	DisplayID   int                `json:"displayID"`
-	DisplayName string             `json:"displayName"`
-	MachineName string             `json:"machineName"`
-	Address     string             `json:"address"`
-	MetricsURL  string             `json:"metricsURL"`
+	FsID               string             `json:"fsID"`
+	NodeID             string             `json:"nodeID"`
+	DisplayID          int                `json:"displayID"`
+	DisplayName        string             `json:"displayName"`
+	MachineName        string             `json:"machineName"`
+	Address            string             `json:"address"`
+	MetricsURL         string             `json:"metricsURL"`
 	Status             NodeStatus         `json:"status"`
 	LastSeen           int64              `json:"lastSeen"`
 	Metrics            *FileserverMetrics `json:"metrics"`
@@ -44,34 +46,35 @@ type NodeState struct {
 
 // AdminServer coordinates fileserver discovery, metrics polling, and serves the REST API + UI.
 type AdminServer struct {
-	stateFile    string
-	staticDir    string
-	msAddr       string                // MetaServer gRPC address for administrative commands (e.g. 10.0.171.40:50051)
-	nodes        map[string]*NodeState // fsID -> NodeState
-	users        map[string]string     // username -> fsID string
-	mu           sync.RWMutex
-	httpClient   *http.Client
-	stopCh       chan struct{}
-	history      *CommandHistory
-	orchestrator *Orchestrator
-	alertManager *AlertManager
-	snapshotPath string
-	authManager  *AuthManager
+	store            storage.MetaStore
+	staticDir        string
+	msAddr           string                // MetaServer gRPC address for administrative commands (e.g. 10.0.171.40:50051)
+	nodes            map[string]*NodeState // fsID -> NodeState
+	users            map[string]string     // username -> fsID string
+	mu               sync.RWMutex
+	httpClient       *http.Client
+	stopCh           chan struct{}
+	history          *CommandHistory
+	orchestrator     *Orchestrator
+	alertManager     *AlertManager
+	snapshotPath     string
+	authManager      *AuthManager
 	tlsCertFile      string
 	tlsKeyFile       string
 	isTLS            bool
 	resolver         *client.DiscoveryResolver
 	removedNodes     map[string]int64 // fsID -> removal timestamp (tombstone)
 	removedNodesFile string
+	loggedOrphans    map[string]string // username -> unregistered home node already reported in the log
 }
 
 // NewAdminServer creates a new AdminServer instance.
-func NewAdminServer(stateFile, staticDir string) *AdminServer {
+func NewAdminServer(store storage.MetaStore, staticDir string) *AdminServer {
 	snapshotPath := "./bin/admin_metrics_snapshot.json"
 	historyPath := "./bin/command_history.json"
 	alertsPath := "./bin/admin_alerts.json"
 	removedNodesPath := "./bin/admin_removed_nodes.json"
-	if stateFile == "" {
+	if store == nil {
 		snapshotPath = ""
 		historyPath = ""
 		alertsPath = ""
@@ -79,7 +82,7 @@ func NewAdminServer(stateFile, staticDir string) *AdminServer {
 	}
 
 	srv := &AdminServer{
-		stateFile: stateFile,
+		store:     store,
 		staticDir: staticDir,
 		nodes:     make(map[string]*NodeState),
 		users:     make(map[string]string),

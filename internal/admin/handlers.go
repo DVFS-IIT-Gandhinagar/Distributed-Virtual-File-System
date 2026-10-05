@@ -515,28 +515,36 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !exists || node == nil {
+		// Not in the console's list. The home node of orphaned users is exactly
+		// that: it has no record, so it is never listed, yet its users can only
+		// be released by deregistering it. Treat the path as a stable node id
+		// and let the metaserver release whoever is homed on it. Only an
+		// explicitly configured metaserver is used; nothing is resolved from
+		// discovery for an id the console has never seen.
+		msAddr := a.msAddr
 		a.mu.Unlock()
-		http.Error(w, fmt.Sprintf(`{"error":"node '%s' not found"}`, fsID), http.StatusNotFound)
+		if msAddr == "" {
+			http.Error(w, fmt.Sprintf(`{"error":"node '%s' not found"}`, fsID), http.StatusNotFound)
+			return
+		}
+		if err := a.CallDeregisterFileServer(msAddr, fsID, ""); err != nil {
+			log.Printf("[ADMIN] metaserver deregister by id %s failed: %v", fsID, err)
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "metaserver deregister failed: " + err.Error()})
+			return
+		}
+		log.Printf("[ADMIN] Released users homed on unlisted node id=%s", fsID)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success":         true,
+			"removed_node_id": fsID,
+			"released_only":   true,
+		})
 		return
 	}
 
 	fsAddr := node.Address
 	displayName := node.DisplayName
-	delete(a.nodes, fsID)
-	if a.removedNodes == nil {
-		a.removedNodes = make(map[string]int64)
-	}
-	a.removedNodes[fsID] = time.Now().Unix()
-	a.saveRemovedNodesLocked()
-
-	// Also remove user mappings assigned to this fsID
-	for username, homeFsID := range a.users {
-		if homeFsID == fsID {
-			delete(a.users, username)
-		}
-	}
-
-	stateFile := a.stateFile
+	nodeID := node.NodeID
 	msAddr := a.msAddr
 	if msAddr == "" && a.resolver != nil {
 		if resolved, err := a.resolver.ResolveMetaAddress("50051"); err == nil && resolved != "" {
@@ -545,29 +553,49 @@ func (a *AdminServer) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Unlock()
 
-	log.Printf("[ADMIN] Node removed by admin: fsID=%s name=%s address=%s", fsID, displayName, fsAddr)
-
-	// Clean state file on disk directly if accessible
-	if stateFile != "" {
-		if err := RemoveNodeFromMetaStateFile(stateFile, fsID); err != nil {
-			log.Printf("[ADMIN] Notice: direct state file removal for %s: %v", fsID, err)
-		} else {
-			log.Printf("[ADMIN] Successfully purged fsID=%s from state file %s", fsID, stateFile)
-		}
-	}
-
+	// The metaserver owns cluster membership; this console never edits the
+	// store directly. The cluster is changed first and the node hidden only
+	// once that has happened: a node that is hidden here but still routed to
+	// is worse than an error, because the operator believes it is gone.
 	var msErr string
-	if msAddr != "" && fsAddr != "" {
-		if err := a.CallDeregisterFileServer(msAddr, fsAddr); err != nil {
-			log.Printf("[ADMIN] Warning: metaserver deregister for %s failed: %v", fsAddr, err)
-			msErr = err.Error()
+	switch {
+	case msAddr == "":
+		msErr = "no metaserver address configured (-metaserver_addr or DVFS_METASERVER_ADDR); node hidden from this console only, not deregistered from the cluster"
+		log.Printf("[ADMIN] Warning: %s", msErr)
+	case nodeID == "" && fsAddr == "":
+		msErr = "node has neither a stable id nor an address; cannot deregister it from the metaserver"
+		log.Printf("[ADMIN] Warning: %s", msErr)
+	default:
+		if err := a.CallDeregisterFileServer(msAddr, nodeID, fsAddr); err != nil {
+			log.Printf("[ADMIN] metaserver deregister for %s (%s) failed; node left in place: %v", nodeID, fsAddr, err)
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "metaserver deregister failed: " + err.Error()})
+			return
 		}
 	}
+
+	a.mu.Lock()
+	delete(a.nodes, fsID)
+	if a.removedNodes == nil {
+		a.removedNodes = make(map[string]int64)
+	}
+	a.removedNodes[fsID] = time.Now().Unix()
+	a.saveRemovedNodesLocked()
+	// Also remove user mappings assigned to this fsID
+	for username, homeFsID := range a.users {
+		if homeFsID == fsID {
+			delete(a.users, username)
+		}
+	}
+	a.mu.Unlock()
+
+	log.Printf("[ADMIN] Node removed by admin: fsID=%s name=%s address=%s", fsID, displayName, fsAddr)
 
 	resp := map[string]interface{}{
 		"success":         true,
 		"removed_fs_id":   fsID,
 		"removed_address": fsAddr,
+		"removed_node_id": nodeID,
 		"display_name":    displayName,
 	}
 	if msErr != "" {
@@ -1277,4 +1305,3 @@ func (a *AdminServer) handleGoogleLoginCallback(w http.ResponseWriter, r *http.R
 
 	_ = auth.RenderCallbackHTML(w, email, token, "")
 }
-

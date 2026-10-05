@@ -17,6 +17,7 @@ import (
 
 	mspb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/metaserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/metaserver"
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage/memory"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -24,7 +25,7 @@ import (
 func startTestMetaServerForFS(t *testing.T) (addr string, cleanup func()) {
 	t.Helper()
 
-	ms, err := metaserver.NewMetaServer(t.TempDir() + "/mds_state.json")
+	ms, err := metaserver.NewMetaServer(context.Background(), memory.New())
 	if err != nil {
 		t.Fatalf("NewMetaServer failed: %v", err)
 	}
@@ -286,7 +287,7 @@ func TestFileServer_DialMetaServer_mTLSWithClientCert(t *testing.T) {
 	}
 	creds := credentials.NewTLS(serverTLSConfig)
 
-	ms, err := metaserver.NewMetaServer(filepath.Join(tempDir, "mds_state.json"))
+	ms, err := metaserver.NewMetaServer(context.Background(), memory.New())
 	if err != nil {
 		t.Fatalf("NewMetaServer failed: %v", err)
 	}

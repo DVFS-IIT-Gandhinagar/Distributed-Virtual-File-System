@@ -75,15 +75,18 @@ run-server: build
 	@echo "Starting file server..."
 	@./$(FILESERVER_BINARY) -id=fs1 -port=50051 -data=./fileserver_data
 
+# MongoDB connection for the metaserver and admin console.
+MONGO_URI ?= mongodb://127.0.0.1:27017/dvfs
+
 # Run meta server
 run-metaserver: build
 	@echo "Starting meta server..."
-	@./$(METASERVER_BINARY) -port=50052
+	@./$(METASERVER_BINARY) -port=50052 -mongo_uri='$(MONGO_URI)'
 
 # Run admin console
 run-admin: build
 	@echo "Starting admin console..."
-	@./$(ADMIN_BINARY) -port=8080 -state_file=./metaserver_state.json
+	@./$(ADMIN_BINARY) -port=8080 -mongo_uri='$(MONGO_URI)'
 
 # Run client (usage: make run-client USER=alice IP_ADDR=127.0.0.1)
 USER ?= alice

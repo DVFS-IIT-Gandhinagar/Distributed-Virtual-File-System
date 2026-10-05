@@ -105,7 +105,7 @@ func TestAuthManager_SessionLifecycle(t *testing.T) {
 }
 
 func TestAuthManager_ClusterSanitization(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	sum := sha256.Sum256([]byte("adminpass"))
 	srv.authManager.SetHash(hex.EncodeToString(sum[:]))
 
@@ -115,15 +115,15 @@ func TestAuthManager_ClusterSanitization(t *testing.T) {
 		Address: "127.0.0.1:50052",
 		Status:  StatusOnline,
 		Metrics: &FileserverMetrics{
-			DiskTotalBytes:   1000000,
-			DiskUsedBytes:    500000,
-			UsersAssigned:    2,
-			ActiveUsers:      []string{"alice", "bob"},
-			PerUserStorage:   map[string]uint64{"alice": 200000, "bob": 300000},
-			PerUserQuota:     map[string]uint64{"alice": 500000, "bob": 500000},
-			UptimeSeconds:    3600,
-			CPUTempCelsius:   45.5,
-			CPUUsagePercent:  12.3,
+			DiskTotalBytes:  1000000,
+			DiskUsedBytes:   500000,
+			UsersAssigned:   2,
+			ActiveUsers:     []string{"alice", "bob"},
+			PerUserStorage:  map[string]uint64{"alice": 200000, "bob": 300000},
+			PerUserQuota:    map[string]uint64{"alice": 500000, "bob": 500000},
+			UptimeSeconds:   3600,
+			CPUTempCelsius:  45.5,
+			CPUUsagePercent: 12.3,
 		},
 		WriteMbps: 15.5,
 		ReadMbps:  42.0,
@@ -206,7 +206,7 @@ func TestAuthManager_ClusterSanitization(t *testing.T) {
 }
 
 func TestAuthManager_ProtectedEndpoints401(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	sum := sha256.Sum256([]byte("mypassword"))
 	srv.authManager.SetHash(hex.EncodeToString(sum[:]))
 
@@ -237,7 +237,7 @@ func TestAuthManager_ProtectedEndpoints401(t *testing.T) {
 }
 
 func TestAuthManager_LoginLogoutAPI(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	sum := sha256.Sum256([]byte("secureadmin"))
 	srv.authManager.SetHash(hex.EncodeToString(sum[:]))
 
@@ -314,7 +314,7 @@ func TestAuthManager_LoginLogoutAPI(t *testing.T) {
 }
 
 func TestWebSocket_CookieAuth(t *testing.T) {
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	srv.nodes["0"] = &NodeState{FsID: "0", Address: "10.0.0.1:50052"}
 
 	mockSSH := NewMockSSHExecutor()
@@ -376,7 +376,7 @@ func TestAuth_TLSSecureCookie(t *testing.T) {
 	rawSum := sha256.Sum256([]byte("secretpass"))
 	expectedHash := hex.EncodeToString(rawSum[:])
 
-	srv := NewAdminServer("", "")
+	srv := NewAdminServer(nil, "")
 	am := &AuthManager{
 		hash:     expectedHash,
 		sessions: make(map[string]time.Time),
@@ -429,4 +429,3 @@ func TestAuth_TLSSecureCookie(t *testing.T) {
 		t.Errorf("expected Secure=true on logout cookie when TLS is enabled, got false")
 	}
 }
-

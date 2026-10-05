@@ -29,7 +29,7 @@ func (m *mockFileServer) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) 
 }
 
 func TestHandleUsers(t *testing.T) {
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	admin.users["alice"] = "0"
 	admin.users["bob"] = "1"
 
@@ -121,7 +121,7 @@ func TestHandleUsers(t *testing.T) {
 }
 
 func TestHandleUserQuotaValidation(t *testing.T) {
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	admin.users["alice"] = "0"
 
 	// 1. Invalid path
@@ -165,7 +165,7 @@ func TestHandleUserQuotaSuccess(t *testing.T) {
 
 	serverAddr := lis.Addr().String()
 
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	admin.users["alice"] = "0"
 	admin.nodes["0"] = &NodeState{
 		FsID:    "0",
@@ -229,7 +229,7 @@ func TestHandleUserQuotaSuccessTLS(t *testing.T) {
 
 	serverAddr := lis.Addr().String()
 
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	admin.users["alice"] = "0"
 	admin.nodes["0"] = &NodeState{
 		FsID:    "0",
@@ -267,7 +267,7 @@ func TestHandleUserQuotaSuccessTLS(t *testing.T) {
 }
 
 func TestHandleUsers_DiscoveredMachineMappingAndShiftFix(t *testing.T) {
-	admin := NewAdminServer("", "")
+	admin := NewAdminServer(nil, "")
 	// Bob is assigned to fsID "1", which in the cluster corresponds to dvfs3 (FS-3) because dvfs2 was skipped
 	admin.users["bob"] = "1"
 	admin.users["alice"] = "0"
@@ -366,4 +366,3 @@ func TestHandleUsers_DiscoveredMachineMappingAndShiftFix(t *testing.T) {
 		t.Errorf("expected node 1 MachineName 'dvfs3', got %q", node1Storage.MachineName)
 	}
 }
-

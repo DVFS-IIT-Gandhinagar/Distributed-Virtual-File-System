@@ -22,6 +22,8 @@ else
         FS_ID="fs${BASH_REMATCH[1]}"
     else
         FS_ID="fs1"
+        echo "[STARTUP] WARNING: neither user '${DETECTED_NAME}' nor host '${HOSTNAME}' looks like dvfsN; defaulting FS_ID to fs1." >&2
+        echo "[STARTUP] WARNING: FS_ID is this node's identity in the cluster and must be unique; the metaserver refuses a second live node named fs1. Set FS_ID explicitly on any node that is not alone." >&2
     fi
     echo "[STARTUP] Auto-detected FS_ID: ${FS_ID} (from host/user '${DETECTED_NAME}')"
 fi

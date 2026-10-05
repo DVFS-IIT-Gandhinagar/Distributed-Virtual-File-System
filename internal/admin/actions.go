@@ -5,13 +5,40 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/storage"
 	"github.com/google/uuid"
 )
+
+// shellQuote wraps s in single quotes for safe interpolation into a remote
+// shell command. A fileserver's id is chosen by whoever runs that fileserver,
+// so it is never trusted to be a plain word.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// A direct-binary restart runs on the target host and must use that host's own
+// MongoDB configuration: handing it the console's URI pointed a metaserver on
+// another machine at that machine's loopback and put the console's credentials
+// on a remote command line. The binaries read MONGO_URI themselves; the login
+// environment is loaded first and the launch refused if it is not there, since
+// the binary would only exit on it a second later with the error in a log file.
+const (
+	loadLoginEnv    = ". ~/.profile 2>/dev/null; . ~/.bashrc 2>/dev/null; "
+	requireMongoURI = `[ -n "$MONGO_URI" ] || { echo "MONGO_URI is not set in this host's login environment (~/.profile or /etc/environment); not starting a binary that would exit on it" >&2; exit 1; }; `
+)
+
+var mongoCredentialRE = regexp.MustCompile(`(mongodb(?:\+srv)?://[^:/@\s']+):[^@\s']*@`)
+
+// redactMongoURI masks the password in any MongoDB URI inside s.
+func redactMongoURI(s string) string {
+	return mongoCredentialRE.ReplaceAllString(s, "${1}:***@")
+}
 
 // Supported orchestration action types.
 const (
@@ -109,6 +136,16 @@ func (o *Orchestrator) GetPresets() map[string]*NodeRestartParams {
 
 	presets := make(map[string]*NodeRestartParams)
 	for fsID, node := range o.server.nodes {
+		// The -id a restart relaunches under is the node's identity in the
+		// cluster, so it must be the one it registered with. The console's
+		// numeric key is only a display handle; relaunching under it would
+		// register a different fileserver. A pre-fs_id node has no such id, and
+		// the numeric key is the only guess left.
+		restartID := node.NodeID
+		if restartID == "" || strings.HasPrefix(restartID, storage.LegacyNodeIDPrefix) {
+			restartID = fsID
+		}
+
 		host, portStr, err := net.SplitHostPort(node.Address)
 		port := 50052
 		if err == nil {
@@ -129,7 +166,7 @@ func (o *Orchestrator) GetPresets() map[string]*NodeRestartParams {
 		}
 
 		presets[fsID] = &NodeRestartParams{
-			FsID:     fsID,
+			FsID:     restartID,
 			Address:  node.Address,
 			Host:     host,
 			Port:     port,
@@ -181,16 +218,19 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 		}
 
 		if req.RestartMode == "binary" {
+			fsIDArg := shellQuote(params.FsID)
+			killPattern := shellQuote("fileserver -id=" + params.FsID)
+
 			switch targetService {
 			case "metaserver":
-				return fmt.Sprintf(
-					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -state_file=%s/bin/metaserver_state.json > %s/metaserver.log 2>&1 < /dev/null &",
-					repoPath, repoPath, repoPath,
+				return loadLoginEnv + requireMongoURI + fmt.Sprintf(
+					"fuser -k 50051/tcp 2>/dev/null || pkill -f 'metaserver' || true; sleep 1; nohup %s/bin/metaserver -port=50051 > %s/metaserver.log 2>&1 < /dev/null &",
+					repoPath, repoPath,
 				)
 			case "admin":
-				return fmt.Sprintf(
-					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 -state_file=%s/bin/metaserver_state.json > %s/admin.log 2>&1 < /dev/null &",
-					repoPath, repoPath, repoPath,
+				return loadLoginEnv + requireMongoURI + fmt.Sprintf(
+					"fuser -k 8080/tcp 2>/dev/null || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/admin -port=8080 > %s/admin.log 2>&1 < /dev/null &",
+					repoPath, repoPath,
 				)
 			case "all":
 				dataDir := params.DataDir
@@ -205,9 +245,9 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 				if ownIP == "" {
 					ownIP = params.Host
 				}
-				return fmt.Sprintf(
-					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 -state_file=%s/bin/metaserver_state.json > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 -state_file=%s/bin/metaserver_state.json > %s/admin.log 2>&1 < /dev/null &",
-					params.Port, params.FsID, repoPath, repoPath, repoPath, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, repoPath, repoPath,
+				return loadLoginEnv + requireMongoURI + fmt.Sprintf(
+					"fuser -k %d/tcp 50051/tcp 8080/tcp 2>/dev/null || pkill -f %s || pkill -f 'metaserver' || pkill -f 'bin/admin' || true; sleep 1; nohup %s/bin/metaserver -port=50051 > %s/metaserver.log 2>&1 < /dev/null & nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null & nohup %s/bin/admin -port=8080 > %s/admin.log 2>&1 < /dev/null &",
+					params.Port, killPattern, repoPath, repoPath, repoPath, fsIDArg, params.Port, dataDir, metaAddr, ownIP, repoPath, repoPath, repoPath,
 				)
 			default: // "fileserver"
 				dataDir := params.DataDir
@@ -223,8 +263,8 @@ func (o *Orchestrator) FormatCommand(req *ActionRequest, nodeID string, params *
 					ownIP = params.Host
 				}
 				return fmt.Sprintf(
-					"fuser -k %d/tcp 2>/dev/null || pkill -f 'fileserver -id=%s' || true; sleep 1; nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null &",
-					params.Port, params.FsID, repoPath, params.FsID, params.Port, dataDir, metaAddr, ownIP, repoPath,
+					"fuser -k %d/tcp 2>/dev/null || pkill -f %s || true; sleep 1; nohup %s/bin/fileserver -id=%s -port=%d -data=%s -meta_addr=%s -own_ip=%s > %s/fileserver.log 2>&1 < /dev/null &",
+					params.Port, killPattern, repoPath, fsIDArg, params.Port, dataDir, metaAddr, ownIP, repoPath,
 				)
 			}
 		}
@@ -401,6 +441,7 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 	if displayCmd == "" {
 		displayCmd = req.ActionType
 	}
+	displayCmd = redactMongoURI(displayCmd)
 
 	// Initial record in running state
 	record := CommandRecord{
@@ -462,7 +503,7 @@ func (o *Orchestrator) Execute(ctx context.Context, req ActionRequest, onEvent f
 					ActionID: actionID,
 					NodeID:   nID,
 					Address:  nState.Address,
-					Command:  cmd,
+					Command:  redactMongoURI(cmd),
 				})
 			}
 
