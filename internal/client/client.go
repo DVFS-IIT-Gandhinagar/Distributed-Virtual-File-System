@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
@@ -70,7 +71,19 @@ type Client struct {
 	cacheHandler  *CacheHandler
 	stopCallback  func() error
 	notifyWriter  io.Writer // readline-aware writer for notification messages
+
+	// fidMu guards currentFID/rootFID/sessionToken against the heartbeat goroutine.
+	fidMu         sync.Mutex
+	heartbeatStop chan struct{}
+	heartbeatDone chan struct{}
+	// cacheMu guards the cacheHandler pointer, which callbacks read concurrently.
+	cacheMu sync.Mutex
 }
+
+// sessionHeartbeatInterval must stay well below the fileserver's activeSessionTTL
+// (45s); otherwise an idle client is treated as inactive and stops receiving
+// cache-invalidation callbacks for changes other users make in a shared folder.
+const sessionHeartbeatInterval = 15 * time.Second
 
 // Shared Roots with the user
 type SharedRoot struct {
@@ -118,7 +131,16 @@ func (c *Client) AuthToken() string {
 
 // AttachCacheHandler wires cache invalidation callbacks to the active cache handler.
 func (c *Client) AttachCacheHandler(cacheHandler *CacheHandler) {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
 	c.cacheHandler = cacheHandler
+}
+
+// attachedCacheHandler returns the cache handler; safe to call from callbacks.
+func (c *Client) attachedCacheHandler() *CacheHandler {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+	return c.cacheHandler
 }
 
 // SetNotifyWriter provides a readline-aware writer so notifications correctly
@@ -152,6 +174,7 @@ func (c *Client) SetRootPath(display_name, path string) {
 
 // Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
+	c.stopHeartbeat() // a previous connection's heartbeat must not outlive it
 	if c.stopCallback == nil {
 		callbackAddr, stopFn, err := c.startCallbackServer()
 		if err != nil {
@@ -249,9 +272,69 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		log.Printf("[AUTH] Established authenticated session with server")
 	}
 
+	c.fidMu.Lock()
 	c.rootFID = domain.FIDFromProto(resp.UserRootFid)
 	c.currentFID = c.rootFID
-	return c.currentFID, nil
+	fid := c.currentFID
+	c.fidMu.Unlock()
+
+	c.startHeartbeat()
+	return fid, nil
+}
+
+// startHeartbeat periodically tells the fileserver this session is still alive
+// (and which directory it is in) so it keeps receiving invalidation callbacks.
+func (c *Client) startHeartbeat() {
+	c.stopHeartbeat()
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	c.heartbeatStop = stop
+	c.heartbeatDone = done
+	conn := c.serverConn
+
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(sessionHeartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				c.sendHeartbeat(conn)
+			}
+		}
+	}()
+}
+
+func (c *Client) stopHeartbeat() {
+	if c.heartbeatStop == nil {
+		return
+	}
+	close(c.heartbeatStop)
+	<-c.heartbeatDone
+	c.heartbeatStop = nil
+	c.heartbeatDone = nil
+}
+
+func (c *Client) sendHeartbeat(conn pb.FileServerClient) {
+	// Hold fidMu for the whole RPC so a concurrent `cd` cannot be overwritten
+	// on the server by a heartbeat carrying the previous directory.
+	c.fidMu.Lock()
+	defer c.fidMu.Unlock()
+	if conn == nil || c.currentFID == nil || c.rootFID == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// ChangeDir(".") is a no-op move that refreshes the session's activity and
+	// current directory on the fileserver.
+	_, _ = conn.ChangeDir(ctx, &pb.ChangeDirRequest{
+		Fid:     c.currentFID.ToProto(),
+		RootFid: c.rootFID.ToProto(),
+		Path:    ".",
+	})
 }
 
 // ReRegister re-establishes the client session with the fileserver.
@@ -280,11 +363,12 @@ func (c *Client) ReRegister() error {
 		return fmt.Errorf("server returned nil root FID")
 	}
 
+	c.fidMu.Lock()
 	if resp.SessionToken != "" {
 		c.sessionToken = resp.SessionToken
 	}
-
 	c.rootFID = newRootFID
+	c.fidMu.Unlock()
 	if c.cacheHandler != nil && c.cacheHandler.root != nil {
 		c.cacheHandler.root.fid = newRootFID
 	}
@@ -304,7 +388,10 @@ func (c *Client) Disconnect() {
 	if c == nil {
 		return
 	}
+	c.stopHeartbeat()
+	c.fidMu.Lock()
 	c.sessionToken = ""
+	c.fidMu.Unlock()
 	if c.serverConn != nil && c.username != "" {
 		func() {
 			defer func() { _ = recover() }()
@@ -383,6 +470,8 @@ func (c *Client) Path() (string, error) {
 
 // CreateDirectory changes the current directory
 func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
+	c.fidMu.Lock()
+	defer c.fidMu.Unlock()
 	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
 		Fid:     c.currentFID.ToProto(),
 		RootFid: c.rootFID.ToProto(),
@@ -401,6 +490,8 @@ func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
 }
 
 func (c *Client) ChangeCurrentFID(fid *domain.FID) {
+	c.fidMu.Lock()
+	defer c.fidMu.Unlock()
 	c.currentFID = fid
 }
 
