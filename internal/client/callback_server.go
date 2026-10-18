@@ -51,22 +51,32 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 		eventType = callbackEventFileUpdated
 	}
 
-	if s.client == nil {
-		return &cbpb.InvalidateResponse{Success: true}, nil
+	if s.client != nil {
+		s.client.handleInvalidation(fid, eventType)
 	}
-	ch := s.client.attachedCacheHandler()
+
+	return &cbpb.InvalidateResponse{Success: true}, nil
+}
+
+// handleInvalidation applies one invalidation event, whether it arrived over
+// the WatchEvents stream or a legacy callback. It runs off the shell
+// goroutine, so it only queues work for the cache (applied before the next
+// command) and prints a notice.
+func (c *Client) handleInvalidation(fid *domain.FID, eventType uint64) {
+	if c == nil || fid == nil {
+		return
+	}
+	ch := c.attachedCacheHandler()
 
 	switch eventType {
 	case callbackEventDirNewFile:
 		ch.QueueDirInvalidation(fid)
-		s.client.Notify("\n[NOTIFY] New file or folder added in your current directory by another user. Cache invalidated; run ls to see it.\n")
+		c.Notify("\n[NOTIFY] New file or folder added in your current directory by another user. Cache invalidated; run ls to see it.\n")
 	case callbackEventFileDeleted:
 		ch.QueueDirInvalidation(fid)
-		s.client.Notify("\n[NOTIFY] A file or folder was deleted in your current directory by another user. Cache invalidated; run ls to see the change.\n")
+		c.Notify("\n[NOTIFY] A file or folder was deleted in your current directory by another user. Cache invalidated; run ls to see the change.\n")
 	default:
 		ch.QueueFileInvalidation(fid)
-		s.client.Notify("\n[NOTIFY] File updated by another user. Cache invalidated.\n")
+		c.Notify("\n[NOTIFY] File updated by another user. Cache invalidated.\n")
 	}
-
-	return &cbpb.InvalidateResponse{Success: true}, nil
 }

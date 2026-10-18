@@ -284,6 +284,21 @@ message UnregisterClientResponse {
 }
 
 // FileServer service
+// WatchEvents: a client-initiated, long-lived stream over which the fileserver
+// pushes cache invalidations. It replaces the server-to-client callback dial,
+// which cannot get through NAT or client firewalls.
+message WatchEventsRequest {
+  string client_id = 1;
+  string username = 2; // used only when the server runs without authentication
+}
+
+message WatchEvent {
+  // 0 = ready/keepalive (no FID), 1 = file updated, 2 = entry added to directory,
+  // 3 = entry removed from directory. Same values as callback.InvalidateRequest.new_version.
+  uint64 event_type = 1;
+  FID fid = 2; // changed file (1) or directory whose entries changed (2, 3)
+}
+
 service FileServer {
   rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse);
   rpc UnregisterClient(UnregisterClientRequest) returns (UnregisterClientResponse);
@@ -306,6 +321,7 @@ service FileServer {
   rpc Share(ShareRequest) returns (ShareResponse);
   rpc Unshare(UnshareRequest) returns (UnshareResponse);
   rpc SetQuota(SetQuotaRequest) returns (SetQuotaResponse);
+  rpc WatchEvents(WatchEventsRequest) returns (stream WatchEvent);
 }
 
 // To build these run: make proto

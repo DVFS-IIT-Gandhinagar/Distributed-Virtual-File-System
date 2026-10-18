@@ -18,8 +18,10 @@ import (
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver/session"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 // GRPCHandler implements the gRPC file server interface
@@ -1171,4 +1173,54 @@ func (h *GRPCHandler) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) (*p
 	}
 
 	return &pb.SetQuotaResponse{Success: true}, nil
+}
+
+// watchKeepaliveInterval keeps idle event streams alive through NAT/firewall
+// idle timeouts and lets both ends notice a dead connection.
+const watchKeepaliveInterval = 20 * time.Second
+
+// WatchEvents streams cache invalidations to a client over a connection the
+// client opened, so it works through NAT and client firewalls. The first
+// message (event_type 0) confirms the stream is live; later type-0 messages
+// are keepalives.
+func (h *GRPCHandler) WatchEvents(req *pb.WatchEventsRequest, stream pb.FileServer_WatchEventsServer) error {
+	ctx := stream.Context()
+
+	username := ""
+	if caller, ok := session.UsernameFromContext(ctx); ok && caller != "" {
+		username = caller
+	} else if req != nil {
+		username = req.Username
+	}
+	if username == "" {
+		return status.Error(codes.InvalidArgument, "username is required")
+	}
+
+	es := h.fileServer.attachEventStream(username)
+	defer h.fileServer.detachEventStream(username, es)
+	log.Printf("WatchEvents: stream %d opened for user=%s", es.id, username)
+	defer log.Printf("WatchEvents: stream %d closed for user=%s", es.id, username)
+
+	if err := stream.Send(&pb.WatchEvent{EventType: 0}); err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(watchKeepaliveInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-es.done:
+			return status.Error(codes.Aborted, "event stream closed by server; reconnect")
+		case ev := <-es.ch:
+			if err := stream.Send(ev); err != nil {
+				return err
+			}
+		case <-ticker.C:
+			if err := stream.Send(&pb.WatchEvent{EventType: 0}); err != nil {
+				return err
+			}
+		}
+	}
 }

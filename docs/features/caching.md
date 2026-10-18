@@ -1,4 +1,4 @@
-# Client-Side Caching & Invalidation Callbacks
+# Client-Side Caching & Pushed Invalidations
 
 This document details the DVFS client caching architecture, split into its theoretical foundation (**In Essence**) and its concrete engineering realities (**Implementation Quirks**).
 
@@ -29,11 +29,10 @@ Cache File    into Local Cache File
 ### Server-Driven Invalidation Callbacks
 Local caching creates a cache coherence challenge: if User A updates a file that User B has cached, User B might read stale data.
 
-DVFS resolves this using **server-push callbacks**:
-- When a client reads a file, the FileServer notes the client's presence.
-- When any user modifies or deletes that file, the FileServer initiates an outbound gRPC `Invalidate` RPC to all clients holding that file in their active directory.
-- Upon receiving the callback, the client immediately evicts the local cache file and clears its cached status flag.
-- The next time the user reads the file, a cache miss triggers a fresh download of the updated content.
+DVFS resolves this with **server-pushed invalidations**:
+- After connecting, each client opens a long-lived `WatchEvents` stream to its FileServer. The client dials out, exactly like every other RPC, so this works behind NAT, campus Wi-Fi and client firewalls and needs no listening port on the client.
+- The FileServer tracks which directory each session is in. When any user changes that directory (create, mkdir, upload, write, delete, trash, restore), the FileServer pushes an event down the streams of the other users in it.
+- On an event the client drops the stale cached file or marks the directory listing stale; the next `ls`, `cd` or `read` re-fetches from the server.
 
 This push-invalidation architecture completely eliminates repetitive "check if modified" polling requests, preserving network bandwidth and fileserver CPU cycles.
 
@@ -93,42 +92,47 @@ Cached files are stored in `./.cache/` relative to the client binary:
 - UUID naming prevents local path collisions when files with the same name exist in different directories or roots.
 - On client exit (`exit`), `h.cacheHandler.ClearCache()` automatically unlinks all UUID files and removes `./.cache/`.
 
-### 2.3 Push Callback Event Types
-The FileServer callback sender (`internal/fileserver/callback_server.go`) issues three distinct invalidation event codes:
+### 2.3 Push Event Types
+The FileServer event sender (`internal/fileserver/callback_server.go`) issues three distinct invalidation event codes:
 
 ```
 +--------------------------+------------+--------------------------------------------+
 | Event Constant           | Enum Value | Trigger Source                             |
 +--------------------------+------------+--------------------------------------------+
-| callbackEventFileUpdated | 1          | UploadFile stream close (file hash changed) |
-| callbackEventDirNewFile  | 2          | CreateFile RPC or UploadFile stream open   |
-| callbackEventFileDeleted | 3          | DeleteFile RPC handler                     |
+| callbackEventFileUpdated | 1          | UploadFile completion, WriteFile           |
+| callbackEventDirNewFile  | 2          | CreateFile (file or directory), RestoreFile |
+| callbackEventFileDeleted | 3          | DeleteFile, TrashFile, failed-upload cleanup |
 +--------------------------+------------+--------------------------------------------+
 ```
 
-In the Protocol Buffer schema (`api/callback/callback.proto`), these event codes are transmitted over the `uint64 new_version` field of `InvalidateRequest`, allowing backward compatibility with standard version invalidation semantics while delivering rich event notifications to active client sessions.
+Events travel in `WatchEvent.event_type` on the `WatchEvents` stream (`api/fileserver/fileserver.proto`). `event_type = 0` is the server's "stream is live" message and a keepalive sent every 20 s, which keeps NAT/firewall mappings open and lets both ends notice a dead connection.
 
-When an event arrives at the client's callback listener (which binds to an ephemeral `0.0.0.0:0` port, `internal/client/callback_server.go`):
-1. **`FILE_UPDATED`**: Searches the active directory for the matching FID, deletes the local `./.cache/<contentUID>` file, sets `contentCached = false`, and logs a cache invalidation notice.
-2. **`DIR_NEW_FILE`**: Logs a notice alerting the user that a new file was created in their current directory.
-3. **`FILE_DELETED`**: Evicts the deleted node from `curr.children`, deletes any associated local cache file, and alerts the user.
+Events arrive on a background goroutine, so the client (`internal/client/event_stream.go`, `handleInvalidation`) only queues them; the shell applies the queue before the next command, so the cache tree is never touched concurrently:
+1. **`FILE_UPDATED`**: Deletes the local `./.cache/<contentUID>` file, sets `contentCached = false`, and re-fetches the parent listing (sizes).
+2. **`DIR_NEW_FILE`** / **`FILE_DELETED`**: Marks the directory's listing stale; it is re-fetched on the next `ls`/`cd`.
 
-### 2.4 Callback Session Targeting & Failure Pruning
-Broadcasting callbacks to every known client would degrade performance. The FileServer optimizes callbacks with strict session filtering:
-- **Directory Matching**: Callbacks are only delivered to sessions whose `currentDirFID` matches the directory where the event occurred.
+**Reconnects.** If the stream drops (server restart, network blip), the client reconnects with exponential backoff (1 s up to 30 s). After reconnecting it re-sends its current directory and re-fetches it, since events may have been missed. If the server rejects the session (expired, or the machine's IP changed), the client prints a notice and `refresh` re-registers and reopens the stream.
+
+**Legacy callbacks.** A FileServer that predates `WatchEvents` answers `Unimplemented`; the client then falls back to the old model: it opens an inbound listener (`internal/client/callback_server.go`) and the FileServer dials it with `callback.Invalidate`. That path only works when the FileServer can reach the client directly (no NAT, no blocking firewall).
+
+### 2.4 Event Session Targeting
+Broadcasting events to every known client would degrade performance. The FileServer filters targets strictly:
+- **Directory Matching**: Events are only delivered to sessions whose `currentDirFID` matches the directory where the event occurred. Each client reports its directory on every `cd` and in a 15 s heartbeat; with authentication, only the caller's own session is updated.
 - **Origin Exclusion**: The user who triggered the modification is excluded from notifications (their local cache is already updated).
-- **Activity TTL**: Sessions with no activity for more than 45 seconds (`activeSessionTTL = 45 * time.Second`) are skipped.
-- **Failure Pruning**: If dialing a client's callback listener fails 3 consecutive times (`maxCallbackFailures = 3`), the session is purged from `fs.sessions`.
+- **Liveness**: A session with an open `WatchEvents` stream is always a target. Legacy (callback-only) sessions are skipped after 45 s without activity (`activeSessionTTL`).
+- **Multiple clients per user**: Each running client has its own stream, and every stream of the user receives the event.
+- **Slow clients**: Each stream buffers up to 256 events; a client that falls further behind is disconnected and resyncs when it reconnects, so it can never stall the FileServer.
+- **Failure Pruning (legacy)**: If dialing a client's callback listener fails 3 consecutive times (`maxCallbackFailures = 3`), the session is purged from `fs.sessions`.
 
 ### 2.5 Client Session Lifecycle: Graceful Disconnect & Re-Registration
 Maintaining accurate connection counts on FileServers and Admin Dashboards requires deterministic lifecycle hooks:
 - **Graceful Disconnect (`UnregisterClient`)**:
   - When a client exits cleanly (`exit`), switches storage roots (`cd ..` at root), or receives an OS interrupt (`SIGINT`/`SIGTERM` trapped via Go signals), `Client.Disconnect()` dispatches an `UnregisterClient` RPC to the FileServer before terminating.
-  - The FileServer immediately removes the client's session from `fs.sessions`, closes active callback listeners, and decrements its active connections metric to 0.
+  - The client closes its `WatchEvents` stream first; the FileServer then removes the session from `fs.sessions`, closes any remaining streams for it, and decrements its active connections metric.
 - **Session Self-Healing (`ReRegister`)**:
   - If a FileServer crashes and reboots while a client remains open, the FileServer's in-memory callback sessions are lost.
   - When the client executes `refresh` (or navigates directories), `CacheHandler.Refresh()` invokes `Client.ReRegister()`.
-  - The client re-registers with the FileServer, re-binds its callback port, verifies the root FID has not shifted, and restores push notification delivery without client restarts.
+  - The client re-registers with the FileServer, verifies the root FID has not shifted, and reopens its `WatchEvents` stream, restoring push notification delivery without client restarts. (After a FileServer restart the stream also reconnects on its own.)
 
 ### 2.6 Terminal Prompt Safety (`SetNotifyWriter`)
 Because callbacks are received asynchronously over gRPC, printing alerts while the user is typing would corrupt the interactive readline prompt. 
