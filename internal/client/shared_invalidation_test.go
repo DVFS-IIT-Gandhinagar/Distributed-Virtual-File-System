@@ -110,7 +110,12 @@ func setupSharedPair(t *testing.T) (alice, bob *Client, bobCache *CacheHandler, 
 	t.Helper()
 	fsAddr, _, cleanupFS := startTestFileServerGRPC(t, "")
 	t.Cleanup(cleanupFS)
+	return setupSharedPairAt(t, fsAddr)
+}
 
+// setupSharedPairAt is setupSharedPair against an already running fileserver.
+func setupSharedPairAt(t *testing.T, fsAddr string) (alice, bob *Client, bobCache *CacheHandler, expect func(what, want string, action func() error)) {
+	t.Helper()
 	alice = connectTestClient(t, "alice", "alice", fsAddr)
 	t.Cleanup(alice.Disconnect)
 	if err := alice.Share("bob"); err != nil {

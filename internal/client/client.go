@@ -78,6 +78,27 @@ type Client struct {
 	heartbeatDone chan struct{}
 	// cacheMu guards the cacheHandler pointer, which callbacks read concurrently.
 	cacheMu sync.Mutex
+	// tokenMu guards sessionToken, which the auth interceptors read from the
+	// heartbeat and event-stream goroutines.
+	tokenMu sync.RWMutex
+
+	// Event stream (server push). watchCancel/watchDone control the goroutine;
+	// legacyCallbacks is set when the server predates WatchEvents.
+	watchCancel     context.CancelFunc
+	watchDone       chan struct{}
+	legacyCallbacks bool
+}
+
+func (c *Client) getSessionToken() string {
+	c.tokenMu.RLock()
+	defer c.tokenMu.RUnlock()
+	return c.sessionToken
+}
+
+func (c *Client) setSessionToken(t string) {
+	c.tokenMu.Lock()
+	c.sessionToken = t
+	c.tokenMu.Unlock()
 }
 
 // sessionHeartbeatInterval must stay well below the fileserver's activeSessionTTL
@@ -175,14 +196,11 @@ func (c *Client) SetRootPath(display_name, path string) {
 // Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	c.stopHeartbeat() // a previous connection's heartbeat must not outlive it
-	if c.stopCallback == nil {
-		callbackAddr, stopFn, err := c.startCallbackServer()
-		if err != nil {
-			return nil, fmt.Errorf("failed to start callback server: %w", err)
-		}
-		c.callbackAddr = callbackAddr
-		c.stopCallback = stopFn
-	}
+	c.stopEventStream()
+	// No local callback listener by default: invalidations arrive over the
+	// WatchEvents stream this client opens, which needs no inbound port and so
+	// works behind NAT and client firewalls. The listener is only started as a
+	// fallback for servers that predate WatchEvents (see startEventStream).
 
 	// TLS configuration
 	var opts []grpc.DialOption
@@ -218,9 +236,9 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	if c.authToken != "" || c.sessionToken != "" {
+	if c.authToken != "" || c.getSessionToken() != "" {
 		authUnary := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, callOpts ...grpc.CallOption) error {
-			token := c.sessionToken
+			token := c.getSessionToken()
 			if token == "" || strings.HasSuffix(method, "RegisterClient") {
 				token = c.authToken
 			}
@@ -230,7 +248,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 			return invoker(ctx, method, req, reply, cc, callOpts...)
 		}
 		authStream := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, callOpts ...grpc.CallOption) (grpc.ClientStream, error) {
-			token := c.sessionToken
+			token := c.getSessionToken()
 			if token == "" {
 				token = c.authToken
 			}
@@ -268,7 +286,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	}
 
 	if resp.SessionToken != "" {
-		c.sessionToken = resp.SessionToken
+		c.setSessionToken(resp.SessionToken)
 		log.Printf("[AUTH] Established authenticated session with server")
 	}
 
@@ -279,6 +297,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	c.fidMu.Unlock()
 
 	c.startHeartbeat()
+	c.startEventStream()
 	return fid, nil
 }
 
@@ -363,10 +382,10 @@ func (c *Client) ReRegister() error {
 		return fmt.Errorf("server returned nil root FID")
 	}
 
-	c.fidMu.Lock()
 	if resp.SessionToken != "" {
-		c.sessionToken = resp.SessionToken
+		c.setSessionToken(resp.SessionToken)
 	}
+	c.fidMu.Lock()
 	c.rootFID = newRootFID
 	c.fidMu.Unlock()
 	if c.cacheHandler != nil && c.cacheHandler.root != nil {
@@ -379,6 +398,12 @@ func (c *Client) ReRegister() error {
 		_, _ = c.ChangeDirectory(".")
 	}
 
+	// Re-open the change-notification stream with the fresh session, e.g.
+	// after it was rejected because the old session expired.
+	if !c.legacyCallbacks {
+		c.startEventStream()
+	}
+
 	return nil
 }
 
@@ -389,9 +414,10 @@ func (c *Client) Disconnect() {
 		return
 	}
 	c.stopHeartbeat()
-	c.fidMu.Lock()
-	c.sessionToken = ""
-	c.fidMu.Unlock()
+	// Close our event stream before unregistering, so the server ending it
+	// is not mistaken for a dropped connection and retried.
+	c.stopEventStream()
+	c.setSessionToken("")
 	if c.serverConn != nil && c.username != "" {
 		func() {
 			defer func() { _ = recover() }()
@@ -412,6 +438,8 @@ func (c *Client) Disconnect() {
 		_ = c.stopCallback()
 		c.stopCallback = nil
 	}
+	c.callbackAddr = ""
+	c.legacyCallbacks = false
 }
 
 // Share another user the root dir only if current user is owner

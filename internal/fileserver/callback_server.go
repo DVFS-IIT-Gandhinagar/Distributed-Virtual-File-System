@@ -3,9 +3,12 @@ package fileserver
 import (
 	"context"
 	"log"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	cbpb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/callback"
+	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"google.golang.org/grpc"
 )
@@ -17,6 +20,63 @@ type clientSession struct {
 	currentDirFID       string
 	lastSeenAt          time.Time
 	consecutiveFailures int
+	// streams are client-opened WatchEvents streams (one per running client of
+	// this user). When present, invalidations are pushed over them instead of
+	// dialling callbackAddress, which NAT and client firewalls block.
+	streams map[uint64]*eventStream
+}
+
+// eventStream is the server side of one WatchEvents stream.
+type eventStream struct {
+	id   uint64
+	ch   chan *pb.WatchEvent
+	done chan struct{}
+	once sync.Once
+}
+
+func (e *eventStream) close() { e.once.Do(func() { close(e.done) }) }
+
+// eventStreamBuffer bounds queued events per stream; a client that falls this
+// far behind is disconnected and refreshes when it reconnects.
+const eventStreamBuffer = 256
+
+var nextEventStreamID atomic.Uint64
+
+// attachEventStream registers a new event stream for username, creating the
+// session if the user has none yet (e.g. it was pruned while offline).
+func (fs *FileServer) attachEventStream(username string) *eventStream {
+	es := &eventStream{
+		id:   nextEventStreamID.Add(1),
+		ch:   make(chan *pb.WatchEvent, eventStreamBuffer),
+		done: make(chan struct{}),
+	}
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	s, ok := fs.sessions[username]
+	if !ok {
+		s = &clientSession{username: username}
+		fs.sessions[username] = s
+	}
+	if s.streams == nil {
+		s.streams = make(map[uint64]*eventStream)
+	}
+	s.streams[es.id] = es
+	s.lastSeenAt = time.Now()
+	return es
+}
+
+// detachEventStream removes a stream when its RPC ends.
+func (fs *FileServer) detachEventStream(username string, es *eventStream) {
+	es.close()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if s, ok := fs.sessions[username]; ok && s.streams != nil {
+		delete(s.streams, es.id)
+		// Treat the stream's end as last activity so the session stays a
+		// notify target for one TTL while the client reconnects.
+		s.lastSeenAt = time.Now()
+	}
 }
 
 const activeSessionTTL = 45 * time.Second
@@ -35,6 +95,11 @@ func (fs *FileServer) RemoveClientSession(username string) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
+	if s, ok := fs.sessions[username]; ok {
+		for _, es := range s.streams {
+			es.close()
+		}
+	}
 	delete(fs.sessions, username)
 }
 
@@ -139,7 +204,13 @@ func (fs *FileServer) UpdateClientCurrentDir(username string, currentDirFID *dom
 }
 
 func (fs *FileServer) isSessionActiveLocked(session *clientSession, now time.Time) bool {
-	if session == nil || session.lastSeenAt.IsZero() {
+	if session == nil {
+		return false
+	}
+	if len(session.streams) > 0 {
+		return true // an open stream is proof of life
+	}
+	if session.lastSeenAt.IsZero() {
 		return false
 	}
 	return now.Sub(session.lastSeenAt) <= activeSessionTTL
@@ -150,7 +221,7 @@ func (fs *FileServer) snapshotNotifyTargetsForDirLocked(currentDirFID, originUse
 	targets := make([]clientSession, 0)
 
 	for _, session := range fs.sessions {
-		if session == nil || session.callbackAddress == "" {
+		if session == nil || (session.callbackAddress == "" && len(session.streams) == 0) {
 			continue
 		}
 		if session.username == originUsername {
@@ -162,7 +233,15 @@ func (fs *FileServer) snapshotNotifyTargetsForDirLocked(currentDirFID, originUse
 		if session.currentDirFID != currentDirFID {
 			continue
 		}
-		targets = append(targets, *session)
+		target := *session
+		if len(session.streams) > 0 {
+			// Copy the stream set so senders don't race with attach/detach.
+			target.streams = make(map[uint64]*eventStream, len(session.streams))
+			for id, es := range session.streams {
+				target.streams[id] = es
+			}
+		}
+		targets = append(targets, target)
 	}
 
 	return targets
@@ -194,7 +273,25 @@ func (fs *FileServer) recordCallbackResult(username string, success bool) {
 }
 
 func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FID, eventType uint64) {
-	if target.callbackAddress == "" || changedFID == nil {
+	if changedFID == nil {
+		return
+	}
+
+	if len(target.streams) > 0 {
+		ev := &pb.WatchEvent{EventType: eventType, Fid: changedFID.ToProto()}
+		for _, es := range target.streams {
+			select {
+			case es.ch <- ev:
+			case <-es.done:
+			default:
+				log.Printf("Callback: event stream for user=%s is full; closing it so the client resyncs", target.username)
+				es.close()
+			}
+		}
+		return
+	}
+
+	if target.callbackAddress == "" {
 		return
 	}
 
