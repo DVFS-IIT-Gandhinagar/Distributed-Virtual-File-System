@@ -59,10 +59,10 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 	switch eventType {
 	case callbackEventDirNewFile:
 		ch.QueueDirInvalidation(fid)
-		s.client.Notify("\n[NOTIFY] New file uploaded in your current directory by another user. Cache invalidated; run ls to see it.\n")
+		s.client.Notify("\n[NOTIFY] New file or folder added in your current directory by another user. Cache invalidated; run ls to see it.\n")
 	case callbackEventFileDeleted:
 		ch.QueueDirInvalidation(fid)
-		s.client.Notify("\n[NOTIFY] A file was deleted in your current directory by another user. Cache invalidated; run ls to see the change.\n")
+		s.client.Notify("\n[NOTIFY] A file or folder was deleted in your current directory by another user. Cache invalidated; run ls to see the change.\n")
 	default:
 		ch.QueueFileInvalidation(fid)
 		s.client.Notify("\n[NOTIFY] File updated by another user. Cache invalidated.\n")
