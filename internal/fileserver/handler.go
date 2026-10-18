@@ -551,9 +551,8 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	}
 
 	log.Printf("CreateFile: success - created %s with FID %s", req.Name, fid.String())
-	if fileType == domain.InodeTypeFile {
-		h.fileServer.NotifyNewFileInDir(parentFID, req.Name, "")
-	}
+	// Notify for directories too, so `mkdir` in a shared folder reaches other users.
+	h.fileServer.NotifyNewFileInDir(parentFID, req.Name, effectiveUser)
 
 	return &pb.CreateFileResponse{
 		Success: true,
@@ -579,7 +578,10 @@ func (h *GRPCHandler) cleanupFailedUpload(parentFID *domain.FID, name string, us
 	}
 
 	log.Printf("[FILESERVER] Scrapping partially uploaded file '%s' (FID: %s) for user '%s'", name, childInode.FID.String(), user)
-	_ = h.fileServer.DeleteFile(childInode.FID, user, false)
+	if err := h.fileServer.DeleteFile(childInode.FID, user, false); err == nil {
+		// CreateFile already announced this file; tell other users it is gone again.
+		h.fileServer.NotifyFileDeletedInDir(parentFID, name, user)
+	}
 }
 
 // UploadFile uploads the file chunk by chunk
@@ -997,12 +999,17 @@ func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (
 		return &pb.TrashFileResponse{Success: false, Error: "user is required"}, nil
 	}
 
+	// Capture the parent before the move so users in that directory can be notified.
+	parentFID, originalName := h.fileServer.parentAndName(fid)
+
 	trashedName, err := h.fileServer.TrashFile(fid, effectiveUser, req.Recursive)
 	if err != nil {
 		log.Printf("TrashFile: error - %v", err)
 		opErr = err
 		return &pb.TrashFileResponse{Success: false, Error: err.Error()}, nil
 	}
+
+	h.fileServer.NotifyFileDeletedInDir(parentFID, originalName, effectiveUser)
 
 	return &pb.TrashFileResponse{Success: true, TrashedName: trashedName}, nil
 }
@@ -1049,6 +1056,11 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 		log.Printf("RestoreFile: error - %v", err)
 		opErr = err
 		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
+	}
+
+	// The item reappears in its original directory; tell users who are there.
+	if restoredParent, _ := h.fileServer.parentAndName(fid); restoredParent != nil {
+		h.fileServer.NotifyNewFileInDir(restoredParent, restoredName, req.Username)
 	}
 
 	return &pb.RestoreFileResponse{Success: true, RestoredName: restoredName}, nil

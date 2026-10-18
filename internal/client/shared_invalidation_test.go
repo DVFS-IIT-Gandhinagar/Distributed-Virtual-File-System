@@ -1,6 +1,8 @@
 package client
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -99,4 +101,118 @@ func hasFile(files []*FileInfo, name string) bool {
 		}
 	}
 	return false
+}
+
+// setupSharedPair connects alice (owner) and bob (shared user, with a cache
+// handler) to alice's root. expect runs action and waits until bob receives a
+// new notification containing want.
+func setupSharedPair(t *testing.T) (alice, bob *Client, bobCache *CacheHandler, expect func(what, want string, action func() error)) {
+	t.Helper()
+	fsAddr, _, cleanupFS := startTestFileServerGRPC(t, "")
+	t.Cleanup(cleanupFS)
+
+	alice = connectTestClient(t, "alice", "alice", fsAddr)
+	t.Cleanup(alice.Disconnect)
+	if err := alice.Share("bob"); err != nil {
+		t.Fatalf("Share failed: %v", err)
+	}
+
+	bob = connectTestClient(t, "bob", "alice", fsAddr)
+	t.Cleanup(bob.Disconnect)
+	rec := &notifyRecorder{ch: make(chan struct{}, 64)}
+	bob.SetNotifyWriter(rec)
+	bobCache = NewCacheHandler(bob, bob.rootFID)
+	if bobCache == nil {
+		t.Fatalf("NewCacheHandler returned nil")
+	}
+	bob.AttachCacheHandler(bobCache)
+
+	expect = func(what, want string, action func() error) {
+		t.Helper()
+		// Let callbacks from earlier steps land so they are not mistaken for this one.
+		time.Sleep(100 * time.Millisecond)
+		rec.mu.Lock()
+		mark := len(rec.msgs)
+		rec.mu.Unlock()
+
+		if err := action(); err != nil {
+			t.Fatalf("%s failed: %v", what, err)
+		}
+		deadline := time.After(5 * time.Second)
+		for {
+			rec.mu.Lock()
+			for _, m := range rec.msgs[mark:] {
+				if strings.Contains(m, want) {
+					rec.mu.Unlock()
+					return
+				}
+			}
+			rec.mu.Unlock()
+			select {
+			case <-rec.ch:
+			case <-deadline:
+				t.Fatalf("bob never received a %q notification for %s", want, what)
+			}
+		}
+	}
+	return alice, bob, bobCache, expect
+}
+
+func TestSharedUserNotifiedOnMkdirTrashRestore(t *testing.T) {
+	defer withTempWorkingDir(t)()
+	alice, _, bobCache, expect := setupSharedPair(t)
+
+	if files, _ := bobCache.ListFiles(); hasFile(files, "share_test") {
+		t.Fatalf("share_test should not exist yet")
+	}
+
+	expect("mkdir", "added", func() error { _, err := alice.CreateDirectory("share_test"); return err })
+	if files, _ := bobCache.ListFiles(); !hasFile(files, "share_test") {
+		t.Fatalf("bob does not see share_test after mkdir: %+v", files)
+	}
+
+	expect("trash", "deleted", func() error { _, err := alice.TrashFile("share_test", true); return err })
+	if files, _ := bobCache.ListFiles(); hasFile(files, "share_test") {
+		t.Fatalf("bob still sees share_test after trash: %+v", files)
+	}
+
+	expect("restore", "added", func() error {
+		trash, err := alice.ShowTrash()
+		if err != nil || len(trash) == 0 {
+			t.Fatalf("alice ShowTrash failed: err=%v entries=%d", err, len(trash))
+		}
+		_, err = alice.RestoreFile(trash[0].Name)
+		return err
+	})
+	if files, _ := bobCache.ListFiles(); !hasFile(files, "share_test") {
+		t.Fatalf("bob does not see share_test after restore: %+v", files)
+	}
+}
+
+func TestSharedUserNotifiedOnUploadFileAndFolder(t *testing.T) {
+	defer withTempWorkingDir(t)()
+	alice, _, bobCache, expect := setupSharedPair(t)
+
+	local := t.TempDir()
+	filePath := filepath.Join(local, "notes.txt")
+	if err := os.WriteFile(filePath, []byte("hello from alice"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(local, "photos")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "a.jpg"), []byte("jpg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	expect("file upload", "added", func() error { _, err := alice.Upload(filePath); return err })
+	if files, _ := bobCache.ListFiles(); !hasFile(files, "notes.txt") {
+		t.Fatalf("bob does not see notes.txt after upload: %+v", files)
+	}
+
+	expect("folder upload", "added", func() error { _, err := alice.Upload(folder); return err })
+	if files, _ := bobCache.ListFiles(); !hasFile(files, "photos") {
+		t.Fatalf("bob does not see photos/ after folder upload: %+v", files)
+	}
 }

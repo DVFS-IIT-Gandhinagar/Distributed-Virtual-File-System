@@ -226,6 +226,26 @@ func (fs *FileServer) sendInvalidate(target clientSession, changedFID *domain.FI
 	fs.recordCallbackResult(target.username, true)
 }
 
+// parentAndName returns a copy of the inode's parent FID and its current name,
+// or (nil, "") if the inode or its parent is unknown.
+func (fs *FileServer) parentAndName(fid *domain.FID) (*domain.FID, string) {
+	if fid == nil {
+		return nil, ""
+	}
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	inode, err := fs.GetInode(fid)
+	if err != nil || inode == nil || inode.Parent == nil || inode.Parent.FID == nil {
+		return nil, ""
+	}
+	p := inode.Parent.FID
+	return &domain.FID{
+		FileServerID:     p.FileServerID,
+		InodeID:          p.InodeID,
+		GenerationNumber: p.GenerationNumber,
+	}, inode.Name
+}
+
 // NotifyFileUpdated notifies active users in the same current directory about file changes.
 func (fs *FileServer) NotifyFileUpdated(parentFID *domain.FID, name, originUsername string) {
 	if parentFID == nil || name == "" {
