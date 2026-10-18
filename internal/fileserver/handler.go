@@ -406,8 +406,16 @@ func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (
 		}, nil
 	}
 
-	h.fileServer.TouchClientActivityByRootFID(root_fid)
-	h.fileServer.UpdateClientCurrentDirByRootFID(root_fid, new_fid)
+	// Track the caller's current directory so callbacks reach the right users.
+	// Several sessions can share one root (owner + users it is shared with), so
+	// with an authenticated caller only that user's session is updated; matching
+	// by root would move every other session on that root as well.
+	if caller, ok := session.UsernameFromContext(ctx); ok && caller != "" {
+		h.fileServer.UpdateClientCurrentDir(caller, new_fid)
+	} else {
+		h.fileServer.TouchClientActivityByRootFID(root_fid)
+		h.fileServer.UpdateClientCurrentDirByRootFID(root_fid, new_fid)
+	}
 
 	log.Printf("ChangeDir: success - changed Dir to %v", fid)
 	return &pb.ChangeDirResponse{

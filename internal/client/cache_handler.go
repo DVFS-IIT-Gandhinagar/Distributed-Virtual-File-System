@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
@@ -31,6 +32,13 @@ type CacheHandler struct {
 	root   *CNode
 	curr   *CNode
 	client *Client
+
+	// Invalidations pushed by the fileserver arrive on the callback goroutine.
+	// They are queued here and applied on the shell goroutine before the next
+	// cache read, so the cache tree is never touched concurrently.
+	pendingMu    sync.Mutex
+	pendingDirs  map[string]*domain.FID
+	pendingFiles map[string]*domain.FID
 }
 
 const CacheDir = "./.cache"
@@ -69,7 +77,73 @@ func NewCacheHandler(c *Client, rootFID *domain.FID) *CacheHandler {
 	}
 }
 
+// QueueDirInvalidation marks a directory's cached listing as stale.
+func (c *CacheHandler) QueueDirInvalidation(fid *domain.FID) {
+	if c == nil || fid == nil {
+		return
+	}
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	if c.pendingDirs == nil {
+		c.pendingDirs = make(map[string]*domain.FID)
+	}
+	c.pendingDirs[fid.String()] = fid
+}
+
+// QueueFileInvalidation marks a file's cached content (and its parent listing) as stale.
+func (c *CacheHandler) QueueFileInvalidation(fid *domain.FID) {
+	if c == nil || fid == nil {
+		return
+	}
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	if c.pendingFiles == nil {
+		c.pendingFiles = make(map[string]*domain.FID)
+	}
+	c.pendingFiles[fid.String()] = fid
+}
+
+// applyPendingInvalidations drops stale cached content and re-fetches stale
+// directory listings. Must be called from the shell goroutine.
+func (c *CacheHandler) applyPendingInvalidations() {
+	if c == nil {
+		return
+	}
+	c.pendingMu.Lock()
+	dirs, files := c.pendingDirs, c.pendingFiles
+	c.pendingDirs, c.pendingFiles = nil, nil
+	c.pendingMu.Unlock()
+
+	if len(dirs) == 0 && len(files) == 0 {
+		return
+	}
+
+	refresh := make(map[*CNode]bool)
+	for _, fid := range files {
+		node, _, ok := c.findNodeByFID(c.root, fid, c.root.Name)
+		if !ok || node == nil {
+			continue
+		}
+		c.InvalidateFileByFID(fid)
+		if node.parent != nil {
+			refresh[node.parent] = true
+		}
+	}
+	for _, fid := range dirs {
+		node, _, ok := c.findNodeByFID(c.root, fid, c.root.Name)
+		if ok && node != nil && node.Type == domain.InodeTypeDirectory {
+			refresh[node] = true
+		}
+	}
+	for node := range refresh {
+		if err := c.populateNodeCache(node); err != nil {
+			log.Printf("Error refreshing invalidated directory %s: %v", node.Name, err)
+		}
+	}
+}
+
 func (c *CacheHandler) VisualizeCache(indent string) {
+	c.applyPendingInvalidations()
 	node := c.curr // will always be the current directory node
 	fmt.Println("Cache Structure:")
 	fmt.Printf("%s- %s (%s)\n", indent, node.Name, func() string {
@@ -102,6 +176,7 @@ func (c *CacheHandler) GetFileInfo() (*FileInfo, error) {
 
 // check for cache hit, if not then download file from server and update cache
 func (c *CacheHandler) ReadFile(s string) ([]byte, error) {
+	c.applyPendingInvalidations()
 	// check if file exists in cache of current directory
 	fileNode, exists := c.curr.children[s]
 	if exists && fileNode.Type == domain.InodeTypeFile && fileNode.contentCached {
@@ -225,6 +300,7 @@ func (c *CacheHandler) Upload(s string) error {
 }
 
 func (c *CacheHandler) ChangeDirectory(s string) error {
+	c.applyPendingInvalidations()
 	if s == ".trash" || strings.HasPrefix(s, ".trash/") {
 		return fmt.Errorf("access denied: use show_trash to view trash contents")
 	}
@@ -289,6 +365,7 @@ func (c *CacheHandler) DeleteFromTrash(name string) error {
 }
 
 func (c *CacheHandler) ListFiles() ([]*FileInfo, error) {
+	c.applyPendingInvalidations()
 	// read from cache of current directory
 	files := make([]*FileInfo, 0)
 	for _, child := range c.curr.children {
@@ -392,6 +469,7 @@ func (c *CacheHandler) populateCurrentDirCache() error {
 
 // delete file/dir from server and update cache accordingly. If recursive is true, delete all contents of the directory as well
 func (c *CacheHandler) DeleteFile(s string, recursive bool) error {
+	c.applyPendingInvalidations()
 	err := c.client.DeleteFile(s, recursive) // delete file/dir from server
 	if err != nil {
 		return err
@@ -409,6 +487,7 @@ func (c *CacheHandler) DeleteFile(s string, recursive bool) error {
 
 // TrashFile moves a file/dir to server-side trash and updates the current cache view.
 func (c *CacheHandler) TrashFile(name string, recursive bool) (string, error) {
+	c.applyPendingInvalidations()
 	trashedName, err := c.client.TrashFile(name, recursive)
 	if err != nil {
 		return "", err

@@ -119,6 +119,25 @@ func (fs *FileServer) UpdateClientCurrentDirByRootFID(rootFID, currentDirFID *do
 	}
 }
 
+// UpdateClientCurrentDir updates the current directory (and activity) of a single
+// user's session. Returns false when that user has no session on this server.
+func (fs *FileServer) UpdateClientCurrentDir(username string, currentDirFID *domain.FID) bool {
+	if username == "" || currentDirFID == nil {
+		return false
+	}
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	s, ok := fs.sessions[username]
+	if !ok {
+		return false
+	}
+	s.currentDirFID = currentDirFID.String()
+	s.lastSeenAt = time.Now()
+	return true
+}
+
 func (fs *FileServer) isSessionActiveLocked(session *clientSession, now time.Time) bool {
 	if session == nil || session.lastSeenAt.IsZero() {
 		return false
