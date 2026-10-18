@@ -51,41 +51,21 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 		eventType = callbackEventFileUpdated
 	}
 
-	if eventType == callbackEventDirNewFile {
-		if s.client != nil && s.client.cacheHandler != nil {
-			if path, ok := s.client.cacheHandler.InvalidateFileByFID(fid); ok {
-				s.client.Notify("\n[NOTIFY] New file uploaded in directory %s. Please run refresh.\n", path)
-			} else {
-				s.client.Notify("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
-			}
-		} else {
-			s.client.Notify("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
-		}
+	if s.client == nil {
 		return &cbpb.InvalidateResponse{Success: true}, nil
 	}
+	ch := s.client.attachedCacheHandler()
 
-	if eventType == callbackEventFileDeleted {
-		if s.client != nil && s.client.cacheHandler != nil {
-			if path, ok := s.client.cacheHandler.InvalidateFileByFID(fid); ok {
-				s.client.Notify("\n[NOTIFY] A file was deleted in directory %s. Please run refresh.\n", path)
-			} else {
-				s.client.Notify("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
-			}
-		} else {
-			s.client.Notify("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
-		}
-		return &cbpb.InvalidateResponse{Success: true}, nil
-	}
-
-	if s.client != nil && s.client.cacheHandler != nil {
-		path, ok := s.client.cacheHandler.InvalidateFileByFID(fid)
-		if ok {
-			s.client.Notify("\n[NOTIFY] File updated by another user. Cache invalidated: %s\n", path)
-		} else {
-			s.client.Notify("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
-		}
-	} else {
-		s.client.Notify("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
+	switch eventType {
+	case callbackEventDirNewFile:
+		ch.QueueDirInvalidation(fid)
+		s.client.Notify("\n[NOTIFY] New file uploaded in your current directory by another user. Cache invalidated; run ls to see it.\n")
+	case callbackEventFileDeleted:
+		ch.QueueDirInvalidation(fid)
+		s.client.Notify("\n[NOTIFY] A file was deleted in your current directory by another user. Cache invalidated; run ls to see the change.\n")
+	default:
+		ch.QueueFileInvalidation(fid)
+		s.client.Notify("\n[NOTIFY] File updated by another user. Cache invalidated.\n")
 	}
 
 	return &cbpb.InvalidateResponse{Success: true}, nil
