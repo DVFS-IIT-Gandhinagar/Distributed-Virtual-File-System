@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
@@ -71,40 +70,7 @@ type Client struct {
 	cacheHandler  *CacheHandler
 	stopCallback  func() error
 	notifyWriter  io.Writer // readline-aware writer for notification messages
-
-	// fidMu guards currentFID/rootFID/sessionToken against the heartbeat goroutine.
-	fidMu         sync.Mutex
-	heartbeatStop chan struct{}
-	heartbeatDone chan struct{}
-	// cacheMu guards the cacheHandler pointer, which callbacks read concurrently.
-	cacheMu sync.Mutex
-	// tokenMu guards sessionToken, which the auth interceptors read from the
-	// heartbeat and event-stream goroutines.
-	tokenMu sync.RWMutex
-
-	// Event stream (server push). watchCancel/watchDone control the goroutine;
-	// legacyCallbacks is set when the server predates WatchEvents.
-	watchCancel     context.CancelFunc
-	watchDone       chan struct{}
-	legacyCallbacks bool
 }
-
-func (c *Client) getSessionToken() string {
-	c.tokenMu.RLock()
-	defer c.tokenMu.RUnlock()
-	return c.sessionToken
-}
-
-func (c *Client) setSessionToken(t string) {
-	c.tokenMu.Lock()
-	c.sessionToken = t
-	c.tokenMu.Unlock()
-}
-
-// sessionHeartbeatInterval must stay well below the fileserver's activeSessionTTL
-// (45s); otherwise an idle client is treated as inactive and stops receiving
-// cache-invalidation callbacks for changes other users make in a shared folder.
-const sessionHeartbeatInterval = 15 * time.Second
 
 // Shared Roots with the user
 type SharedRoot struct {
@@ -152,16 +118,7 @@ func (c *Client) AuthToken() string {
 
 // AttachCacheHandler wires cache invalidation callbacks to the active cache handler.
 func (c *Client) AttachCacheHandler(cacheHandler *CacheHandler) {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
 	c.cacheHandler = cacheHandler
-}
-
-// attachedCacheHandler returns the cache handler; safe to call from callbacks.
-func (c *Client) attachedCacheHandler() *CacheHandler {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-	return c.cacheHandler
 }
 
 // SetNotifyWriter provides a readline-aware writer so notifications correctly
@@ -195,12 +152,14 @@ func (c *Client) SetRootPath(display_name, path string) {
 
 // Connect connects to a file server and gets user root and files/dir in the root
 func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
-	c.stopHeartbeat() // a previous connection's heartbeat must not outlive it
-	c.stopEventStream()
-	// No local callback listener by default: invalidations arrive over the
-	// WatchEvents stream this client opens, which needs no inbound port and so
-	// works behind NAT and client firewalls. The listener is only started as a
-	// fallback for servers that predate WatchEvents (see startEventStream).
+	if c.stopCallback == nil {
+		callbackAddr, stopFn, err := c.startCallbackServer()
+		if err != nil {
+			return nil, fmt.Errorf("failed to start callback server: %w", err)
+		}
+		c.callbackAddr = callbackAddr
+		c.stopCallback = stopFn
+	}
 
 	// TLS configuration
 	var opts []grpc.DialOption
@@ -236,9 +195,9 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	if c.authToken != "" || c.getSessionToken() != "" {
+	if c.authToken != "" || c.sessionToken != "" {
 		authUnary := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, callOpts ...grpc.CallOption) error {
-			token := c.getSessionToken()
+			token := c.sessionToken
 			if token == "" || strings.HasSuffix(method, "RegisterClient") {
 				token = c.authToken
 			}
@@ -248,7 +207,7 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 			return invoker(ctx, method, req, reply, cc, callOpts...)
 		}
 		authStream := func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, callOpts ...grpc.CallOption) (grpc.ClientStream, error) {
-			token := c.getSessionToken()
+			token := c.sessionToken
 			if token == "" {
 				token = c.authToken
 			}
@@ -286,74 +245,13 @@ func (c *Client) Connect(serverAddress string) (*domain.FID, error) {
 	}
 
 	if resp.SessionToken != "" {
-		c.setSessionToken(resp.SessionToken)
+		c.sessionToken = resp.SessionToken
 		log.Printf("[AUTH] Established authenticated session with server")
 	}
 
-	c.fidMu.Lock()
 	c.rootFID = domain.FIDFromProto(resp.UserRootFid)
 	c.currentFID = c.rootFID
-	fid := c.currentFID
-	c.fidMu.Unlock()
-
-	c.startHeartbeat()
-	c.startEventStream()
-	return fid, nil
-}
-
-// startHeartbeat periodically tells the fileserver this session is still alive
-// (and which directory it is in) so it keeps receiving invalidation callbacks.
-func (c *Client) startHeartbeat() {
-	c.stopHeartbeat()
-
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	c.heartbeatStop = stop
-	c.heartbeatDone = done
-	conn := c.serverConn
-
-	go func() {
-		defer close(done)
-		ticker := time.NewTicker(sessionHeartbeatInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-stop:
-				return
-			case <-ticker.C:
-				c.sendHeartbeat(conn)
-			}
-		}
-	}()
-}
-
-func (c *Client) stopHeartbeat() {
-	if c.heartbeatStop == nil {
-		return
-	}
-	close(c.heartbeatStop)
-	<-c.heartbeatDone
-	c.heartbeatStop = nil
-	c.heartbeatDone = nil
-}
-
-func (c *Client) sendHeartbeat(conn pb.FileServerClient) {
-	// Hold fidMu for the whole RPC so a concurrent `cd` cannot be overwritten
-	// on the server by a heartbeat carrying the previous directory.
-	c.fidMu.Lock()
-	defer c.fidMu.Unlock()
-	if conn == nil || c.currentFID == nil || c.rootFID == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	// ChangeDir(".") is a no-op move that refreshes the session's activity and
-	// current directory on the fileserver.
-	_, _ = conn.ChangeDir(ctx, &pb.ChangeDirRequest{
-		Fid:     c.currentFID.ToProto(),
-		RootFid: c.rootFID.ToProto(),
-		Path:    ".",
-	})
+	return c.currentFID, nil
 }
 
 // ReRegister re-establishes the client session with the fileserver.
@@ -383,11 +281,10 @@ func (c *Client) ReRegister() error {
 	}
 
 	if resp.SessionToken != "" {
-		c.setSessionToken(resp.SessionToken)
+		c.sessionToken = resp.SessionToken
 	}
-	c.fidMu.Lock()
+
 	c.rootFID = newRootFID
-	c.fidMu.Unlock()
 	if c.cacheHandler != nil && c.cacheHandler.root != nil {
 		c.cacheHandler.root.fid = newRootFID
 	}
@@ -396,12 +293,6 @@ func (c *Client) ReRegister() error {
 	// sync the server-side session's currentDirFID to our current directory.
 	if c.currentFID != nil && c.rootFID != nil && c.currentFID.String() != c.rootFID.String() {
 		_, _ = c.ChangeDirectory(".")
-	}
-
-	// Re-open the change-notification stream with the fresh session, e.g.
-	// after it was rejected because the old session expired.
-	if !c.legacyCallbacks {
-		c.startEventStream()
 	}
 
 	return nil
@@ -413,11 +304,7 @@ func (c *Client) Disconnect() {
 	if c == nil {
 		return
 	}
-	c.stopHeartbeat()
-	// Close our event stream before unregistering, so the server ending it
-	// is not mistaken for a dropped connection and retried.
-	c.stopEventStream()
-	c.setSessionToken("")
+	c.sessionToken = ""
 	if c.serverConn != nil && c.username != "" {
 		func() {
 			defer func() { _ = recover() }()
@@ -438,8 +325,6 @@ func (c *Client) Disconnect() {
 		_ = c.stopCallback()
 		c.stopCallback = nil
 	}
-	c.callbackAddr = ""
-	c.legacyCallbacks = false
 }
 
 // Share another user the root dir only if current user is owner
@@ -498,8 +383,6 @@ func (c *Client) Path() (string, error) {
 
 // CreateDirectory changes the current directory
 func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
-	c.fidMu.Lock()
-	defer c.fidMu.Unlock()
 	resp, err := c.serverConn.ChangeDir(context.Background(), &pb.ChangeDirRequest{
 		Fid:     c.currentFID.ToProto(),
 		RootFid: c.rootFID.ToProto(),
@@ -518,8 +401,6 @@ func (c *Client) ChangeDirectory(relative_path string) (domain.FID, error) {
 }
 
 func (c *Client) ChangeCurrentFID(fid *domain.FID) {
-	c.fidMu.Lock()
-	defer c.fidMu.Unlock()
 	c.currentFID = fid
 }
 

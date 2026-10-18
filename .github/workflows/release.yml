@@ -38,6 +38,7 @@ jobs:
         run: |
           if [ -d "cmd/admin/ui" ] && [ -f "cmd/admin/ui/package.json" ]; then
             cd cmd/admin/ui
+            npm install -D @vitejs/plugin-react@^6.1.1 vite@^8.2.2
             npm ci || npm install
             npm run build
             cd ../../..

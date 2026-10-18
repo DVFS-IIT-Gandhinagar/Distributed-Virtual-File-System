@@ -2749,116 +2749,6 @@ func (x *UnregisterClientResponse) GetError() string {
 	return ""
 }
 
-// FileServer service
-// WatchEvents: a client-initiated, long-lived stream over which the fileserver
-// pushes cache invalidations. It replaces the server-to-client callback dial,
-// which cannot get through NAT or client firewalls.
-type WatchEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"` // used only when the server runs without authentication
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WatchEventsRequest) Reset() {
-	*x = WatchEventsRequest{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[45]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WatchEventsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WatchEventsRequest) ProtoMessage() {}
-
-func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[45]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WatchEventsRequest.ProtoReflect.Descriptor instead.
-func (*WatchEventsRequest) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{45}
-}
-
-func (x *WatchEventsRequest) GetClientId() string {
-	if x != nil {
-		return x.ClientId
-	}
-	return ""
-}
-
-func (x *WatchEventsRequest) GetUsername() string {
-	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
-type WatchEvent struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// 0 = ready/keepalive (no FID), 1 = file updated, 2 = entry added to directory,
-	// 3 = entry removed from directory. Same values as callback.InvalidateRequest.new_version.
-	EventType     uint64 `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
-	Fid           *FID   `protobuf:"bytes,2,opt,name=fid,proto3" json:"fid,omitempty"` // changed file (1) or directory whose entries changed (2, 3)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WatchEvent) Reset() {
-	*x = WatchEvent{}
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WatchEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WatchEvent) ProtoMessage() {}
-
-func (x *WatchEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_api_fileserver_fileserver_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WatchEvent.ProtoReflect.Descriptor instead.
-func (*WatchEvent) Descriptor() ([]byte, []int) {
-	return file_api_fileserver_fileserver_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *WatchEvent) GetEventType() uint64 {
-	if x != nil {
-		return x.EventType
-	}
-	return 0
-}
-
-func (x *WatchEvent) GetFid() *FID {
-	if x != nil {
-		return x.Fid
-	}
-	return nil
-}
-
 var File_api_fileserver_fileserver_proto protoreflect.FileDescriptor
 
 const file_api_fileserver_fileserver_proto_rawDesc = "" +
@@ -3047,18 +2937,10 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\busername\x18\x02 \x01(\tR\busername\"J\n" +
 	"\x18UnregisterClientResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"M\n" +
-	"\x12WatchEventsRequest\x12\x1b\n" +
-	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1a\n" +
-	"\busername\x18\x02 \x01(\tR\busername\"N\n" +
-	"\n" +
-	"WatchEvent\x12\x1d\n" +
-	"\n" +
-	"event_type\x18\x01 \x01(\x04R\teventType\x12!\n" +
-	"\x03fid\x18\x02 \x01(\v2\x0f.fileserver.FIDR\x03fid*$\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error*$\n" +
 	"\tInodeType\x12\b\n" +
 	"\x04FILE\x10\x00\x12\r\n" +
-	"\tDIRECTORY\x10\x012\xe8\f\n" +
+	"\tDIRECTORY\x10\x012\x9f\f\n" +
 	"\n" +
 	"FileServer\x12W\n" +
 	"\x0eRegisterClient\x12!.fileserver.RegisterClientRequest\x1a\".fileserver.RegisterClientResponse\x12]\n" +
@@ -3084,8 +2966,7 @@ const file_api_fileserver_fileserver_proto_rawDesc = "" +
 	"\fDownloadFile\x12\x1f.fileserver.DownloadFileRequest\x1a .fileserver.DownloadFileResponse0\x01\x12<\n" +
 	"\x05Share\x12\x18.fileserver.ShareRequest\x1a\x19.fileserver.ShareResponse\x12B\n" +
 	"\aUnshare\x12\x1a.fileserver.UnshareRequest\x1a\x1b.fileserver.UnshareResponse\x12E\n" +
-	"\bSetQuota\x12\x1b.fileserver.SetQuotaRequest\x1a\x1c.fileserver.SetQuotaResponse\x12G\n" +
-	"\vWatchEvents\x12\x1e.fileserver.WatchEventsRequest\x1a\x16.fileserver.WatchEvent0\x01BPZNgithub.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserverb\x06proto3"
+	"\bSetQuota\x12\x1b.fileserver.SetQuotaRequest\x1a\x1c.fileserver.SetQuotaResponseBPZNgithub.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserverb\x06proto3"
 
 var (
 	file_api_fileserver_fileserver_proto_rawDescOnce sync.Once
@@ -3100,7 +2981,7 @@ func file_api_fileserver_fileserver_proto_rawDescGZIP() []byte {
 }
 
 var file_api_fileserver_fileserver_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_fileserver_fileserver_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_api_fileserver_fileserver_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(InodeType)(0),                   // 0: fileserver.InodeType
 	(*FID)(nil),                      // 1: fileserver.FID
@@ -3148,8 +3029,6 @@ var file_api_fileserver_fileserver_proto_goTypes = []any{
 	(*SetQuotaResponse)(nil),         // 43: fileserver.SetQuotaResponse
 	(*UnregisterClientRequest)(nil),  // 44: fileserver.UnregisterClientRequest
 	(*UnregisterClientResponse)(nil), // 45: fileserver.UnregisterClientResponse
-	(*WatchEventsRequest)(nil),       // 46: fileserver.WatchEventsRequest
-	(*WatchEvent)(nil),               // 47: fileserver.WatchEvent
 }
 var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	1,  // 0: fileserver.CreateFileRequest.fid:type_name -> fileserver.FID
@@ -3180,56 +3059,53 @@ var file_api_fileserver_fileserver_proto_depIdxs = []int32{
 	1,  // 25: fileserver.ShareRequest.fid:type_name -> fileserver.FID
 	1,  // 26: fileserver.UnshareRequest.fid:type_name -> fileserver.FID
 	1,  // 27: fileserver.RegisterClientResponse.user_root_fid:type_name -> fileserver.FID
-	1,  // 28: fileserver.WatchEvent.fid:type_name -> fileserver.FID
-	40, // 29: fileserver.FileServer.RegisterClient:input_type -> fileserver.RegisterClientRequest
-	44, // 30: fileserver.FileServer.UnregisterClient:input_type -> fileserver.UnregisterClientRequest
-	3,  // 31: fileserver.FileServer.CreateFile:input_type -> fileserver.CreateFileRequest
-	5,  // 32: fileserver.FileServer.OpenFile:input_type -> fileserver.OpenFileRequest
-	7,  // 33: fileserver.FileServer.ReadFile:input_type -> fileserver.ReadFileRequest
-	9,  // 34: fileserver.FileServer.WriteFile:input_type -> fileserver.WriteFileRequest
-	11, // 35: fileserver.FileServer.CloseFile:input_type -> fileserver.CloseFileRequest
-	13, // 36: fileserver.FileServer.DeleteFile:input_type -> fileserver.DeleteFileRequest
-	15, // 37: fileserver.FileServer.TrashFile:input_type -> fileserver.TrashFileRequest
-	17, // 38: fileserver.FileServer.RestoreFile:input_type -> fileserver.RestoreFileRequest
-	19, // 39: fileserver.FileServer.ShowTrash:input_type -> fileserver.ShowTrashRequest
-	21, // 40: fileserver.FileServer.GetAttr:input_type -> fileserver.GetAttrRequest
-	27, // 41: fileserver.FileServer.ListDir:input_type -> fileserver.ListDirRequest
-	30, // 42: fileserver.FileServer.Lookup:input_type -> fileserver.LookupRequest
-	23, // 43: fileserver.FileServer.Path:input_type -> fileserver.PathRequest
-	25, // 44: fileserver.FileServer.ChangeDir:input_type -> fileserver.ChangeDirRequest
-	32, // 45: fileserver.FileServer.UploadFile:input_type -> fileserver.UploadFileRequest
-	34, // 46: fileserver.FileServer.DownloadFile:input_type -> fileserver.DownloadFileRequest
-	36, // 47: fileserver.FileServer.Share:input_type -> fileserver.ShareRequest
-	38, // 48: fileserver.FileServer.Unshare:input_type -> fileserver.UnshareRequest
-	42, // 49: fileserver.FileServer.SetQuota:input_type -> fileserver.SetQuotaRequest
-	46, // 50: fileserver.FileServer.WatchEvents:input_type -> fileserver.WatchEventsRequest
-	41, // 51: fileserver.FileServer.RegisterClient:output_type -> fileserver.RegisterClientResponse
-	45, // 52: fileserver.FileServer.UnregisterClient:output_type -> fileserver.UnregisterClientResponse
-	4,  // 53: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
-	6,  // 54: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse
-	8,  // 55: fileserver.FileServer.ReadFile:output_type -> fileserver.ReadFileResponse
-	10, // 56: fileserver.FileServer.WriteFile:output_type -> fileserver.WriteFileResponse
-	12, // 57: fileserver.FileServer.CloseFile:output_type -> fileserver.CloseFileResponse
-	14, // 58: fileserver.FileServer.DeleteFile:output_type -> fileserver.DeleteFileResponse
-	16, // 59: fileserver.FileServer.TrashFile:output_type -> fileserver.TrashFileResponse
-	18, // 60: fileserver.FileServer.RestoreFile:output_type -> fileserver.RestoreFileResponse
-	20, // 61: fileserver.FileServer.ShowTrash:output_type -> fileserver.ShowTrashResponse
-	22, // 62: fileserver.FileServer.GetAttr:output_type -> fileserver.GetAttrResponse
-	29, // 63: fileserver.FileServer.ListDir:output_type -> fileserver.ListDirResponse
-	31, // 64: fileserver.FileServer.Lookup:output_type -> fileserver.LookupResponse
-	24, // 65: fileserver.FileServer.Path:output_type -> fileserver.PathResponse
-	26, // 66: fileserver.FileServer.ChangeDir:output_type -> fileserver.ChangeDirResponse
-	33, // 67: fileserver.FileServer.UploadFile:output_type -> fileserver.UploadFileResponse
-	35, // 68: fileserver.FileServer.DownloadFile:output_type -> fileserver.DownloadFileResponse
-	37, // 69: fileserver.FileServer.Share:output_type -> fileserver.ShareResponse
-	39, // 70: fileserver.FileServer.Unshare:output_type -> fileserver.UnshareResponse
-	43, // 71: fileserver.FileServer.SetQuota:output_type -> fileserver.SetQuotaResponse
-	47, // 72: fileserver.FileServer.WatchEvents:output_type -> fileserver.WatchEvent
-	51, // [51:73] is the sub-list for method output_type
-	29, // [29:51] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	40, // 28: fileserver.FileServer.RegisterClient:input_type -> fileserver.RegisterClientRequest
+	44, // 29: fileserver.FileServer.UnregisterClient:input_type -> fileserver.UnregisterClientRequest
+	3,  // 30: fileserver.FileServer.CreateFile:input_type -> fileserver.CreateFileRequest
+	5,  // 31: fileserver.FileServer.OpenFile:input_type -> fileserver.OpenFileRequest
+	7,  // 32: fileserver.FileServer.ReadFile:input_type -> fileserver.ReadFileRequest
+	9,  // 33: fileserver.FileServer.WriteFile:input_type -> fileserver.WriteFileRequest
+	11, // 34: fileserver.FileServer.CloseFile:input_type -> fileserver.CloseFileRequest
+	13, // 35: fileserver.FileServer.DeleteFile:input_type -> fileserver.DeleteFileRequest
+	15, // 36: fileserver.FileServer.TrashFile:input_type -> fileserver.TrashFileRequest
+	17, // 37: fileserver.FileServer.RestoreFile:input_type -> fileserver.RestoreFileRequest
+	19, // 38: fileserver.FileServer.ShowTrash:input_type -> fileserver.ShowTrashRequest
+	21, // 39: fileserver.FileServer.GetAttr:input_type -> fileserver.GetAttrRequest
+	27, // 40: fileserver.FileServer.ListDir:input_type -> fileserver.ListDirRequest
+	30, // 41: fileserver.FileServer.Lookup:input_type -> fileserver.LookupRequest
+	23, // 42: fileserver.FileServer.Path:input_type -> fileserver.PathRequest
+	25, // 43: fileserver.FileServer.ChangeDir:input_type -> fileserver.ChangeDirRequest
+	32, // 44: fileserver.FileServer.UploadFile:input_type -> fileserver.UploadFileRequest
+	34, // 45: fileserver.FileServer.DownloadFile:input_type -> fileserver.DownloadFileRequest
+	36, // 46: fileserver.FileServer.Share:input_type -> fileserver.ShareRequest
+	38, // 47: fileserver.FileServer.Unshare:input_type -> fileserver.UnshareRequest
+	42, // 48: fileserver.FileServer.SetQuota:input_type -> fileserver.SetQuotaRequest
+	41, // 49: fileserver.FileServer.RegisterClient:output_type -> fileserver.RegisterClientResponse
+	45, // 50: fileserver.FileServer.UnregisterClient:output_type -> fileserver.UnregisterClientResponse
+	4,  // 51: fileserver.FileServer.CreateFile:output_type -> fileserver.CreateFileResponse
+	6,  // 52: fileserver.FileServer.OpenFile:output_type -> fileserver.OpenFileResponse
+	8,  // 53: fileserver.FileServer.ReadFile:output_type -> fileserver.ReadFileResponse
+	10, // 54: fileserver.FileServer.WriteFile:output_type -> fileserver.WriteFileResponse
+	12, // 55: fileserver.FileServer.CloseFile:output_type -> fileserver.CloseFileResponse
+	14, // 56: fileserver.FileServer.DeleteFile:output_type -> fileserver.DeleteFileResponse
+	16, // 57: fileserver.FileServer.TrashFile:output_type -> fileserver.TrashFileResponse
+	18, // 58: fileserver.FileServer.RestoreFile:output_type -> fileserver.RestoreFileResponse
+	20, // 59: fileserver.FileServer.ShowTrash:output_type -> fileserver.ShowTrashResponse
+	22, // 60: fileserver.FileServer.GetAttr:output_type -> fileserver.GetAttrResponse
+	29, // 61: fileserver.FileServer.ListDir:output_type -> fileserver.ListDirResponse
+	31, // 62: fileserver.FileServer.Lookup:output_type -> fileserver.LookupResponse
+	24, // 63: fileserver.FileServer.Path:output_type -> fileserver.PathResponse
+	26, // 64: fileserver.FileServer.ChangeDir:output_type -> fileserver.ChangeDirResponse
+	33, // 65: fileserver.FileServer.UploadFile:output_type -> fileserver.UploadFileResponse
+	35, // 66: fileserver.FileServer.DownloadFile:output_type -> fileserver.DownloadFileResponse
+	37, // 67: fileserver.FileServer.Share:output_type -> fileserver.ShareResponse
+	39, // 68: fileserver.FileServer.Unshare:output_type -> fileserver.UnshareResponse
+	43, // 69: fileserver.FileServer.SetQuota:output_type -> fileserver.SetQuotaResponse
+	49, // [49:70] is the sub-list for method output_type
+	28, // [28:49] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_api_fileserver_fileserver_proto_init() }
@@ -3243,7 +3119,7 @@ func file_api_fileserver_fileserver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_fileserver_fileserver_proto_rawDesc), len(file_api_fileserver_fileserver_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   47,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

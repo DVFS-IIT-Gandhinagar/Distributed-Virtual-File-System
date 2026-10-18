@@ -122,7 +122,7 @@ func TestRobustness_CallbackServerInvalidate_EventTypesAndNotification(t *testin
 	if err != nil || resp == nil || !resp.Success {
 		t.Fatalf("Invalidate DirNewFile failed: resp=%+v, err=%v", resp, err)
 	}
-	if !strings.Contains(notifyBuf.String(), "[NOTIFY]") || !strings.Contains(notifyBuf.String(), "New file or folder added") {
+	if !strings.Contains(notifyBuf.String(), "[NOTIFY]") || !strings.Contains(notifyBuf.String(), "New file uploaded") {
 		t.Fatalf("unexpected notify output: %s", notifyBuf.String())
 	}
 

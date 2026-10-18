@@ -18,10 +18,8 @@ import (
 	pb "github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/api/fileserver"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/domain"
 	"github.com/DVFS-IIT-Gandhinagar/Distributed-Virtual-File-System/internal/fileserver/session"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
 )
 
 // GRPCHandler implements the gRPC file server interface
@@ -408,16 +406,8 @@ func (h *GRPCHandler) ChangeDir(ctx context.Context, req *pb.ChangeDirRequest) (
 		}, nil
 	}
 
-	// Track the caller's current directory so callbacks reach the right users.
-	// Several sessions can share one root (owner + users it is shared with), so
-	// with an authenticated caller only that user's session is updated; matching
-	// by root would move every other session on that root as well.
-	if caller, ok := session.UsernameFromContext(ctx); ok && caller != "" {
-		h.fileServer.UpdateClientCurrentDir(caller, new_fid)
-	} else {
-		h.fileServer.TouchClientActivityByRootFID(root_fid)
-		h.fileServer.UpdateClientCurrentDirByRootFID(root_fid, new_fid)
-	}
+	h.fileServer.TouchClientActivityByRootFID(root_fid)
+	h.fileServer.UpdateClientCurrentDirByRootFID(root_fid, new_fid)
 
 	log.Printf("ChangeDir: success - changed Dir to %v", fid)
 	return &pb.ChangeDirResponse{
@@ -553,8 +543,9 @@ func (h *GRPCHandler) CreateFile(ctx context.Context, req *pb.CreateFileRequest)
 	}
 
 	log.Printf("CreateFile: success - created %s with FID %s", req.Name, fid.String())
-	// Notify for directories too, so `mkdir` in a shared folder reaches other users.
-	h.fileServer.NotifyNewFileInDir(parentFID, req.Name, effectiveUser)
+	if fileType == domain.InodeTypeFile {
+		h.fileServer.NotifyNewFileInDir(parentFID, req.Name, "")
+	}
 
 	return &pb.CreateFileResponse{
 		Success: true,
@@ -580,10 +571,7 @@ func (h *GRPCHandler) cleanupFailedUpload(parentFID *domain.FID, name string, us
 	}
 
 	log.Printf("[FILESERVER] Scrapping partially uploaded file '%s' (FID: %s) for user '%s'", name, childInode.FID.String(), user)
-	if err := h.fileServer.DeleteFile(childInode.FID, user, false); err == nil {
-		// CreateFile already announced this file; tell other users it is gone again.
-		h.fileServer.NotifyFileDeletedInDir(parentFID, name, user)
-	}
+	_ = h.fileServer.DeleteFile(childInode.FID, user, false)
 }
 
 // UploadFile uploads the file chunk by chunk
@@ -1001,17 +989,12 @@ func (h *GRPCHandler) TrashFile(ctx context.Context, req *pb.TrashFileRequest) (
 		return &pb.TrashFileResponse{Success: false, Error: "user is required"}, nil
 	}
 
-	// Capture the parent before the move so users in that directory can be notified.
-	parentFID, originalName := h.fileServer.parentAndName(fid)
-
 	trashedName, err := h.fileServer.TrashFile(fid, effectiveUser, req.Recursive)
 	if err != nil {
 		log.Printf("TrashFile: error - %v", err)
 		opErr = err
 		return &pb.TrashFileResponse{Success: false, Error: err.Error()}, nil
 	}
-
-	h.fileServer.NotifyFileDeletedInDir(parentFID, originalName, effectiveUser)
 
 	return &pb.TrashFileResponse{Success: true, TrashedName: trashedName}, nil
 }
@@ -1058,11 +1041,6 @@ func (h *GRPCHandler) RestoreFile(ctx context.Context, req *pb.RestoreFileReques
 		log.Printf("RestoreFile: error - %v", err)
 		opErr = err
 		return &pb.RestoreFileResponse{Success: false, Error: err.Error()}, nil
-	}
-
-	// The item reappears in its original directory; tell users who are there.
-	if restoredParent, _ := h.fileServer.parentAndName(fid); restoredParent != nil {
-		h.fileServer.NotifyNewFileInDir(restoredParent, restoredName, req.Username)
 	}
 
 	return &pb.RestoreFileResponse{Success: true, RestoredName: restoredName}, nil
@@ -1173,54 +1151,4 @@ func (h *GRPCHandler) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) (*p
 	}
 
 	return &pb.SetQuotaResponse{Success: true}, nil
-}
-
-// watchKeepaliveInterval keeps idle event streams alive through NAT/firewall
-// idle timeouts and lets both ends notice a dead connection.
-const watchKeepaliveInterval = 20 * time.Second
-
-// WatchEvents streams cache invalidations to a client over a connection the
-// client opened, so it works through NAT and client firewalls. The first
-// message (event_type 0) confirms the stream is live; later type-0 messages
-// are keepalives.
-func (h *GRPCHandler) WatchEvents(req *pb.WatchEventsRequest, stream pb.FileServer_WatchEventsServer) error {
-	ctx := stream.Context()
-
-	username := ""
-	if caller, ok := session.UsernameFromContext(ctx); ok && caller != "" {
-		username = caller
-	} else if req != nil {
-		username = req.Username
-	}
-	if username == "" {
-		return status.Error(codes.InvalidArgument, "username is required")
-	}
-
-	es := h.fileServer.attachEventStream(username)
-	defer h.fileServer.detachEventStream(username, es)
-	log.Printf("WatchEvents: stream %d opened for user=%s", es.id, username)
-	defer log.Printf("WatchEvents: stream %d closed for user=%s", es.id, username)
-
-	if err := stream.Send(&pb.WatchEvent{EventType: 0}); err != nil {
-		return err
-	}
-
-	ticker := time.NewTicker(watchKeepaliveInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-es.done:
-			return status.Error(codes.Aborted, "event stream closed by server; reconnect")
-		case ev := <-es.ch:
-			if err := stream.Send(ev); err != nil {
-				return err
-			}
-		case <-ticker.C:
-			if err := stream.Send(&pb.WatchEvent{EventType: 0}); err != nil {
-				return err
-			}
-		}
-	}
 }

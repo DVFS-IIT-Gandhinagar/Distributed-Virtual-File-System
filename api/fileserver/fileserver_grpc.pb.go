@@ -40,12 +40,13 @@ const (
 	FileServer_Share_FullMethodName            = "/fileserver.FileServer/Share"
 	FileServer_Unshare_FullMethodName          = "/fileserver.FileServer/Unshare"
 	FileServer_SetQuota_FullMethodName         = "/fileserver.FileServer/SetQuota"
-	FileServer_WatchEvents_FullMethodName      = "/fileserver.FileServer/WatchEvents"
 )
 
 // FileServerClient is the client API for FileServer service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// FileServer service
 type FileServerClient interface {
 	RegisterClient(ctx context.Context, in *RegisterClientRequest, opts ...grpc.CallOption) (*RegisterClientResponse, error)
 	UnregisterClient(ctx context.Context, in *UnregisterClientRequest, opts ...grpc.CallOption) (*UnregisterClientResponse, error)
@@ -68,7 +69,6 @@ type FileServerClient interface {
 	Share(ctx context.Context, in *ShareRequest, opts ...grpc.CallOption) (*ShareResponse, error)
 	Unshare(ctx context.Context, in *UnshareRequest, opts ...grpc.CallOption) (*UnshareResponse, error)
 	SetQuota(ctx context.Context, in *SetQuotaRequest, opts ...grpc.CallOption) (*SetQuotaResponse, error)
-	WatchEvents(ctx context.Context, in *WatchEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchEvent], error)
 }
 
 type fileServerClient struct {
@@ -301,28 +301,11 @@ func (c *fileServerClient) SetQuota(ctx context.Context, in *SetQuotaRequest, op
 	return out, nil
 }
 
-func (c *fileServerClient) WatchEvents(ctx context.Context, in *WatchEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchEvent], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &FileServer_ServiceDesc.Streams[2], FileServer_WatchEvents_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[WatchEventsRequest, WatchEvent]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type FileServer_WatchEventsClient = grpc.ServerStreamingClient[WatchEvent]
-
 // FileServerServer is the server API for FileServer service.
 // All implementations must embed UnimplementedFileServerServer
 // for forward compatibility.
+//
+// FileServer service
 type FileServerServer interface {
 	RegisterClient(context.Context, *RegisterClientRequest) (*RegisterClientResponse, error)
 	UnregisterClient(context.Context, *UnregisterClientRequest) (*UnregisterClientResponse, error)
@@ -345,7 +328,6 @@ type FileServerServer interface {
 	Share(context.Context, *ShareRequest) (*ShareResponse, error)
 	Unshare(context.Context, *UnshareRequest) (*UnshareResponse, error)
 	SetQuota(context.Context, *SetQuotaRequest) (*SetQuotaResponse, error)
-	WatchEvents(*WatchEventsRequest, grpc.ServerStreamingServer[WatchEvent]) error
 	mustEmbedUnimplementedFileServerServer()
 }
 
@@ -418,9 +400,6 @@ func (UnimplementedFileServerServer) Unshare(context.Context, *UnshareRequest) (
 }
 func (UnimplementedFileServerServer) SetQuota(context.Context, *SetQuotaRequest) (*SetQuotaResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetQuota not implemented")
-}
-func (UnimplementedFileServerServer) WatchEvents(*WatchEventsRequest, grpc.ServerStreamingServer[WatchEvent]) error {
-	return status.Error(codes.Unimplemented, "method WatchEvents not implemented")
 }
 func (UnimplementedFileServerServer) mustEmbedUnimplementedFileServerServer() {}
 func (UnimplementedFileServerServer) testEmbeddedByValue()                    {}
@@ -803,17 +782,6 @@ func _FileServer_SetQuota_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _FileServer_WatchEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(WatchEventsRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(FileServerServer).WatchEvents(m, &grpc.GenericServerStream[WatchEventsRequest, WatchEvent]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type FileServer_WatchEventsServer = grpc.ServerStreamingServer[WatchEvent]
-
 // FileServer_ServiceDesc is the grpc.ServiceDesc for FileServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -907,11 +875,6 @@ var FileServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "DownloadFile",
 			Handler:       _FileServer_DownloadFile_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "WatchEvents",
-			Handler:       _FileServer_WatchEvents_Handler,
 			ServerStreams: true,
 		},
 	},

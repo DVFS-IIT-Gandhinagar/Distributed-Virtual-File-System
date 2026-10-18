@@ -51,32 +51,42 @@ func (s *callbackServer) Invalidate(ctx context.Context, req *cbpb.InvalidateReq
 		eventType = callbackEventFileUpdated
 	}
 
-	if s.client != nil {
-		s.client.handleInvalidation(fid, eventType)
+	if eventType == callbackEventDirNewFile {
+		if s.client != nil && s.client.cacheHandler != nil {
+			if path, ok := s.client.cacheHandler.InvalidateFileByFID(fid); ok {
+				s.client.Notify("\n[NOTIFY] New file uploaded in directory %s. Please run refresh.\n", path)
+			} else {
+				s.client.Notify("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
+			}
+		} else {
+			s.client.Notify("\n[NOTIFY] New file uploaded in your current directory. Please run refresh.\n")
+		}
+		return &cbpb.InvalidateResponse{Success: true}, nil
+	}
+
+	if eventType == callbackEventFileDeleted {
+		if s.client != nil && s.client.cacheHandler != nil {
+			if path, ok := s.client.cacheHandler.InvalidateFileByFID(fid); ok {
+				s.client.Notify("\n[NOTIFY] A file was deleted in directory %s. Please run refresh.\n", path)
+			} else {
+				s.client.Notify("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
+			}
+		} else {
+			s.client.Notify("\n[NOTIFY] A file was deleted in your current directory. Please run refresh.\n")
+		}
+		return &cbpb.InvalidateResponse{Success: true}, nil
+	}
+
+	if s.client != nil && s.client.cacheHandler != nil {
+		path, ok := s.client.cacheHandler.InvalidateFileByFID(fid)
+		if ok {
+			s.client.Notify("\n[NOTIFY] File updated by another user. Cache invalidated: %s\n", path)
+		} else {
+			s.client.Notify("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
+		}
+	} else {
+		s.client.Notify("\n[NOTIFY] File updated by another user. Please refresh current view. (FID: %s)\n", fid.String())
 	}
 
 	return &cbpb.InvalidateResponse{Success: true}, nil
-}
-
-// handleInvalidation applies one invalidation event, whether it arrived over
-// the WatchEvents stream or a legacy callback. It runs off the shell
-// goroutine, so it only queues work for the cache (applied before the next
-// command) and prints a notice.
-func (c *Client) handleInvalidation(fid *domain.FID, eventType uint64) {
-	if c == nil || fid == nil {
-		return
-	}
-	ch := c.attachedCacheHandler()
-
-	switch eventType {
-	case callbackEventDirNewFile:
-		ch.QueueDirInvalidation(fid)
-		c.Notify("\n[NOTIFY] New file or folder added in your current directory by another user. Cache invalidated; run ls to see it.\n")
-	case callbackEventFileDeleted:
-		ch.QueueDirInvalidation(fid)
-		c.Notify("\n[NOTIFY] A file or folder was deleted in your current directory by another user. Cache invalidated; run ls to see the change.\n")
-	default:
-		ch.QueueFileInvalidation(fid)
-		c.Notify("\n[NOTIFY] File updated by another user. Cache invalidated.\n")
-	}
 }
