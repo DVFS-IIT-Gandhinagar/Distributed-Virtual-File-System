@@ -61,4 +61,10 @@ nav:
       - MetaServer Coordinator: diagrams/metaserver_coordinator.md
       - Client & Cache: diagrams/client_system.md
       - Zero-Trust PKI & Network: diagrams/tls_and_network.md
+  - MongoDB Migration (PR 16):
+      - Overview: mongodb_migration/index.md
+      - Previous System (JSON state file): mongodb_migration/before.md
+      - What Changed: mongodb_migration/changes.md
+      - New System (MongoDB MetaStore): mongodb_migration/after.md
+      - Flow Diagrams (Before vs After): mongodb_migration/diagrams.md
   - Project Artifacts: artifacts.md

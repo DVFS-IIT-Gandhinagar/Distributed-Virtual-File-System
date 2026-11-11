@@ -105,6 +105,7 @@ Explore the comprehensive guides and references below:
   - [Remote Orchestration & Alerts](features/cluster_orchestration.md): Remote SSH management, live log streaming, and deduplicated alerts.
   - [Authentication & Security](features/authentication.md): Google OAuth 2.0 PKCE, loopback listener, Server Session Tokens (SST), centralized PEP (`fs.Authorize`), dual-mode `SetQuota`, cluster mTLS, and Admin Web Console security.
 - [**Client CLI Reference**](client_cli.md): Complete manual for all 20 interactive shell commands, flags, syntax, and examples.
+- [**MongoDB Migration (PR #16)**](mongodb_migration/index.md): How MetaServer routing state moved from `metaserver_state.json` to MongoDB. [Previous system](mongodb_migration/before.md), [what changed](mongodb_migration/changes.md), [new system](mongodb_migration/after.md), and [before/after flow diagrams](mongodb_migration/diagrams.md).
 - [**Project Artifacts**](artifacts.md): Downloadable academic poster (`Poster.pdf`), summary of research findings, and cross-compiled release binaries.
 
 ---
